@@ -1,0 +1,145 @@
+@import "tailwindcss";
+
+:root {
+  --app-scale: 1;
+}
+
+/* Shimmer Loading */
+.input-wrapper.loading {
+    border-color: transparent !important;
+    box-shadow: 0 0 30px -5px rgba(255, 255, 255, 0.4), inset 0 0 15px rgba(255, 255, 255, 0.1) !important;
+}
+
+/* 1. The glowing border doing laps */
+.input-wrapper.loading::before {
+    content: ''; 
+    position: absolute; 
+    top: -1px; left: -1px; right: -1px; bottom: -1px;
+    border-radius: inherit;
+    padding: 1.5px;
+    background: linear-gradient(90deg, transparent 0%, rgba(200, 200, 200, 0.8) 50%, transparent 100%);
+    background-size: 200% 100%;
+    animation: shiningBorder 1.5s infinite linear;
+    
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    
+    pointer-events: none;
+    z-index: 10;
+}
+
+/* 2. The inner diffuse sweep of light */
+.input-wrapper.loading::after {
+    content: ''; 
+    position: absolute; 
+    top: 0; 
+    left: -100%; 
+    width: 60%; 
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(200, 200, 200, 0.15), transparent);
+    animation: shimmerMove 1.5s infinite linear; 
+    pointer-events: none;
+    border-radius: inherit;
+    z-index: 1;
+}
+
+@keyframes shiningBorder {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+@keyframes shimmerMove { 
+    0% { transform: translateX(0); } 
+    100% { transform: translateX(350%); } 
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+.scalable-container {
+  transform: scale(var(--app-scale));
+  transform-origin: center center;
+  transition: transform 0.3s ease-out;
+}
+
+.markdown-body {
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+.markdown-body > *:first-child {
+  margin-top: 0;
+}
+
+.markdown-body > *:last-child {
+  margin-bottom: 0;
+}
+
+.markdown-body p {
+  margin-bottom: 1em;
+}
+
+.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4, .markdown-body h5, .markdown-body h6 {
+  font-weight: 600;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+  color: #0f172a;
+}
+
+.markdown-body strong {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.markdown-body ul {
+  list-style-type: disc;
+  padding-left: 1.5em;
+  margin-bottom: 1em;
+}
+
+.markdown-body ol {
+  list-style-type: decimal;
+  padding-left: 1.5em;
+  margin-bottom: 1em;
+}
+
+.markdown-body li + li {
+  margin-top: 0.25em;
+}
+
+.markdown-body code {
+  background-color: #f1f5f9;
+  padding: 0.2em 0.4em;
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-size: 0.85em;
+}
+
+.markdown-body pre {
+  background-color: #f8fafc;
+  padding: 1em;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin-bottom: 1em;
+  border: 1px solid #e2e8f0;
+}
+
+.markdown-body pre code {
+  background-color: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-size: 0.85em;
+}
+
+.markdown-body blockquote {
+  border-left: 4px solid #cbd5e1;
+  padding-left: 1em;
+  color: #64748b;
+  margin-bottom: 1em;
+}
+
+.markdown-body a {
+  color: #2563eb;
+  text-decoration: underline;
+}
