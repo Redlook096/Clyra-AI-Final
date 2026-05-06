@@ -3,175 +3,143 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect, useRef, useCallback, useTransition, useState } from "react";
+import React, {
+    useEffect,
+    useLayoutEffect,
+    useMemo,
+    useRef,
+    useCallback,
+    useState,
+} from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { GoogleGenAI } from "@google/genai";
+import {
+    AppWindow,
+    ArrowUpIcon,
+    Check,
+    FileUp,
+    Folder,
+    MessageCircleDashed,
+    MousePointer2,
+    Paperclip,
+    Pencil,
+    Play,
+    Search,
+    Settings,
+    SquarePen,
+    Trash2,
+    X,
+    XIcon,
+} from "lucide-react";
 import { cn } from "./lib/utils";
-
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 import { SettingsModal } from "./components/SettingsModal";
 import { ShiningText } from "./components/ShiningText";
-import { BlurTextEffect } from "./components/BlurTextEffect";
+import { BlurredStaggerStream } from "@/components/ui/blurred-stagger-text";
+import { MarkdownMessageContent } from "./components/MarkdownMessageContent";
+import { VibeAgentMessageBody } from "./components/vibe/VibeAgentMessageBody";
+import { VibeLivePreviewPanel } from "./components/vibe/VibeLivePreviewPanel";
+import { VIBE_CURSOR_AGENT_SYSTEM_PROMPT } from "./lib/vibeAgentConstants";
+import { extractVibeFilesFromContent } from "./lib/parseVibeAgentContent";
 
-import Markdown from "react-markdown";
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
-
-
-const ReasoningDisplay = ({ reasoningContent, isStreaming, isThinking }: { reasoningContent: string, isStreaming?: boolean, isThinking?: boolean }) => {
-    const [isCollapsed, setIsCollapsed] = useState(true);
-    const [isDoneState, setIsDoneState] = useState(false);
-    const expandTimerRef = useRef<NodeJS.Timeout | null>(null);
-    const finishTimerRef = useRef<NodeJS.Timeout | null>(null);
-    
-    useEffect(() => {
-        if (isThinking && isStreaming && reasoningContent && !expandTimerRef.current) {
-           expandTimerRef.current = setTimeout(() => {
-               setIsCollapsed(false);
-           }, 800);
-        }
-        return () => {
-            if (expandTimerRef.current && !isStreaming) {
-                clearTimeout(expandTimerRef.current);
-            }
-        };
-    }, [isStreaming, isThinking, !!reasoningContent]);
-
-    useEffect(() => {
-        if (!isThinking && reasoningContent && !finishTimerRef.current) {
-           finishTimerRef.current = setTimeout(() => {
-               setIsCollapsed(true);
-               // Wait for collapse animation to finish before showing 'Thought'
-               setTimeout(() => {
-                   setIsDoneState(true);
-               }, 500);
-           }, 0);
-        }
-    }, [isThinking, reasoningContent]);
-
-    if (!reasoningContent && !isThinking) return null;
-
-    return (
-        <div className="flex flex-col w-full text-[14px]">
-            <button 
-                onClick={() => setIsCollapsed(!isCollapsed)}
-                className="flex items-center gap-2 transition-colors w-fit pb-1 relative z-10 group"
-            >
-                <div className="flex items-center justify-center w-5 h-5 shrink-0">
-                   <ChevronRight className={cn("w-4 h-4 transition-transform duration-500 text-slate-400 group-hover:text-slate-600", !isCollapsed ? "rotate-90" : "")} />
-                </div>
-                {isDoneState ? (
-                    <span className="text-[14px] leading-none text-slate-400 font-medium">Thought Process</span>
-                ) : (
-                    <ShiningText text="Thinking..." className="text-[14px] leading-none font-medium" />
-                )}
-            </button>
-            <AnimatePresence initial={false}>
-                {!isCollapsed && reasoningContent && (
-                    <motion.div 
-                        key="reasoning-content"
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "auto", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.6, type: "spring", bounce: 0.2, opacity: { duration: 0.3 } }}
-                        className="overflow-hidden opacity-70 ml-[9px] pl-5 border-l-2 border-slate-200"
-                    >
-                        <div className="pt-2 pb-4 markdown-body text-slate-600">
-                           <BlurTextEffect isStreaming={isThinking}>
-                               {reasoningContent}
-                           </BlurTextEffect>
-                        </div>
-                    </motion.div>
-                )}
-            </AnimatePresence>
-        </div>
-    )
+let geminiSingleton: GoogleGenAI | null = null;
+function getGeminiClient(): GoogleGenAI | null {
+    const key = process.env.GEMINI_API_KEY;
+    if (!key) return null;
+    geminiSingleton ??= new GoogleGenAI({ apiKey: key });
+    return geminiSingleton;
 }
 
-const AnimatedMessage = ({ content, isThinking, isStreaming, reasoningContent, fontSizeClass, markdownSupport, codeHighlighting = true }: { content: string, isThinking?: boolean, isStreaming?: boolean, reasoningContent?: string, fontSizeClass?: string, markdownSupport?: boolean, codeHighlighting?: boolean }) => {
+/** Standard chat: shimmer until the model emits answer text (`content`), then hide so stagger can print it. */
+function ChatThinkingLabel({
+    isThinking,
+    isStreaming,
+    content,
+}: {
+    isThinking: boolean;
+    isStreaming: boolean;
+    content: string;
+}) {
+    const visible = content.length === 0 && (isThinking || isStreaming);
+
+    if (!visible) return null;
+
+    return (
+        <div className="flex items-center gap-1" aria-live="polite">
+            <ShiningText text="Thinking" preset="thinkingChat" />
+        </div>
+    );
+}
+
+const AnimatedMessage = ({
+    messageId,
+    content,
+    isThinking,
+    isStreaming,
+    fontSizeClass,
+    markdownSupport,
+    codeHighlighting = true,
+    assistantKind = "chat",
+    isLastAssistant,
+    onVibePreviewReady,
+}: {
+    messageId?: string;
+    content: string;
+    isThinking?: boolean;
+    isStreaming?: boolean;
+    reasoningContent?: string;
+    vibeUserPrompt?: string;
+    fontSizeClass?: string;
+    markdownSupport?: boolean;
+    codeHighlighting?: boolean;
+    assistantKind?: "chat" | "vibe";
+    isLastAssistant?: boolean;
+    onVibePreviewReady?: (messageId: string, filesByPath: Record<string, string>) => void;
+}) => {
+    const isVibe = assistantKind === "vibe";
+    /** Vibe agent now drives its own thought UI from the model's <<<VIBE_THINKING>>> blocks. While we have no
+     *  content yet, show the unified "Thinking" shimmer so the seam into the inline VibeThoughtPanel is clean. */
+    const suppressVibeAnswerBody = isVibe && !!isThinking && content.length === 0;
     return (
         <div className={cn("pt-0.5 font-medium text-inherit w-full relative flex flex-col gap-2", fontSizeClass)}>
-            {isThinking ? (
-                <ShiningText text="Thinking..." className="text-[15px] sm:text-base font-medium" />
-            ) : null}
-            
-            {!isThinking && content.length > 0 ? (
-                <div className="markdown-body mt-1">
-                    {markdownSupport ? (
-                        <Markdown 
-                            components={{
-                                code({node, inline, className, children, ...props}: any) {
-                                    const match = /language-(\w+)/.exec(className || '')
-                                    return (!inline && match && codeHighlighting) ? (
-                                        <SyntaxHighlighter
-                                            {...props}
-                                            children={String(children).replace(/\n$/, '')}
-                                            style={vscDarkPlus}
-                                            language={match[1]}
-                                            PreTag="div"
-                                            className="rounded-lg my-2 !bg-[#1E1E1E] border border-slate-700/50"
-                                        />
-                                    ) : (
-                                        <code {...props} className={cn("bg-slate-100/80 px-1 py-0.5 rounded text-[0.9em] font-mono", className)}>
-                                            {children}
-                                        </code>
-                                    )
-                                }
-                            }}
-                        >
-                            {content}
-                        </Markdown>
+            <ChatThinkingLabel isThinking={!!isThinking} isStreaming={!!isStreaming} content={content} />
+            {content.length > 0 && !suppressVibeAnswerBody ? (
+                <div className={cn("markdown-body mt-1", isVibe && "markdown-body--vibe")} data-invert-ignore>
+                    {isVibe ? (
+                        <VibeAgentMessageBody
+                            key={messageId ?? "vibe-body"}
+                            messageId={messageId}
+                            content={content}
+                            isStreaming={!!isStreaming}
+                            fontSizeClass={fontSizeClass}
+                            isLastAssistant={!!isLastAssistant}
+                            onVibePreviewReady={onVibePreviewReady}
+                        />
+                    ) : markdownSupport ? (
+                        isStreaming ? (
+                            <BlurredStaggerStream
+                                text={content}
+                                isStreaming
+                                className={cn("text-inherit", fontSizeClass)}
+                            />
+                        ) : (
+                            <MarkdownMessageContent
+                                content={content}
+                                codeHighlighting={!!codeHighlighting}
+                                codePresentation="default"
+                            />
+                        )
                     ) : (
-                        <BlurTextEffect isStreaming={isStreaming}>
-                            {content}
-                        </BlurTextEffect>
+                        <BlurredStaggerStream
+                            text={content}
+                            isStreaming={!!isStreaming}
+                            className={cn("text-inherit", fontSizeClass)}
+                        />
                     )}
                 </div>
             ) : null}
         </div>
     );
 };
-
-import {
-    ImageIcon,
-    FileUp,
-    Figma,
-    MonitorIcon,
-    CircleUserRound,
-    ArrowUpIcon,
-    Paperclip,
-    PlusIcon,
-    SendIcon,
-    XIcon,
-    LoaderIcon,
-    Sparkles,
-    Command,
-    Settings,
-    Clock,
-    Blocks,
-    Mic,
-    Terminal,
-    Play,
-    AppWindow,
-    MousePointer2,
-    FilePenLine,
-    FileText,
-    MessageCircle,
-    MessageCircleDashed,
-    Search,
-    Pin,
-    Pencil,
-    Trash2,
-    Check,
-    X,
-    SquarePen,
-    PanelLeftClose,
-    ChevronDown,
-    ChevronRight,
-    Folder
-} from "lucide-react";
-import * as React from "react";
-import { ProgressCircle } from "./components/ui/progress";
 
 interface UseAutoResizeTextareaProps {
     minHeight: number;
@@ -260,14 +228,20 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
 )
 Textarea.displayName = "Textarea"
 
-const HighlightText = ({ text, highlight }: { text: string, highlight: string }) => {
+const HighlightText = ({ text, highlight }: { text: string; highlight: string }) => {
     if (!highlight.trim()) return <>{text}</>;
-    const regex = new RegExp(`(${highlight})`, 'gi');
-    const parts = text.split(regex);
+    const lower = highlight.toLowerCase();
+    const parts = text.split(new RegExp(`(${highlight.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi"));
     return (
         <>
-            {parts.map((part, i) => 
-                regex.test(part) ? <span key={i} className="text-blue-500 font-medium transition-colors duration-300 ease-out">{part}</span> : part
+            {parts.map((part, i) =>
+                part.toLowerCase() === lower ? (
+                    <span key={i} className="text-blue-500 font-medium transition-colors duration-300 ease-out">
+                        {part}
+                    </span>
+                ) : (
+                    part
+                )
             )}
         </>
     );
@@ -286,6 +260,10 @@ export default function App() {
         reasoningContent?: string;
         isThinking?: boolean;
         isStreaming?: boolean;
+        /** `vibe` keeps the expandable thought UI; normal chat uses the “Thinking:” line only. */
+        assistantKind?: 'chat' | 'vibe';
+        /** User prompt for this Vibe reply—drives the fixed Thought summary. */
+        vibeUserPrompt?: string;
     }
 
     interface ChatSession {
@@ -316,18 +294,19 @@ export default function App() {
     }, [chats]);
 
     const [currentChatId, setCurrentChatId] = useState<string | null>(null);
+    const currentChatIdRef = useRef<string | null>(null);
+    useEffect(() => {
+        currentChatIdRef.current = currentChatId;
+    }, [currentChatId]);
     const [searchQuery, setSearchQuery] = useState("");
     const [editingChatId, setEditingChatId] = useState<string | null>(null);
     const [editingTitle, setEditingTitle] = useState("");
     const [value, setValue] = useState("");
     const [attachments, setAttachments] = useState<string[]>([]);
-    const [isTyping, setIsTyping] = useState(false);
-    const [isPending, startTransition] = useTransition();
     const [activeSuggestion, setActiveSuggestion] = useState<number>(-1);
     const [showCommandPalette, setShowCommandPalette] = useState(false);
     const [recentCommand, setRecentCommand] = useState<string | null>(null);
     const [isInputExpanded, setIsInputExpanded] = useState(false);
-    const [isAiAnimating, setIsAiAnimating] = useState(false);
     const inputContainerRef = useRef<HTMLDivElement>(null);
     const { textareaRef, adjustHeight } = useAutoResizeTextarea({
         minHeight: 52,
@@ -351,10 +330,88 @@ export default function App() {
     const [userBubbleColor, setUserBubbleColor] = useState('#e2e8f0');
     const commandPaletteRef = useRef<HTMLDivElement>(null);
     const searchInputRef = useRef<HTMLInputElement>(null);
+    /** When true, stream / layout growth will keep the chat column pinned to the bottom (normal chat behavior). */
+    const chatNearBottomRef = useRef(true);
 
     useEffect(() => {
         setIsSearching(searchQuery.length > 0);
     }, [searchQuery]);
+
+    const lastAssistantId = useMemo(() => {
+        for (let i = messages.length - 1; i >= 0; i--) {
+            if (messages[i]!.role === "assistant") return messages[i]!.id;
+        }
+        return null as string | null;
+    }, [messages]);
+
+    const [vibePreviewMessageId, setVibePreviewMessageId] = useState<string | null>(null);
+    const [vibePreviewFiles, setVibePreviewFiles] = useState<Record<string, string> | null>(null);
+
+    const handleVibePreviewReady = useCallback((messageId: string, files: Record<string, string>) => {
+        if (Object.keys(files).length === 0) return;
+        setVibePreviewMessageId(messageId);
+        setVibePreviewFiles(files);
+    }, []);
+
+    /** Keeps Vibe streams writing into the correct chat in `chats` even when the user switches away. */
+    const patchMessagesForChat = useCallback((chatId: string, update: (prev: Message[]) => Message[]) => {
+        setChats((prevChats) => {
+            const i = prevChats.findIndex((c) => c.id === chatId);
+            if (i < 0) return prevChats;
+            const nextMsgs = update(prevChats[i]!.messages);
+            const next = [...prevChats];
+            next[i] = { ...next[i]!, messages: nextMsgs, updatedAt: Date.now() };
+            return next;
+        });
+        setMessages((prev) => (currentChatIdRef.current === chatId ? update(prev) : prev));
+    }, []);
+
+    const showVibeLivePreview =
+        !!vibePreviewFiles &&
+        vibePreviewMessageId != null &&
+        vibePreviewMessageId === lastAssistantId &&
+        messages.some(
+            (m) =>
+                m.id === lastAssistantId &&
+                m.role === "assistant" &&
+                !m.isStreaming,
+        );
+
+    useEffect(() => {
+        if (!vibePreviewMessageId) return;
+        if (!messages.some((m) => m.id === vibePreviewMessageId)) {
+            setVibePreviewMessageId(null);
+            setVibePreviewFiles(null);
+        }
+    }, [messages, vibePreviewMessageId]);
+
+    const chatScrollSignature = useMemo(
+        () =>
+            messages
+                .map((m) => `${m.id}:${m.content.length}:${m.isStreaming ? 1 : 0}:${m.isThinking ? 1 : 0}`)
+                .join("|"),
+        [messages],
+    );
+
+    useEffect(() => {
+        const el = document.getElementById("chat-container");
+        if (!el) return;
+        const onScroll = () => {
+            const gap = el.scrollHeight - el.scrollTop - el.clientHeight;
+            chatNearBottomRef.current = gap < 120;
+        };
+        el.addEventListener("scroll", onScroll, { passive: true });
+        onScroll();
+        return () => el.removeEventListener("scroll", onScroll);
+    }, [messages.length]);
+
+    useLayoutEffect(() => {
+        if (!autoScroll) return;
+        const el = document.getElementById("chat-container");
+        if (!el || messages.length === 0) return;
+        if (!chatNearBottomRef.current) return;
+        el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    }, [chatScrollSignature, autoScroll, messages.length, showVibeLivePreview]);
 
     useEffect(() => {
         if (toastMessage) {
@@ -377,19 +434,12 @@ export default function App() {
         return () => window.removeEventListener('keydown', handleGlobalKeyDown);
     }, []);
 
-    useEffect(() => {
-        const handleActive = () => setIsAiAnimating(true);
-        const handleComplete = () => setIsAiAnimating(false);
-        window.addEventListener('ai-animation-active', handleActive);
-        window.addEventListener('ai-animation-complete', handleComplete);
-        return () => {
-            window.removeEventListener('ai-animation-active', handleActive);
-            window.removeEventListener('ai-animation-complete', handleComplete);
-        }
-    }, []);
-
-    const isAiResponding = (messages.length > 0 && (messages[messages.length - 1].isThinking || messages[messages.length - 1].isStreaming)) || isAiAnimating;
-    const isExpanded = !isAiResponding && (isInputExpanded || value.trim().length > 0 || attachments.length > 0 || selectedCommand !== null || messages.length > 0);
+    const isExpanded =
+        isInputExpanded ||
+        value.trim().length > 0 ||
+        attachments.length > 0 ||
+        selectedCommand !== null ||
+        messages.length > 0;
 
     useEffect(() => {
         if (messages.length === 0 || isTemporaryChat) return;
@@ -629,55 +679,92 @@ export default function App() {
         }
     };
 
-    const simulateVibeCoder = async (aiMsgId: string, userPrompt: string) => {
+    const simulateVibeCoder = async (aiMsgId: string, userPrompt: string, streamChatId: string) => {
         try {
-            let fullCode = "";
-            let planText = "";
+            let full = "";
             const openAiMessages = [
-                { role: 'user', content: `Generate a single-file React component for this request: "${userPrompt}". 
-It must be exported as default and use inline Tailwind CSS classes.
-You have access to the following dependencies:
-- react (hooks like useState, useEffect)
-- lucide-react (for icons)
-- framer-motion (for animations)
-DO NOT output any explanation. Output ONLY the raw React code inside a \`\`\`tsx block.` }
+                {
+                    role: "user",
+                    content: `User request — build a polished React 19 experience with Tailwind, lucide-react, and framer-motion where helpful.
+
+Project context: Cursor/Codex-style in-browser agent. Your stream is rendered as a live timeline:
+  - THINKING blocks render as an inline expandable "Thought" panel.
+  - ANALYZE renders as a small "Analysing <path>" banner.
+  - CODE renders as a typed mini code box, one block per file.
+  - RUN renders as a single-row "Run Command <cmd>" card.
+  - Short prose lines BETWEEN blocks render as small narration lines (kept short — one sentence each).
+  - Once everything finishes, the UI auto-renders a "Build complete" summary listing each file you wrote and its top-level exports — so make sure exports are named and (ideally) preceded by a brief JSDoc.
+
+You MUST follow the mandatory agent loop. Do NOT stop after the first thinking block.
+
+Required rhythm — a "step" can contain MULTIPLE actions:
+  1) Open <<<VIBE_THINKING>>> (Goal / Approach / Unknowns / Risk areas / Step plan) <<<END_VIBE_THINKING>>>.
+  2) One short transition line (≤1 sentence), e.g. "Let me start with the types and the hook.".
+  3) STEP actions — multiple files allowed in a single step:
+       - Optional <<<VIBE_ANALYZE path="…">>><<<END_VIBE_ANALYZE>>>.
+       - <<<VIBE_CODE file="…" added="N" removed="M">>>RAW source — no markdown fences, ever<<<END_VIBE_CODE>>>.
+       - Optional one-line transition line.
+       - Repeat the analyse + code pair for the next file in the SAME step (e.g. types → hook → component all in one step).
+  4) <<<VIBE_THINKING>>> reflection — what the step shipped, what's next, any new risks <<<END_VIBE_THINKING>>>.
+  5) Loop back to (2) → (3) → (4) until every file is delivered.
+  6) Optional <<<VIBE_RUN>>> with a single \`$ command\` and Purpose line.
+  7) Final <<<VIBE_THINKING>>> summarising the delivered build.
+
+Hard rules:
+  - NEVER use markdown triple-backtick fences. All code goes inside <<<VIBE_CODE>>> as raw source.
+  - Prose OUTSIDE delimiters must be short (≤1 sentence). Long reasoning belongs inside THINKING.
+  - In <<<VIBE_CODE>>>, \`added\` must equal the number of lines in that code block (split on newlines); \`removed\` = lines removed when editing.
+  - SANDBOX: every \`file\` and \`path\` MUST start with \`vibe-project/\`. The host strips and rejects anything outside that namespace, so do NOT use absolute paths, \`..\`, or pretend to edit Clyra's own source. The preview is mounted automatically from the sandbox; do not ask the user to start another dev server.
+  - Aim for at least 3 thinking blocks (open / mid-reflection(s) / final) and at least 1 code block.
+  - Group tightly-related files into one step instead of reflecting between every file.
+  - Each top-level export in your CODE blocks should have a one-line JSDoc above it for the build summary.
+
+Request details: ${userPrompt}`,
+                },
             ];
-            
+
+            // Use deepseek-chat (non-reasoning) for the structured agent stream so the model spends
+            // its entire output budget on the delimited timeline (thinking + analyze + code + ...)
+            // instead of burning tokens on internal reasoning that we discard anyway.
             await streamOpenAI(
-                 "You are an expert Frontend Developer. In your internal reasoning, briefly discuss the project overview and goal, then your key decisions and approach in 2-4 sentences.",
-                 openAiMessages,
-                 (chunkText, isReasoning) => {
+                VIBE_CURSOR_AGENT_SYSTEM_PROMPT,
+                openAiMessages,
+                (chunkText, isReasoning) => {
                      if (isReasoning) {
-                         planText += chunkText;
-                         setMessages(prev => prev.map(msg => 
-                             msg.id === aiMsgId ? { 
-                                 ...msg, 
-                                 reasoningContent: planText,
-                             } : msg
-                         ));
-                     } else {
-                         fullCode += chunkText;
-                         setMessages(prev => prev.map(msg => 
-                             msg.id === aiMsgId ? { 
-                                 ...msg, 
-                                 content: fullCode,
-                                 isThinking: false
-                             } : msg
-                         ));
+                         return;
                      }
-                 }
+                     full += chunkText;
+                     patchMessagesForChat(streamChatId, (prev) =>
+                         prev.map((msg) =>
+                             msg.id === aiMsgId
+                                 ? {
+                                       ...msg,
+                                       content: full,
+                                       isThinking: false,
+                                   }
+                                 : msg,
+                         ),
+                     );
+                 },
+                 0.6,
+                 8000,
+                 "deepseek-chat",
             );
 
             // Removed fetch
 
-            setMessages(prev => prev.map(msg => 
-                msg.id === aiMsgId ? { 
-                    ...msg, 
-                    isThinking: false,
-                    isStreaming: false
-                } : msg
-            ));
-            
+            patchMessagesForChat(streamChatId, (prev) =>
+                prev.map((msg) =>
+                    msg.id === aiMsgId
+                        ? {
+                              ...msg,
+                              isThinking: false,
+                              isStreaming: false,
+                          }
+                        : msg,
+                ),
+            );
+
             setTimeout(() => {
                 const chatContainer = document.getElementById('chat-container');
                 if (chatContainer && autoScroll) {
@@ -687,19 +774,55 @@ DO NOT output any explanation. Output ONLY the raw React code inside a \`\`\`tsx
 
         } catch (error) {
             console.error('Vibe Coder error:', error);
-            setMessages(prev => prev.map(msg => 
-                msg.id === aiMsgId ? { 
-                    ...msg, 
-                    isThinking: false,
-                    isStreaming: false,
-                    content: "Sorry, I encountered an error during Vibe Coding."
-                } : msg
-            ));
+            patchMessagesForChat(streamChatId, (prev) =>
+                prev.map((msg) =>
+                    msg.id === aiMsgId
+                        ? {
+                              ...msg,
+                              isThinking: false,
+                              isStreaming: false,
+                              content: "Sorry, I encountered an error during Vibe Coding.",
+                          }
+                        : msg,
+                ),
+            );
         }
     };
 
+    const handleAutoFix = useCallback((error: { message: string; stack?: string; label?: string }) => {
+        if (!currentChatIdRef.current || !vibePreviewMessageId) return;
+        
+        const errorPrompt = `The live preview encountered a ${error.label || 'runtime'} error:
+\`\`\`
+${error.message}
+${error.stack || ''}
+\`\`\`
+Please analyze the code you just wrote and fix this error.`;
+
+        const userMsgId = Date.now().toString();
+        const aiMsgId = (Date.now() + 1).toString();
+
+        setMessages((prev) => [
+            ...prev,
+            { id: userMsgId, role: "user", content: "I'm seeing an error in the preview. Can you fix it?" },
+            {
+                id: aiMsgId,
+                role: "assistant",
+                content: "",
+                isThinking: true,
+                isStreaming: true,
+                assistantKind: "vibe",
+                vibeUserPrompt: "Fixing preview error...",
+            },
+        ]);
+
+        simulateVibeCoder(aiMsgId, errorPrompt, currentChatIdRef.current);
+    }, [vibePreviewMessageId, simulateVibeCoder]);
+
     const handleSendMessage = async () => {
         if (value.trim() || selectedCommand) {
+            setVibePreviewMessageId(null);
+            setVibePreviewFiles(null);
             const userCommandLabel = selectedCommand?.label;
             const userCommandId = selectedCommand?.id;
             const rawUserText = value.trim();
@@ -719,22 +842,28 @@ DO NOT output any explanation. Output ONLY the raw React code inside a \`\`\`tsx
             const currentMessages = messages;
             const userMsgId = Date.now().toString();
             const aiMsgId = (Date.now() + 1).toString();
-            
-            setMessages(prev => [
-                ...prev, 
-                { id: userMsgId, role: 'user', content: userText },
-                { 
-                    id: aiMsgId, 
-                    role: 'assistant', 
-                    content: '', 
-                    isThinking: true, 
-                    isStreaming: true
-                }
+
+            const isVibeMode = userCommandId === "vibe";
+
+            chatNearBottomRef.current = true;
+            setMessages((prev) => [
+                ...prev,
+                { id: userMsgId, role: "user", content: userText },
+                {
+                    id: aiMsgId,
+                    role: "assistant",
+                    content: "",
+                    isThinking: true,
+                    isStreaming: true,
+                    assistantKind: isVibeMode ? "vibe" : "chat",
+                    ...(isVibeMode ? { vibeUserPrompt: userText } : {}),
+                },
             ]);
 
             setTimeout(() => {
                 const chatContainer = document.getElementById('chat-container');
                 if (chatContainer && autoScroll) {
+                    chatNearBottomRef.current = true;
                     chatContainer.scrollTo({
                         top: chatContainer.scrollHeight,
                         behavior: 'smooth'
@@ -742,27 +871,27 @@ DO NOT output any explanation. Output ONLY the raw React code inside a \`\`\`tsx
                 }
             }, 100);
 
-            const isVibeMode = userCommandId === 'vibe' || 
-                rawUserText.toLowerCase().includes('code') || 
-                rawUserText.toLowerCase().includes('app') || 
-                rawUserText.toLowerCase().includes('website') ||
-                rawUserText.toLowerCase().includes('design');
-
             try {
                 if (isFirstMessage && !isTemporaryChat) {
-                    ai.models.generateContent({
-                        model: "gemini-3-flash-preview",
-                        contents: `Generate a concise, up to 4 word title for a conversation that starts with the following prompt: "${userText}". Output only the title string without quotes.`,
-                    }).then(titleResponse => {
-                        const newTitle = titleResponse.text?.trim().replace(/^"|"$/g, '');
-                        if (newTitle) {
-                            setChats(prev => prev.map(c => c.id === chatId ? { ...c, title: newTitle } : c));
-                        }
-                    }).catch(console.error);
+                    const gemini = getGeminiClient();
+                    if (gemini) {
+                        gemini.models
+                            .generateContent({
+                                model: "gemini-3-flash-preview",
+                                contents: `Generate a concise, up to 4 word title for a conversation that starts with the following prompt: "${userText}". Output only the title string without quotes.`,
+                            })
+                            .then((titleResponse) => {
+                                const newTitle = titleResponse.text?.trim().replace(/^"|"$/g, "");
+                                if (newTitle) {
+                                    setChats((prev) => prev.map((c) => (c.id === chatId ? { ...c, title: newTitle } : c)));
+                                }
+                            })
+                            .catch(console.error);
+                    }
                 }
 
-                if (isVibeMode) {
-                    simulateVibeCoder(aiMsgId, userText);
+                if (isVibeMode && chatId) {
+                    simulateVibeCoder(aiMsgId, userText, chatId);
                     return;
                 }
 
@@ -863,24 +992,42 @@ DO NOT output any explanation. Output ONLY the raw React code inside a \`\`\`tsx
                 .text-slate-400, .text-slate-500, .text-slate-600 { color: #000 !important; }
             `}} />
         )}
-        <div className="h-dvh flex w-full bg-white text-slate-900 font-sans selection:bg-slate-200 overflow-hidden scalable-container relative">
-            <AnimatePresence initial={false}>
-                {isSidebarOpen && (
-                    <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: 240 }}
-                        exit={{ width: 0 }}
-                        transition={{ type: "spring", stiffness: 400, damping: 40, mass: 0.8 }}
-                        className="h-full shrink-0 flex flex-col z-[80] overflow-hidden bg-white border-r border-slate-200/60"
-                        style={{ willChange: 'width' }}
-                    >
-                        <div className="w-[240px] h-full flex flex-col shrink-0">
-                            <div className="pt-3 pb-2 px-3 flex flex-col gap-1.5 shrink-0 border-b border-black/5">
-                                    <div className="px-1 flex flex-col gap-1 mt-2">
+        <div className="h-dvh flex min-w-0 bg-white text-slate-900 font-sans selection:bg-slate-200 overflow-hidden scalable-container relative">
+            <aside
+                aria-hidden={!isSidebarOpen}
+                {...(!isSidebarOpen ? ({ inert: true } as unknown as Record<string, unknown>) : {})}
+                className={cn(
+                    "relative z-[100] flex h-full shrink-0 flex-col overflow-hidden border-r bg-white transition-[width] duration-[420ms] ease-[cubic-bezier(0.22,1,0.36,1)]",
+                    isSidebarOpen ? "border-slate-200/60" : "border-transparent pointer-events-none",
+                )}
+                style={{ width: isSidebarOpen ? 240 : 0, willChange: "width" }}
+            >
+                <div className="w-[240px] h-full flex flex-col shrink-0">
+                            <div className="px-3 pb-2 pt-2 flex flex-col gap-1.5 shrink-0 border-b border-black/5">
+                                    <div className="flex items-center justify-end h-9 -mt-0.5 -mb-0.5 -mr-1">
+                                        {isSidebarOpen && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setIsSidebarOpen(false)}
+                                                aria-label="Close sidebar"
+                                                title="Close sidebar"
+                                                className="group relative flex h-9 w-9 items-center justify-center rounded-full text-slate-500 transition-[background-color,box-shadow,color,transform] duration-300 hover:scale-[1.05] hover:bg-slate-100 hover:text-slate-800 hover:shadow-[0_4px_14px_rgba(15,23,42,0.06)] active:scale-[0.94]"
+                                            >
+                                                <span
+                                                    className="pointer-events-none absolute inset-0 rounded-full bg-gradient-to-br from-indigo-400/22 via-sky-400/10 to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100"
+                                                    aria-hidden
+                                                />
+                                                <X className="pointer-events-none relative w-[15px] h-[15px] stroke-[2.2]" />
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className="px-1 flex flex-col gap-1">
                                         <button 
                                             onClick={() => {
                                                 setMessages([]);
                                                 setCurrentChatId(null);
+                                                setVibePreviewMessageId(null);
+                                                setVibePreviewFiles(null);
                                                 setIsSidebarOpen(false);
                                                 setSearchQuery("");
                                             }}
@@ -897,7 +1044,7 @@ DO NOT output any explanation. Output ONLY the raw React code inside a \`\`\`tsx
                                         </button>
                                     </div>
                                     
-                                    <div className="relative mt-2 mb-0.5 px-1">
+                                    <div className="relative mt-1.5 mb-0 px-1">
                                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 stroke-[2.5] pointer-events-none" />
                                         <input 
                                             ref={searchInputRef}
@@ -918,7 +1065,7 @@ DO NOT output any explanation. Output ONLY the raw React code inside a \`\`\`tsx
                                     </div>
                                 </div>
                                 
-                                <div className="flex-1 overflow-y-auto flex flex-col p-2 space-y-4">
+                                <div className="scrollbar-none flex-1 overflow-y-auto flex flex-col p-2 space-y-4">
                                     {filteredChats.length > 0 ? (
                                         <div className="flex flex-col gap-0.5">
                                             <AnimatePresence mode="popLayout">
@@ -942,6 +1089,31 @@ DO NOT output any explanation. Output ONLY the raw React code inside a \`\`\`tsx
                                                                             if (editingChatId === chat.id) return;
                                                                             setCurrentChatId(chat.id);
                                                                             setMessages(chat.messages);
+                                                                            let restoredPreview = false;
+                                                                            const lastDoneVibe = [...chat.messages]
+                                                                                .reverse()
+                                                                                .find(
+                                                                                    (m) =>
+                                                                                        m.role === "assistant" &&
+                                                                                        m.assistantKind === "vibe" &&
+                                                                                        !m.isStreaming &&
+                                                                                        typeof m.content === "string" &&
+                                                                                        m.content.includes("<<<VIBE_"),
+                                                                                );
+                                                                            if (lastDoneVibe) {
+                                                                                const files = extractVibeFilesFromContent(
+                                                                                    lastDoneVibe.content,
+                                                                                );
+                                                                                if (Object.keys(files).length > 0) {
+                                                                                    setVibePreviewMessageId(lastDoneVibe.id);
+                                                                                    setVibePreviewFiles(files);
+                                                                                    restoredPreview = true;
+                                                                                }
+                                                                            }
+                                                                            if (!restoredPreview) {
+                                                                                setVibePreviewMessageId(null);
+                                                                                setVibePreviewFiles(null);
+                                                                            }
                                                                             setIsSidebarOpen(false);
                                                                         }}
                                                                     >
@@ -1031,34 +1203,47 @@ DO NOT output any explanation. Output ONLY the raw React code inside a \`\`\`tsx
                                     <span className="flex-1 font-medium text-slate-500 group-hover:text-slate-700 transition-colors text-sm">Settings</span>
                                 </button>
                             </div>
-                        </motion.div>
-                )}
-            </AnimatePresence>
+            </aside>
 
-            <div className="flex-1 min-w-[100vw] md:min-w-0 w-full h-full flex flex-col items-center bg-slate-50 relative z-10 transition-all border-l border-slate-200/50 sm:border-transparent">
-                <button 
-                    onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-                    className="absolute top-4 left-4 sm:top-6 sm:left-6 w-10 h-10 rounded-full hover:bg-slate-200/50 text-slate-600 transition-colors z-[90] flex items-center justify-center group" 
-                    title="Sidebar"
+            <div className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col bg-slate-50 border-l border-slate-200/50 sm:border-transparent">
+                <div
+                    className={cn(
+                        "grid min-h-0 w-full flex-1 overflow-hidden transition-[grid-template-columns] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
+                        showVibeLivePreview
+                            ? "grid-cols-[minmax(260px,min(420px,34vw))_minmax(0,1fr)]"
+                            : "grid-cols-[minmax(0,1fr)_0fr]",
+                    )}
                 >
-                    <div className="relative w-[18px] h-[12px] opacity-70 group-hover:opacity-100 transition-opacity *:absolute *:left-0 *:w-full *:h-[2px] *:bg-current *:rounded-full">
-                        <motion.span
-                            animate={isSidebarOpen ? { rotate: 45, y: 5 } : { rotate: 0, y: 0 }}
-                            className="top-0"
-                            transition={{ duration: 0.2 }}
+                <div
+                    className={cn(
+                        "relative z-10 flex min-h-0 min-w-0 flex-col overflow-hidden",
+                        showVibeLivePreview && "border-r border-slate-200/70",
+                    )}
+                >
+                {!isSidebarOpen && (
+                    <button
+                        type="button"
+                        onClick={() => setIsSidebarOpen(true)}
+                        aria-label="Open sidebar"
+                        aria-expanded={false}
+                        title="Open sidebar"
+                        className="group fixed top-4 left-4 z-[110] flex h-11 w-11 items-center justify-center rounded-full border border-transparent bg-transparent text-slate-600 shadow-none transition-[background-color,border-color,box-shadow,transform] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.06] hover:border-slate-200/70 hover:bg-white/85 hover:shadow-[0_10px_28px_rgba(15,23,42,0.12)] active:scale-[0.94] sm:top-6 sm:left-6"
+                    >
+                        <span
+                            className="pointer-events-none absolute inset-0 rounded-full bg-gradient-to-br from-indigo-400/28 via-sky-400/12 to-transparent opacity-0 transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:opacity-100"
+                            aria-hidden
                         />
-                        <motion.span
-                            animate={isSidebarOpen ? { opacity: 0 } : { opacity: 1 }}
-                            className="top-[5px]"
-                            transition={{ duration: 0.2 }}
+                        <span
+                            className="pointer-events-none absolute inset-0 rounded-full opacity-0 shadow-[inset_0_0_0_1px_rgba(99,102,241,0.38)] transition-opacity duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:opacity-100"
+                            aria-hidden
                         />
-                        <motion.span
-                            animate={isSidebarOpen ? { rotate: -45, y: -5 } : { rotate: 0, y: 0 }}
-                            className="top-[10px]"
-                            transition={{ duration: 0.2 }}
-                        />
-                    </div>
-                </button>
+                        <span className="pointer-events-none relative block h-[12px] w-[18px] opacity-95">
+                            <span className="pointer-events-none absolute left-0 top-0 h-[2px] w-full rounded-full bg-current" />
+                            <span className="pointer-events-none absolute left-0 top-[5px] h-[2px] w-full rounded-full bg-current" />
+                            <span className="pointer-events-none absolute left-0 top-[10px] h-[2px] w-full rounded-full bg-current" />
+                        </span>
+                    </button>
+                )}
                 
                 <AnimatePresence>
                     {(messages.length === 0 || isTemporaryChat) && (
@@ -1076,7 +1261,7 @@ DO NOT output any explanation. Output ONLY the raw React code inside a \`\`\`tsx
                                 }
                             }}
                             className={cn(
-                                "absolute top-4 right-4 sm:top-6 sm:right-6 p-2 rounded-full transition-all duration-300 z-50 group",
+                                "fixed top-4 right-4 z-[95] rounded-full p-2 transition-all duration-300 group sm:top-6 sm:right-6",
                                 isTemporaryChat ? "text-slate-700 bg-slate-100/50" : "text-slate-400 hover:text-slate-600 hover:bg-slate-50/50"
                             )} 
                             title={isTemporaryChat ? "Turn off Temporary Chat" : "Temporary Chat"}
@@ -1104,8 +1289,11 @@ DO NOT output any explanation. Output ONLY the raw React code inside a \`\`\`tsx
                     )}
                 </AnimatePresence>
                 <div className={cn(
-                    "w-full max-w-3xl mx-auto flex flex-col h-full",
-                    messages.length === 0 ? "justify-center px-4 sm:px-6" : "px-4 sm:px-6 pt-4"
+                    "flex flex-col h-full min-h-0 w-full",
+                    showVibeLivePreview ? "min-w-0 flex-1 px-3 sm:px-4" : "max-w-3xl mx-auto",
+                    messages.length === 0
+                        ? "justify-center px-4 sm:px-6"
+                        : cn("pt-12 sm:pt-14", showVibeLivePreview ? "px-3 sm:px-4" : "px-4 sm:px-6"),
                 )}>
                 {messages.length === 0 ? (
                     <motion.div 
@@ -1154,9 +1342,11 @@ DO NOT output any explanation. Output ONLY the raw React code inside a \`\`\`tsx
                         </motion.div>
                     </motion.div>
                 ) : (
-                    <div className="flex-1 overflow-y-auto w-full pb-4 flex flex-col space-y-6 scrollbar-none pt-4 sm:pt-8" id="chat-container">
+                    <div className="flex flex-1 w-full flex-col space-y-6 overflow-y-auto pb-4 pt-0 scrollbar-none" id="chat-container">
                         {messages.map((message) => {
                             const fontClass = fontSize === 'Small' ? 'text-[14px] leading-relaxed' : fontSize === 'Large' ? 'text-[18px] leading-loose' : 'text-[15px] sm:text-[16px] leading-relaxed';
+                            const isLastAssistant =
+                                message.role === "assistant" && lastAssistantId != null && message.id === lastAssistantId;
                             return (
                             <motion.div 
                                 key={message.id}
@@ -1171,7 +1361,7 @@ DO NOT output any explanation. Output ONLY the raw React code inside a \`\`\`tsx
                                 {message.role === 'user' ? (
                                     <div 
                                         data-invert-ignore="true"
-                                        className={cn("px-5 py-3.5 rounded-[24px] rounded-br-[8px] max-w-[85%] sm:max-w-[75%] shadow-[0_2px_10px_rgb(0,0,0,0.02)] border border-slate-200/60 whitespace-pre-wrap", fontClass)}
+                                        className={cn("px-5 py-3.5 rounded-[24px] max-w-[85%] sm:max-w-[75%] shadow-[0_2px_10px_rgb(0,0,0,0.02)] border border-slate-200/60 whitespace-pre-wrap", fontClass)}
                                         style={{ backgroundColor: userBubbleColor, color: '#1e293b' }}
                                     >
                                         {message.content}
@@ -1182,14 +1372,19 @@ DO NOT output any explanation. Output ONLY the raw React code inside a \`\`\`tsx
                                         className="px-2 py-2 w-full flex items-start gap-3"
                                         style={{ color: theme === 'Dark' ? '#e2e8f0' : '#1e293b' }}
                                     >
-                                        <AnimatedMessage 
-                                            content={message.content} 
-                                            isThinking={message.isThinking} 
+                                        <AnimatedMessage
+                                            messageId={message.id}
+                                            content={message.content}
+                                            isThinking={message.isThinking}
                                             isStreaming={message.isStreaming}
                                             reasoningContent={message.reasoningContent}
+                                            vibeUserPrompt={message.vibeUserPrompt}
                                             fontSizeClass={fontClass}
                                             markdownSupport={markdownSupport}
                                             codeHighlighting={codeHighlighting}
+                                            assistantKind={message.assistantKind === "vibe" ? "vibe" : "chat"}
+                                            isLastAssistant={isLastAssistant}
+                                            onVibePreviewReady={handleVibePreviewReady}
                                         />
                                     </div>
                                 )}
@@ -1204,7 +1399,7 @@ DO NOT output any explanation. Output ONLY the raw React code inside a \`\`\`tsx
                     layout
                     ref={inputContainerRef}
                     onClick={() => {
-                        if (!isInputExpanded && !isAiResponding) {
+                        if (!isInputExpanded) {
                             setIsInputExpanded(true);
                         }
                     }}
@@ -1221,8 +1416,8 @@ DO NOT output any explanation. Output ONLY the raw React code inside a \`\`\`tsx
                         className={cn(
                             "input-wrapper relative bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] border transition-all duration-300 cursor-text rounded-[32px] sm:rounded-[40px] z-[3]",
                             isExpanded ? "p-2 sm:p-3" : "p-1.5 sm:p-2",
-                            !isAiResponding && "hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]",
-                            isAiResponding ? "loading border-transparent pointer-events-none" : "border-slate-200/60"
+                            "hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]",
+                            "border-slate-200/60"
                         )}
                     >
                         <div className="relative z-10 w-full h-full">
@@ -1295,17 +1490,15 @@ DO NOT output any explanation. Output ONLY the raw React code inside a \`\`\`tsx
                                     setIsInputExpanded(true);
                                     adjustHeight();
                                 }}
-                                placeholder={isAiResponding ? "" : "Ask Clyra anything..."}
+                                placeholder="Ask Clyra anything..."
                                 containerClassName="w-full"
                                 className={cn(
-                                    "resize-none overflow-y-auto",
+                                    "resize-none overflow-y-auto overflow-x-hidden",
                                     "text-slate-800 text-[15px] leading-relaxed sm:text-lg",
                                     "placeholder:text-slate-400",
                                     isExpanded ? "min-h-[50px] max-h-[35vh] py-3 px-1" : "h-[40px] min-h-[40px] max-h-[40px] py-1.5 px-1",
-                                    isAiResponding && "opacity-0 select-none",
                                     "scrollbar-none transition-all duration-300"
                                 )}
-                                readOnly={isAiResponding}
                             />
                         </div>
 
@@ -1443,8 +1636,25 @@ DO NOT output any explanation. Output ONLY the raw React code inside a \`\`\`tsx
                 </motion.div>
                 )}
                 </AnimatePresence>
-            </div>
-            
+                </div>
+                </div>
+                <div
+                    className={cn(
+                        "flex min-h-0 min-w-0 flex-col overflow-hidden bg-white transition-opacity duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none",
+                        showVibeLivePreview
+                            ? "pointer-events-auto opacity-100"
+                            : "pointer-events-none opacity-0",
+                    )}
+                    aria-hidden={!showVibeLivePreview}
+                >
+                    {showVibeLivePreview ? (
+                        <VibeLivePreviewPanel 
+                            filesByPath={vibePreviewFiles!} 
+                            onAutoFix={handleAutoFix}
+                        />
+                    ) : null}
+                </div>
+                </div>
             <AnimatePresence>
                 {toastMessage && (
                     <motion.div
@@ -1507,51 +1717,41 @@ DO NOT output any explanation. Output ONLY the raw React code inside a \`\`\`tsx
     );
 }
 
-function TypingDots() {
-    return (
-        <div className="flex items-center ml-1">
-            {[1, 2, 3].map((dot) => (
-                <motion.div
-                    key={dot}
-                    className="w-1.5 h-1.5 bg-slate-400 rounded-full mx-[2px]"
-                    initial={{ opacity: 0.4 }}
-                    animate={{ 
-                        opacity: [0.4, 1, 0.4],
-                        scale: [0.8, 1.2, 0.8]
-                    }}
-                    transition={{
-                        duration: 1.4,
-                        repeat: Infinity,
-                        delay: dot * 0.2,
-                        ease: "easeInOut",
-                    }}
-                />
-            ))}
-        </div>
-    );
-}
-
-export async function streamOpenAI(systemInstruction: string | null, messages: any[], onChunk: (text: string, isReasoning?: boolean) => void, temperature: number = 0.7) {
+export async function streamOpenAI(
+    systemInstruction: string | null,
+    messages: any[],
+    onChunk: (text: string, isReasoning?: boolean) => void,
+    temperature: number = 0.7,
+    maxTokens: number = 8000,
+    model: string = "deepseek-reasoner",
+) {
     const formattedMessages = systemInstruction 
         ? [{ role: "system", content: systemInstruction }, ...messages] 
         : messages;
 
-    const response = await fetch("https://api.deepseek.com/chat/completions", {
+    const response = await fetch("/api/deepseek/chat", {
         method: "POST",
         headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer sk-c4fdab6332894c29933ece343b1b192a`
         },
         body: JSON.stringify({
-            model: "deepseek-reasoner",
+            model,
             messages: formattedMessages,
             temperature,
             stream: true,
+            max_tokens: maxTokens,
         })
     });
 
     if (!response.ok) {
-        throw new Error(`OpenAI error: ${response.status} ${response.statusText}`);
+        let detail = response.statusText;
+        try {
+            const errBody = await response.json();
+            if (errBody?.error) detail = String(errBody.error);
+        } catch {
+            /* ignore */
+        }
+        throw new Error(`Chat API error: ${response.status} ${detail}`);
     }
 
     const reader = response.body?.getReader();
@@ -1578,7 +1778,8 @@ export async function streamOpenAI(systemInstruction: string | null, messages: a
                         const delta = data.choices[0].delta;
                         if (delta.reasoning_content) {
                             onChunk(delta.reasoning_content, true);
-                        } else if (delta.content) {
+                        }
+                        if (delta.content) {
                             onChunk(delta.content, false);
                         }
                     }
