@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
 import express from "express";
 import path from "path";
+import { startVibeServer } from "./vibe-server";
 
 const _envRoot = process.cwd();
 dotenv.config({ path: path.join(_envRoot, ".env") });
@@ -10,6 +11,7 @@ import { Readable } from "node:stream";
 async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3000;
+  const VIBE_PORT = Number(process.env.VIBE_PORT) || 5174;
 
   app.use(express.json({ limit: "2mb" }));
 
@@ -64,7 +66,10 @@ async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: process.env.DISABLE_HMR === "true" ? false : undefined,
+      },
       appType: "spa",
     });
     app.use(vite.middlewares);
@@ -79,6 +84,12 @@ async function startServer() {
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
+
+  if (process.env.DISABLE_VIBE_SERVER !== "true") {
+    startVibeServer(VIBE_PORT).catch((error) => {
+      console.error("Failed to start Vibe sandbox server:", error);
+    });
+  }
 }
 
 startServer();

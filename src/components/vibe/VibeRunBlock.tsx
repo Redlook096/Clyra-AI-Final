@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { motion } from "motion/react";
-import { Terminal } from "lucide-react";
+import { AnimatePresence, motion } from "motion/react";
+import { ChevronDown, Terminal } from "lucide-react";
 import { ShiningText } from "@/components/ShiningText";
 
 const HOLD_MS = 2000;
@@ -28,6 +28,7 @@ export function VibeRunBlock({
   archived?: boolean;
 }) {
   const [done, setDone] = useState(() => !!archived);
+  const [expanded, setExpanded] = useState(() => !archived);
   const notifiedRef = useRef(false);
 
   // Pull the actual command line out of the body (model emits "$ npm run lint\nPurpose: ...").
@@ -40,6 +41,7 @@ export function VibeRunBlock({
   useEffect(() => {
     if (archived) {
       setDone(true);
+      setExpanded(false);
       return;
     }
     if (!active || done) return;
@@ -55,6 +57,8 @@ export function VibeRunBlock({
     onCollapsed?.();
   }, [done, onCollapsed]);
 
+  const open = !done || expanded;
+
   return (
     <motion.div
       layout
@@ -65,7 +69,12 @@ export function VibeRunBlock({
       data-invert-ignore
       style={{ contain: "layout paint" }}
     >
-      <div className="flex items-center gap-2 px-4 py-2 text-[13px]">
+      <button
+        type="button"
+        onClick={() => done && setExpanded((value) => !value)}
+        className="flex w-full items-center gap-2 px-4 py-2 text-left text-[13px] transition-colors hover:bg-slate-50"
+        aria-expanded={open}
+      >
         <Terminal className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden />
         <span className="shrink-0 text-slate-500 font-medium">Run Command</span>
         {active && !done ? (
@@ -78,7 +87,31 @@ export function VibeRunBlock({
         ) : (
           <span className="font-mono text-[12.5px] text-slate-700 truncate">{command}</span>
         )}
-      </div>
+        <motion.span
+          animate={{ rotate: open ? 0 : -90 }}
+          transition={{ type: "spring", stiffness: 380, damping: 36, mass: 0.32 }}
+          className="ml-auto shrink-0 text-slate-400"
+          aria-hidden
+        >
+          <ChevronDown className="h-3.5 w-3.5" />
+        </motion.span>
+      </button>
+      <AnimatePresence initial={false}>
+        {open ? (
+          <motion.div
+            key="run-details"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+            className="overflow-hidden border-t border-slate-100"
+          >
+            <pre className="max-h-44 overflow-auto whitespace-pre-wrap px-4 py-3 font-mono text-[11.5px] leading-relaxed text-slate-600 scrollbar-none">
+              {body.trim()}
+            </pre>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
     </motion.div>
   );
 }

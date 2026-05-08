@@ -94,6 +94,11 @@
     100% { transform: translateX(350%); } 
 }
 
+@keyframes vibe-scan {
+  0%, 100% { transform: translateY(-38%); opacity: 0.42; }
+  50% { transform: translateY(255%); opacity: 0.96; }
+}
+
 html, body, #root {
   height: 100%;
 }

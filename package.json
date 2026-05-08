@@ -4,7 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx server.ts",
+    "dev": "npm run build && NODE_ENV=production tsx server.ts",
+    "dev:source": "tsx server.ts",
+    "vibe-server": "tsx vibe-server.ts",
     "start": "node dist/server.cjs",
     "build:server": "esbuild server.ts --platform=node --target=node18 --bundle --format=cjs --outfile=dist/server.cjs --packages=external",
     "build": "vite build && npm run build:server",

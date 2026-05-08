@@ -12,10 +12,10 @@ import {
   type FormEvent,
 } from "react";
 import {
-  ArrowRight,
   ChevronLeft,
   ChevronRight,
   Code2,
+  Crosshair,
   File,
   FileJson,
   FilePlus,
@@ -23,12 +23,15 @@ import {
   Folder,
   FolderPlus,
   LayoutTemplate,
+  Maximize2,
+  Minimize2,
   RotateCw,
   Sparkles,
   AlertCircle,
   X,
 } from "lucide-react";
 import { buildVibePreviewSrcDoc, pickPrimaryPreviewPath } from "@/lib/buildVibePreviewSrcDoc";
+import { sandboxVibePath } from "@/lib/parseVibeAgentContent";
 import { cn } from "@/lib/utils";
 
 const STORAGE_KEY = "clyra_vibe_preview_files";
@@ -43,6 +46,8 @@ type Props = {
   /** Patch streamed files into the editor map without wiping user-added paths (active vibe stream). */
   mergeFilesFromStream?: boolean;
   onAutoFix?: (error: { message: string; stack?: string; label?: string }) => void;
+  setToastMessage?: (message: string) => void;
+  onReferenceElement?: (label: string) => void;
 };
 
 type WorkspaceMode = "preview" | "code";
@@ -277,14 +282,33 @@ function TreeRows({
  * Workbench: file tree + Monaco + mini-browser preview. The iframe loads your running dev server
  * at `?vibe_embed=1` (same as `npm run dev` for this app); files are synced via sessionStorage.
  */
-export function VibeLivePreviewPanel({ filesByPath, className, mergeFilesFromStream = false, onAutoFix }: Props) {
-  const [mergedFiles, setMergedFiles] = useState<Record<string, string>>(() => ({ ...filesByPath }));
+export function VibeLivePreviewPanel({
+  filesByPath,
+  className,
+  mergeFilesFromStream = false,
+  onAutoFix,
+  setToastMessage,
+  onReferenceElement,
+}: Props) {
+  const [mergedFiles, setMergedFiles] = useState<Record<string, string>>(() => {
+    const next: Record<string, string> = {};
+    for (const [path, body] of Object.entries(filesByPath)) next[sandboxVibePath(path)] = body;
+    return next;
+  });
   const [virtualDirs, setVirtualDirs] = useState<Set<string>>(() => new Set());
   const [expanded, setExpanded] = useState<Record<string, boolean>>({ "": true });
   const [iframeReload, setIframeReload] = useState(0);
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("preview");
   const [addressInput, setAddressInput] = useState("");
   const [lastError, setLastError] = useState<{ message: string; stack?: string; label?: string } | null>(null);
+  const [isTesting, setIsTesting] = useState(false);
+  const [testResult, setTestResult] = useState<any>(null);
+  const [sessionUrl, setSessionUrl] = useState("");
+  const [sessionStatus, setSessionStatus] = useState<"idle" | "syncing" | "ready" | "offline">("idle");
+  const [previewNotice, setPreviewNotice] = useState<string | null>(null);
+  const [previewLoaded, setPreviewLoaded] = useState(false);
+  const [isPreviewFullscreen, setIsPreviewFullscreen] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
   useEffect(() => {
@@ -300,23 +324,44 @@ export function VibeLivePreviewPanel({ filesByPath, className, mergeFilesFromStr
           stack: event.data.stack,
           label: event.data.label,
         });
+      } else if (event.data?.type === "VIBE_FOCUS_SELECT") {
+        const label = typeof event.data.label === "string" ? event.data.label : "preview element";
+        onReferenceElement?.(label);
+        setFocusMode(false);
       }
     };
     window.addEventListener("message", handleMessage);
     return () => window.removeEventListener("message", handleMessage);
+  }, [onReferenceElement]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setIsPreviewFullscreen(false);
+        setFocusMode(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  useEffect(() => {
+    iframeRef.current?.contentWindow?.postMessage({ type: "VIBE_FOCUS_MODE", enabled: focusMode }, "*");
+  }, [focusMode, iframeReload, sessionUrl, previewLoaded]);
 
   useEffect(() => {
     if (mergeFilesFromStream) {
       setMergedFiles((prev) => {
         const next = { ...prev };
         for (const k of Object.keys(filesByPath)) {
-          next[k] = filesByPath[k]!;
+          next[sandboxVibePath(k)] = filesByPath[k]!;
         }
         return next;
       });
     } else {
-      setMergedFiles({ ...filesByPath });
+      const next: Record<string, string> = {};
+      for (const [path, body] of Object.entries(filesByPath)) next[sandboxVibePath(path)] = body;
+      setMergedFiles(next);
     }
   }, [filesByPath, mergeFilesFromStream]);
 
@@ -333,11 +378,11 @@ export function VibeLivePreviewPanel({ filesByPath, className, mergeFilesFromStr
     [mergedFiles, virtualDirs],
   );
 
-  /** Synthetic dev-server URL shown in the address bar — purely cosmetic; actual rendering is via srcDoc. */
-  const SANDBOX_DEV_HOST = "http://localhost:5173";
+  /** Real isolated dev server rooted at vibe-sandbox/, separate from the Clyra app. */
+  const SANDBOX_DEV_HOST = "http://localhost:5174";
 
   useLayoutEffect(() => {
-    setAddressInput(`${SANDBOX_DEV_HOST}/vibe-project/`);
+    setAddressInput(`${SANDBOX_DEV_HOST}/`);
   }, []);
 
   const externalEmbedUrl = useMemo(() => {
@@ -357,8 +402,46 @@ export function VibeLivePreviewPanel({ filesByPath, className, mergeFilesFromStr
 
   useEffect(() => {
     const id = window.setTimeout(() => setIframeReload((k) => k + 1), 120);
+    setPreviewLoaded(false);
     return () => window.clearTimeout(id);
   }, [mergedFiles]);
+
+  useEffect(() => {
+    if (Object.keys(mergedFiles).length === 0) {
+      setSessionUrl("");
+      setSessionStatus("idle");
+      return;
+    }
+    const controller = new AbortController();
+    const id = window.setTimeout(async () => {
+      setSessionStatus("syncing");
+      try {
+        const response = await fetch(`${SANDBOX_DEV_HOST}/api/session`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ files: mergedFiles }),
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error(`Sandbox sync failed: ${response.status}`);
+        const result = (await response.json()) as { url?: string };
+        if (!result.url) throw new Error("Sandbox server did not return a preview URL");
+        setSessionUrl(result.url);
+        setAddressInput(result.url);
+        setSessionStatus("ready");
+        setPreviewNotice(null);
+      } catch (error) {
+        if (controller.signal.aborted) return;
+        console.warn("Vibe sandbox server unavailable; falling back to inline preview.", error);
+        setSessionUrl("");
+        setSessionStatus("offline");
+        setPreviewNotice("Sandbox offline. Inline fallback is active.");
+      }
+    }, 220);
+    return () => {
+      controller.abort();
+      window.clearTimeout(id);
+    };
+  }, [SANDBOX_DEV_HOST, mergedFiles]);
 
   const toggleDir = useCallback((path: string) => {
     setExpanded((e) => ({ ...e, [path]: e[path] === false ? true : false }));
@@ -387,7 +470,7 @@ export function VibeLivePreviewPanel({ filesByPath, className, mergeFilesFromStr
     const suggestion = base ? `${base}/Untitled.tsx` : "src/Untitled.tsx";
     const rel = window.prompt("New file path", suggestion)?.trim();
     if (!rel) return;
-    const clean = rel.replace(/^\/+/, "");
+    const clean = sandboxVibePath(rel);
     setMergedFiles((m) => ({ ...m, [clean]: "// New file\n" }));
     setActivePath(clean);
     ensureExpandedPath(clean);
@@ -398,7 +481,7 @@ export function VibeLivePreviewPanel({ filesByPath, className, mergeFilesFromStr
     const suggestion = base ? `${base}/new-folder` : "src/new-folder";
     const rel = window.prompt("New folder path", suggestion)?.trim();
     if (!rel) return;
-    const clean = normDir(rel.replace(/^\/+/, ""));
+    const clean = normDir(sandboxVibePath(rel));
     if (!clean) return;
     setVirtualDirs((d) => new Set(d).add(clean));
     ensureExpandedPath(`${clean}/.keep`);
@@ -406,6 +489,39 @@ export function VibeLivePreviewPanel({ filesByPath, className, mergeFilesFromStr
   }, [activePath, mergedFiles, parentDir, ensureExpandedPath]);
 
   const editorValue = mergedFiles[activePath] ?? "";
+
+  const testPreview = useCallback(async () => {
+    if (Object.keys(mergedFiles).length === 0) return;
+    setIsTesting(true);
+    setTestResult(null);
+    try {
+      const response = await fetch(`${SANDBOX_DEV_HOST}/api/test-preview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: sessionUrl || `${SANDBOX_DEV_HOST}/`, files: mergedFiles, testPrompt: "landing page" }),
+      });
+      if (!response.ok) throw new Error(`Preview test failed: ${response.status}`);
+      const result = await response.json();
+      setTestResult(result);
+      if (result.success && !result.blank) {
+        setPreviewNotice("Headless preview test passed.");
+        setToastMessage?.("Vibe preview test passed");
+      } else {
+        const reason =
+          result.blank ? "Preview looked blank in the headless test." :
+          result.pageErrors?.[0] ?? "Preview test found errors.";
+        setPreviewNotice(reason);
+        setToastMessage?.("Preview test found errors");
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setTestResult({ success: false, error: message });
+      setPreviewNotice(message);
+      setToastMessage?.("Preview test failed");
+    } finally {
+      setIsTesting(false);
+    }
+  }, [SANDBOX_DEV_HOST, mergedFiles, sessionUrl, setToastMessage]);
 
   const reload = useCallback(() => {
     try {
@@ -441,6 +557,10 @@ export function VibeLivePreviewPanel({ filesByPath, className, mergeFilesFromStr
   }, []);
 
   const openExternal = useCallback(() => {
+    if (sessionUrl) {
+      window.open(sessionUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
     if (!externalEmbedUrl) return;
     try {
       sessionStorage.setItem(STORAGE_KEY, JSON.stringify(mergedFiles));
@@ -459,8 +579,9 @@ export function VibeLivePreviewPanel({ filesByPath, className, mergeFilesFromStr
         /* ignore */
       }
       setIframeReload((k) => k + 1);
+      if (addressInput.startsWith(SANDBOX_DEV_HOST)) setSessionUrl(addressInput);
     },
-    [mergedFiles],
+    [addressInput, mergedFiles, SANDBOX_DEV_HOST],
   );
 
   const projectLabel = useMemo(() => {
@@ -469,35 +590,72 @@ export function VibeLivePreviewPanel({ filesByPath, className, mergeFilesFromStr
     return seg.length ? seg[seg.length - 1]! : "Project";
   }, []);
 
+  const healthTone = useMemo(() => {
+    if (lastError || testResult?.success === false) return "error";
+    if (isTesting || sessionStatus === "syncing") return "busy";
+    if (sessionStatus === "ready") return "ready";
+    if (sessionStatus === "offline") return "warn";
+    return "idle";
+  }, [isTesting, lastError, sessionStatus, testResult]);
+
+  const healthText = useMemo(() => {
+    if (lastError) return "Runtime error";
+    if (isTesting) return "Testing preview";
+    if (sessionStatus === "syncing") return "Syncing sandbox";
+    if (sessionStatus === "ready") return "Sandbox live";
+    if (sessionStatus === "offline") return "Inline fallback";
+    return "Preview ready";
+  }, [isTesting, lastError, sessionStatus]);
+
+  const requestAutoFix = useCallback(() => {
+    const message =
+      lastError ??
+      (testResult?.blank
+        ? { label: "blank preview", message: "The Vibe live preview rendered blank in a headless browser test." }
+        : testResult?.pageErrors?.length
+          ? { label: "preview test", message: testResult.pageErrors.join("\n") }
+          : testResult?.error
+            ? { label: "preview test", message: testResult.error }
+            : null);
+    if (!message || !onAutoFix) return;
+    onAutoFix(message);
+    setLastError(null);
+    setPreviewNotice("Auto Fix requested in chat.");
+  }, [lastError, onAutoFix, testResult]);
+
   return (
     <div
-      className={cn("flex h-full min-h-0 min-w-0 max-h-full flex-1 flex-col bg-[#f6f6f6]", className)}
+      className={cn(
+        "flex h-full min-h-0 min-w-0 max-h-full flex-1 flex-col bg-[#f6f6f6]",
+        isPreviewFullscreen && "fixed inset-0 z-[300] h-dvh max-h-none shadow-2xl",
+        className,
+      )}
       data-invert-ignore
     >
-      <header className="flex h-10 shrink-0 items-center gap-1.5 border-b border-slate-200/60 bg-gradient-to-b from-[#f7f7f8] to-[#efeff1] px-2">
+      <header className="flex h-11 shrink-0 items-center gap-2 border-b border-slate-200/70 bg-[#f4f4f5] px-2.5 shadow-[inset_0_-1px_0_rgba(255,255,255,0.75)]">
         <button
           type="button"
           onClick={goBack}
-          className="rounded-md p-1 text-slate-500 transition-colors hover:bg-slate-200/70 hover:text-slate-800"
+          className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white hover:text-slate-800"
           aria-label="Back"
         >
-          <ChevronLeft className="h-4 w-4" strokeWidth={2.2} />
+          <ChevronLeft className="h-4.5 w-4.5" strokeWidth={2.2} />
         </button>
         <button
           type="button"
           onClick={goForward}
-          className="rounded-md p-1 text-slate-500 transition-colors hover:bg-slate-200/70 hover:text-slate-800"
+          className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white hover:text-slate-800"
           aria-label="Forward"
         >
-          <ChevronRight className="h-4 w-4" strokeWidth={2.2} />
+          <ChevronRight className="h-4.5 w-4.5" strokeWidth={2.2} />
         </button>
         <button
           type="button"
           onClick={reload}
-          className="rounded-md p-1 text-slate-500 transition-colors hover:bg-slate-200/70 hover:text-slate-800"
+          className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white hover:text-slate-800"
           aria-label="Reload"
         >
-          <RotateCw className="h-4 w-4" strokeWidth={2} />
+          <RotateCw className="h-4.5 w-4.5" strokeWidth={2} />
         </button>
 
         <form onSubmit={handleAddressSubmit} className="mx-1 flex min-w-0 flex-1 items-center">
@@ -505,22 +663,53 @@ export function VibeLivePreviewPanel({ filesByPath, className, mergeFilesFromStr
             type="text"
             value={addressInput}
             onChange={(e) => setAddressInput(e.target.value)}
-            placeholder="http://localhost:3000/?vibe_embed=1"
-            className="h-7 min-w-0 flex-1 rounded-full border border-slate-300/80 bg-white px-3 font-mono text-[11px] text-slate-700 outline-none transition focus:border-slate-400 focus:ring-1 focus:ring-slate-300"
+            placeholder="http://localhost:5174/sessions/..."
+            className="h-8 min-w-0 flex-1 rounded-full border border-slate-300/80 bg-white px-4 text-center font-mono text-[12px] text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-300/70"
             spellCheck={false}
             autoComplete="off"
             aria-label="Preview URL"
           />
           <button
             type="submit"
-            className="ml-1.5 inline-flex h-7 items-center gap-1 rounded-full bg-slate-900 px-2.5 text-[10.5px] font-semibold text-white transition-colors hover:bg-slate-800"
+            className="sr-only"
           >
-            Go
-            <ArrowRight className="h-3 w-3" strokeWidth={2.3} />
+            Go to preview URL
           </button>
         </form>
 
-        <div className="ml-1 flex shrink-0 rounded-full border border-slate-300/70 bg-white p-[2px]" role="tablist" aria-label="Workspace">
+        <button
+          type="button"
+          onClick={() => setFocusMode((enabled) => !enabled)}
+          className={cn(
+            "rounded-lg p-1.5 transition-colors",
+            focusMode ? "bg-blue-50 text-blue-600 ring-1 ring-blue-200" : "text-slate-500 hover:bg-white hover:text-slate-800",
+          )}
+          aria-label="Inspect preview elements"
+          title="Inspect preview elements"
+        >
+          <Crosshair className="h-4.5 w-4.5" strokeWidth={2} />
+        </button>
+        <button
+          type="button"
+          onClick={testPreview}
+          disabled={isTesting}
+          className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+          aria-label="Test preview"
+          title="Run headless preview test"
+        >
+          <Sparkles className="h-4.5 w-4.5" strokeWidth={2} />
+        </button>
+        <button
+          type="button"
+          onClick={() => setIsPreviewFullscreen((full) => !full)}
+          className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white hover:text-slate-800"
+          aria-label={isPreviewFullscreen ? "Exit full screen preview" : "Full screen preview"}
+          title={isPreviewFullscreen ? "Exit full screen" : "Full screen preview"}
+        >
+          {isPreviewFullscreen ? <Minimize2 className="h-4.5 w-4.5" strokeWidth={2} /> : <Maximize2 className="h-4.5 w-4.5" strokeWidth={2} />}
+        </button>
+
+        <div className="ml-1 flex shrink-0 rounded-full border border-slate-300/70 bg-white p-[2px] shadow-sm" role="tablist" aria-label="Workspace">
           <button
             type="button"
             role="tab"
@@ -532,7 +721,7 @@ export function VibeLivePreviewPanel({ filesByPath, className, mergeFilesFromStr
             )}
           >
             <LayoutTemplate className="h-3 w-3 shrink-0 opacity-90" strokeWidth={2} />
-            Preview
+            {sessionStatus === "syncing" ? "Syncing" : "Preview"}
           </button>
           <button
             type="button"
@@ -678,13 +867,46 @@ export function VibeLivePreviewPanel({ filesByPath, className, mergeFilesFromStr
           ) : null}
 
           <div className="relative flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden bg-white">
+            {(!previewLoaded || lastError) && (
+              <div className="pointer-events-none absolute inset-0 z-30 overflow-hidden bg-white/80 backdrop-blur-[1px]">
+                <div className="absolute inset-x-0 top-0 h-1/3 animate-[vibe-scan_2.6s_ease-in-out_infinite] bg-gradient-to-b from-transparent via-blue-400/45 to-transparent blur-xl" />
+                <div className="absolute left-1/2 top-1/2 h-16 w-48 -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-100/70 blur-2xl" />
+              </div>
+            )}
+            <div className="absolute left-3 top-3 z-40 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-full border border-slate-200/75 bg-white/90 px-2 py-1 text-[11px] font-medium text-slate-600 shadow-[0_8px_24px_rgba(15,23,42,0.08)] backdrop-blur">
+              <span
+                className={cn(
+                  "h-1.5 w-1.5 shrink-0 rounded-full",
+                  healthTone === "ready" && "bg-emerald-500",
+                  healthTone === "busy" && "animate-pulse bg-blue-500",
+                  healthTone === "warn" && "bg-amber-500",
+                  healthTone === "error" && "bg-red-500",
+                  healthTone === "idle" && "bg-slate-300",
+                )}
+                aria-hidden
+              />
+              <span className="truncate">{healthText}</span>
+              {previewNotice ? <span className="hidden max-w-[260px] truncate text-slate-400 sm:inline">{previewNotice}</span> : null}
+              {(lastError || testResult?.success === false || testResult?.blank) && onAutoFix ? (
+                <button
+                  type="button"
+                  onClick={requestAutoFix}
+                  className="pointer-events-auto ml-1 inline-flex h-6 items-center gap-1 rounded-full bg-slate-900 px-2 text-[10.5px] font-semibold text-white transition-colors hover:bg-slate-800"
+                >
+                  <Sparkles className="h-3 w-3 text-amber-300" />
+                  Auto Fix
+                </button>
+              ) : null}
+            </div>
             <iframe
               key={`vibe-preview-${iframeReload}`}
               title="Vibe live preview"
               ref={iframeRef}
-              srcDoc={previewSrcDoc}
-              className="block min-h-0 min-w-0 w-full flex-1 border-0 bg-white"
-              sandbox="allow-scripts allow-forms allow-popups"
+              src={sessionUrl || undefined}
+              srcDoc={sessionUrl ? undefined : previewSrcDoc}
+              onLoad={() => setPreviewLoaded(true)}
+              className="relative z-20 block min-h-0 min-w-0 w-full flex-1 border-0 bg-white"
+              sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
               referrerPolicy="no-referrer"
             />
 
@@ -716,8 +938,7 @@ export function VibeLivePreviewPanel({ filesByPath, className, mergeFilesFromStr
                     <button
                       onClick={() => {
                         if (onAutoFix && lastError) {
-                          onAutoFix(lastError);
-                          setLastError(null);
+                          requestAutoFix();
                         }
                       }}
                       className="group relative flex h-9 flex-1 items-center justify-center gap-2 overflow-hidden rounded-lg bg-slate-900 px-4 text-[12.5px] font-semibold text-white transition-all hover:bg-slate-800 active:scale-[0.98]"
