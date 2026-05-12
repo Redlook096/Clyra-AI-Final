@@ -1,7 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { parseVibeAgentContent, type VibeParsedSegment } from "@/lib/parseVibeAgentContent";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  parseVibeAgentContent,
+  sanitizeVibeAgentContent,
+  type VibeParsedSegment,
+} from "@/lib/parseVibeAgentContent";
 import { extractCodeOutline } from "@/lib/extractCodeOutline";
 import { MarkdownMessageContent } from "@/components/MarkdownMessageContent";
 import { VibeThoughtPanel } from "./VibeThoughtPanel";
@@ -10,8 +21,40 @@ import { VibeMiniCodeBox } from "./VibeMiniCodeBox";
 import { VibeRunBlock } from "./VibeRunBlock";
 import { VibeTextLine } from "./VibeTextLine";
 import { VibeFinalSummary, type SummaryFile } from "./VibeFinalSummary";
-import { BlurredStaggerStream } from "@/components/ui/blurred-stagger-text";
 import { cn } from "@/lib/utils";
+
+type StoredVibeFlowState = {
+  activeStep: number;
+  hadLiveStream: boolean;
+};
+
+const vibeFlowStateByMessage = new Map<string, StoredVibeFlowState>();
+
+function getStoredFlowState(messageId?: string): StoredVibeFlowState | undefined {
+  return messageId ? vibeFlowStateByMessage.get(messageId) : undefined;
+}
+
+function patchStoredFlowState(
+  messageId: string | undefined,
+  patch: Partial<StoredVibeFlowState>,
+) {
+  if (!messageId) return;
+  const prev = vibeFlowStateByMessage.get(messageId) ?? {
+    activeStep: 0,
+    hadLiveStream: false,
+  };
+  vibeFlowStateByMessage.set(messageId, { ...prev, ...patch });
+}
+
+function findLastSegmentIndex(
+  segments: VibeParsedSegment[],
+  type: VibeParsedSegment["type"],
+) {
+  for (let i = segments.length - 1; i >= 0; i--) {
+    if (segments[i]?.type === type) return i;
+  }
+  return -1;
+}
 
 /**
  * Orchestrates the visible Cursor-style agent stream.
@@ -34,41 +77,91 @@ export function VibeAgentMessageBody({
   isStreaming: boolean;
   fontSizeClass?: string;
   isLastAssistant?: boolean;
-  onVibePreviewReady?: (messageId: string, filesByPath: Record<string, string>) => void;
+  onVibePreviewReady?: (
+    messageId: string,
+    filesByPath: Record<string, string>,
+  ) => void;
 }) {
-  const hasDelims = content.includes("<<<VIBE_");
-  const segments = useMemo(() => parseVibeAgentContent(content), [content]);
+  const safeContent = useMemo(() => sanitizeVibeAgentContent(content), [content]);
+  const hasDelims = safeContent.includes("<<<VIBE_");
+  const segments = useMemo(() => parseVibeAgentContent(safeContent), [safeContent]);
   const fallbackMarkdown = !hasDelims && content.length > 0;
+
+  const isPlanMd = (seg: VibeParsedSegment) =>
+    seg.type === "code" && /\bplan\.md\b/i.test(seg.file);
+
+  const isTerminalThinking = (seg: VibeParsedSegment) => {
+    if (seg.type !== "thinking") return false;
+    const body = seg.body.trim().toUpperCase();
+    return (
+      body.startsWith("SHIPPED") ||
+      body.startsWith("SELF-CRITIQUE") ||
+      body.includes("PLAN.MD: COMPLETE")
+    );
+  };
 
   const blocks: VibeParsedSegment[] = useMemo(() => {
     const filtered = segments.filter((s) => {
-      if (s.type === "text") return s.body.trim().length > 0;
+      if (s.type === "text") {
+        const text = s.body.trim();
+        if (!text) return false;
+        if (/^Done!\s+Here's what I built/i.test(text)) return false;
+        return true;
+      }
+      if (isPlanMd(s)) return false;
+      if (isTerminalThinking(s)) return false;
       return true;
     });
-    if (isStreaming || filtered.length === 0) return filtered;
-    return filtered.map((seg, i) => {
-      if (i !== filtered.length - 1) return seg;
+    const lastCodeIndex = findLastSegmentIndex(filtered, "code");
+    const lastRunIndex = findLastSegmentIndex(filtered, "run");
+    const timeline =
+      !isStreaming && lastRunIndex > lastCodeIndex
+        ? filtered.filter(
+            (seg, i) => !(seg.type === "thinking" && i > lastRunIndex),
+          )
+        : filtered;
+    if (isStreaming || timeline.length === 0) return timeline;
+    return timeline.map((seg, i) => {
+      if (i !== timeline.length - 1) return seg;
       if (seg.type === "text") return seg;
       return { ...seg, complete: true } as VibeParsedSegment;
     });
   }, [segments, isStreaming]);
 
-  const [activeStep, setActiveStep] = useState(0);
+  const storedAtMount = getStoredFlowState(messageId);
+  const [activeStep, setActiveStep] = useState(
+    () => storedAtMount?.activeStep ?? 0,
+  );
   const advanceTimeoutRef = useRef<number | null>(null);
+  const previewSentRef = useRef(false);
   /** True once this message has ever streamed; false for history/hydrated bubbles → show full timeline instantly. */
-  const streamStartedRef = useRef(false);
+  const streamStartedRef = useRef(
+    isStreaming || !!storedAtMount?.hadLiveStream,
+  );
 
   useLayoutEffect(() => {
-    if (isStreaming) streamStartedRef.current = true;
-  }, [isStreaming]);
+    if (!isStreaming) return;
+    streamStartedRef.current = true;
+    patchStoredFlowState(messageId, { hadLiveStream: true });
+  }, [isStreaming, messageId]);
 
   useEffect(() => {
-    setActiveStep(0);
+    const stored = getStoredFlowState(messageId);
+    setActiveStep(stored?.activeStep ?? 0);
+    streamStartedRef.current = isStreaming || !!stored?.hadLiveStream;
+    previewSentRef.current = false;
     if (advanceTimeoutRef.current != null) {
       window.clearTimeout(advanceTimeoutRef.current);
       advanceTimeoutRef.current = null;
     }
-  }, [messageId]);
+  }, [messageId, isStreaming]);
+
+  useEffect(() => {
+    patchStoredFlowState(messageId, {
+      activeStep,
+      hadLiveStream: streamStartedRef.current,
+    });
+  }, [activeStep, messageId]);
 
   useEffect(
     () => () => {
@@ -86,6 +179,7 @@ export function VibeAgentMessageBody({
     for (const seg of blocks) {
       if (seg.type !== "code" || !seg.complete) continue;
       if (!seg.body.trim()) continue;
+      if (isPlanMd(seg)) continue;
       byPath.set(seg.file, {
         path: seg.file,
         added: seg.added,
@@ -99,7 +193,12 @@ export function VibeAgentMessageBody({
   const filesByPath = useMemo(() => {
     const m: Record<string, string> = {};
     for (const seg of blocks) {
-      if (seg.type === "code" && seg.complete && seg.body.trim()) {
+      if (
+        seg.type === "code" &&
+        seg.complete &&
+        seg.body.trim() &&
+        !isPlanMd(seg)
+      ) {
         m[seg.file] = seg.body;
       }
     }
@@ -109,21 +208,33 @@ export function VibeAgentMessageBody({
   const handleSummaryPrinted = useCallback(() => {
     if (!isLastAssistant || !onVibePreviewReady || !messageId) return;
     if (Object.keys(filesByPath).length === 0) return;
+    if (previewSentRef.current) return;
+    previewSentRef.current = true;
     onVibePreviewReady(messageId, filesByPath);
   }, [isLastAssistant, onVibePreviewReady, messageId, filesByPath]);
+
+  const allStepsDone = activeStep >= blocks.length;
+  const isStaticHistory = !isStreaming && !streamStartedRef.current;
+  const archived = isStaticHistory || allStepsDone;
+  const showSummary =
+    summaryFiles.length > 0 &&
+    ((!isStreaming && allStepsDone) || isStaticHistory);
 
   if (fallbackMarkdown) {
     return (
       <div className={cn("space-y-3", fontSizeClass)}>
         {isStreaming ? (
-          <BlurredStaggerStream
-            text={content}
-            isStreaming
-            className={cn("text-inherit", fontSizeClass)}
-          />
+          <div
+            className={cn(
+              "whitespace-pre-wrap font-medium leading-relaxed",
+              fontSizeClass,
+            )}
+          >
+            {safeContent}
+          </div>
         ) : (
           <MarkdownMessageContent
-            content={content}
+            content={safeContent}
             codeHighlighting
             codePresentation="soft"
             suppressCodeBlocks
@@ -133,14 +244,8 @@ export function VibeAgentMessageBody({
     );
   }
 
-  const allStepsDone = activeStep >= blocks.length;
-  const isStaticHistory = !isStreaming && !streamStartedRef.current;
-  const archived = isStaticHistory || allStepsDone;
-  const showSummary =
-    summaryFiles.length > 0 && ((!isStreaming && allStepsDone) || isStaticHistory);
-
   return (
-    <div className={cn("flex flex-col gap-3 w-full", fontSizeClass)}>
+    <div className={cn("flex w-full flex-col gap-3", fontSizeClass)}>
       {blocks.map((seg, i) => {
         if (!archived && i > activeStep) return null;
         const isActive = !archived && i === activeStep;
@@ -153,6 +258,7 @@ export function VibeAgentMessageBody({
           }
           const next = i + 1;
           const prevType = blocks[i]?.type;
+          const prevSeg = blocks[i];
           const nextSeg = blocks[next];
           const pauseBeforeNarration =
             nextSeg?.type === "text" &&
@@ -165,11 +271,23 @@ export function VibeAgentMessageBody({
             setActiveStep((s) => (s === i ? next : s));
           };
 
+          // Code blocks: when segmentComplete flips true, dwell at least 800ms
+          const codeJustFinished =
+            prevSeg?.type === "code" &&
+            prevSeg?.complete &&
+            next < blocks.length;
+
           if (pauseBeforeNarration && next < blocks.length) {
             advanceTimeoutRef.current = window.setTimeout(() => {
               advanceTimeoutRef.current = null;
               go();
-            }, 1000);
+            }, 1800);
+          } else if (codeJustFinished) {
+            // Code block collapsed — dwell before next step
+            advanceTimeoutRef.current = window.setTimeout(() => {
+              advanceTimeoutRef.current = null;
+              go();
+            }, 800);
           } else {
             go();
           }
@@ -188,7 +306,7 @@ export function VibeAgentMessageBody({
                 onCollapsed={archived ? undefined : advance}
               />
             );
-          case "analyze":
+          case "analyze": {
             return (
               <VibeAnalysingBanner
                 key={key}
@@ -198,6 +316,7 @@ export function VibeAgentMessageBody({
                 onCompleted={archived ? undefined : advance}
               />
             );
+          }
           case "code":
             return (
               <VibeMiniCodeBox

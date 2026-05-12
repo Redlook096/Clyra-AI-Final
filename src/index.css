@@ -2,194 +2,238 @@
 
 /* Hide scrollbars while keeping overflow scroll (textarea, chat, palettes). */
 .scrollbar-none {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
 }
 .scrollbar-none::-webkit-scrollbar {
-  display: none;
-  width: 0;
-  height: 0;
+    display: none;
+    width: 0;
+    height: 0;
 }
 
 :root {
-  /* Legacy; main layout uses --clyra-ui-scale */
-  --app-scale: 1;
-  /* Set by App resize / visualViewport (defaults safe for SSR) */
-  --clyra-ui-scale: 1;
-  --clyra-content-cap: 768px;
+    /* Legacy; main layout uses --clyra-ui-scale */
+    --app-scale: 1;
+    /* Set by App resize / visualViewport (defaults safe for SSR) */
+    --clyra-ui-scale: 1;
+    --clyra-content-cap: 768px;
 }
 
 /* Extra vertical room so scaled UI (transform) isn’t clipped at the bottom */
 .clyra-stage-safe {
-  flex: 1 1 0%;
-  min-height: 0;
-  min-width: 0;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  padding-bottom: max(0.75rem, calc((var(--clyra-ui-scale, 1) - 1) * 15rem));
+    flex: 1 1 0%;
+    min-height: 0;
+    min-width: 0;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    padding-bottom: max(0.75rem, calc((var(--clyra-ui-scale, 1) - 1) * 15rem));
 }
 
 .clyra-layout-stage {
-  flex: 1 1 auto;
-  min-height: 0;
-  min-width: 0;
-  transform: scale(var(--clyra-ui-scale));
-  transform-origin: top center;
-  width: calc(100% / var(--clyra-ui-scale));
-  max-width: calc(var(--clyra-content-cap) / var(--clyra-ui-scale));
-  transition:
-    transform 0.22s ease-out,
-    width 0.22s ease-out,
-    max-width 0.22s ease-out;
-  will-change: transform;
+    flex: 1 1 auto;
+    min-height: 0;
+    min-width: 0;
+    transform: scale(var(--clyra-ui-scale));
+    transform-origin: top center;
+    width: calc(100% / var(--clyra-ui-scale));
+    max-width: calc(var(--clyra-content-cap) / var(--clyra-ui-scale));
+    transition:
+        transform 0.22s ease-out,
+        width 0.22s ease-out,
+        max-width 0.22s ease-out;
+    will-change: transform;
 }
 
 /* Shimmer Loading */
 .input-wrapper.loading {
     border-color: transparent !important;
-    box-shadow: 0 0 30px -5px rgba(255, 255, 255, 0.4), inset 0 0 15px rgba(255, 255, 255, 0.1) !important;
+    box-shadow:
+        0 0 30px -5px rgba(255, 255, 255, 0.4),
+        inset 0 0 15px rgba(255, 255, 255, 0.1) !important;
 }
 
 /* 1. The glowing border doing laps */
 .input-wrapper.loading::before {
-    content: ''; 
-    position: absolute; 
-    top: -1px; left: -1px; right: -1px; bottom: -1px;
+    content: "";
+    position: absolute;
+    top: -1px;
+    left: -1px;
+    right: -1px;
+    bottom: -1px;
     border-radius: inherit;
     padding: 1.5px;
-    background: linear-gradient(90deg, transparent 0%, rgba(200, 200, 200, 0.8) 50%, transparent 100%);
+    background: linear-gradient(
+        90deg,
+        transparent 0%,
+        rgba(200, 200, 200, 0.8) 50%,
+        transparent 100%
+    );
     background-size: 200% 100%;
     animation: shiningBorder 1.5s infinite linear;
-    
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+
+    -webkit-mask:
+        linear-gradient(#fff 0 0) content-box,
+        linear-gradient(#fff 0 0);
     -webkit-mask-composite: xor;
     mask-composite: exclude;
-    
+
     pointer-events: none;
     z-index: 10;
 }
 
 /* 2. The inner diffuse sweep of light */
 .input-wrapper.loading::after {
-    content: ''; 
-    position: absolute; 
-    top: 0; 
-    left: -100%; 
-    width: 60%; 
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 60%;
     height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(200, 200, 200, 0.15), transparent);
-    animation: shimmerMove 1.5s infinite linear; 
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(200, 200, 200, 0.15),
+        transparent
+    );
+    animation: shimmerMove 1.5s infinite linear;
     pointer-events: none;
     border-radius: inherit;
     z-index: 1;
 }
 
 @keyframes shiningBorder {
-    0% { background-position: 200% 0; }
-    100% { background-position: -200% 0; }
+    0% {
+        background-position: 200% 0;
+    }
+    100% {
+        background-position: -200% 0;
+    }
 }
-@keyframes shimmerMove { 
-    0% { transform: translateX(0); } 
-    100% { transform: translateX(350%); } 
+@keyframes shimmerMove {
+    0% {
+        transform: translateX(0);
+    }
+    100% {
+        transform: translateX(350%);
+    }
 }
 
-@keyframes vibe-scan {
-  0%, 100% { transform: translateY(-38%); opacity: 0.42; }
-  50% { transform: translateY(255%); opacity: 0.96; }
+@keyframes vibe-pulse-smooth {
+    0%,
+    100% {
+        opacity: 0.4;
+        transform: scale(0.9);
+    }
+    50% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+.dot-pulse-smooth {
+    animation: vibe-pulse-smooth 1.5s ease-in-out infinite;
 }
 
-html, body, #root {
-  height: 100%;
+html,
+body,
+#root {
+    height: 100%;
 }
 
 .markdown-body {
-  font-size: clamp(0.9rem, 0.82rem + 0.28vw, 1.05rem);
-  line-height: 1.6;
+    font-size: clamp(0.9rem, 0.82rem + 0.28vw, 1.05rem);
+    line-height: 1.6;
 }
 
 .markdown-body > *:first-child {
-  margin-top: 0;
+    margin-top: 0;
 }
 
 .markdown-body > *:last-child {
-  margin-bottom: 0;
+    margin-bottom: 0;
 }
 
 .markdown-body--vibe p {
-  color: #334155;
+    color: #334155;
 }
 
 .markdown-body p {
-  margin-bottom: 1em;
+    margin-bottom: 1em;
 }
 
-.markdown-body h1, .markdown-body h2, .markdown-body h3, .markdown-body h4, .markdown-body h5, .markdown-body h6 {
-  font-weight: 600;
-  margin-top: 1.5em;
-  margin-bottom: 0.5em;
-  color: #0f172a;
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+    font-weight: 600;
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+    color: #0f172a;
 }
 
 .markdown-body strong {
-  font-weight: 600;
-  color: #0f172a;
+    font-weight: 600;
+    color: #0f172a;
 }
 
 .markdown-body ul {
-  list-style-type: disc;
-  padding-left: 1.5em;
-  margin-bottom: 1em;
+    list-style-type: disc;
+    padding-left: 1.5em;
+    margin-bottom: 1em;
 }
 
 .markdown-body ol {
-  list-style-type: decimal;
-  padding-left: 1.5em;
-  margin-bottom: 1em;
+    list-style-type: decimal;
+    padding-left: 1.5em;
+    margin-bottom: 1em;
 }
 
 .markdown-body li + li {
-  margin-top: 0.25em;
+    margin-top: 0.25em;
 }
 
 .markdown-body code {
-  background-color: #f1f5f9;
-  padding: 0.2em 0.4em;
-  border-radius: 4px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-  font-size: 0.85em;
+    background-color: #f1f5f9;
+    padding: 0.2em 0.4em;
+    border-radius: 4px;
+    font-family:
+        ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+        "Liberation Mono", "Courier New", monospace;
+    font-size: 0.85em;
 }
 
 .markdown-body pre {
-  background-color: #f8fafc;
-  padding: 1em;
-  border-radius: 8px;
-  overflow-x: auto;
-  margin-bottom: 1em;
-  border: 1px solid #e2e8f0;
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+    background-color: #f8fafc;
+    padding: 1em;
+    border-radius: 8px;
+    overflow-x: auto;
+    margin-bottom: 1em;
+    border: 1px solid #e2e8f0;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
 }
 .markdown-body pre::-webkit-scrollbar {
-  display: none;
-  height: 0;
+    display: none;
+    height: 0;
 }
 
 .markdown-body pre code {
-  background-color: transparent;
-  padding: 0;
-  border-radius: 0;
-  font-size: 0.85em;
+    background-color: transparent;
+    padding: 0;
+    border-radius: 0;
+    font-size: 0.85em;
 }
 
 .markdown-body blockquote {
-  border-left: 4px solid #cbd5e1;
-  padding-left: 1em;
-  color: #64748b;
-  margin-bottom: 1em;
+    border-left: 4px solid #cbd5e1;
+    padding-left: 1em;
+    color: #64748b;
+    margin-bottom: 1em;
 }
 
 .markdown-body a {
-  color: #2563eb;
-  text-decoration: underline;
+    color: #2563eb;
+    text-decoration: underline;
 }

@@ -1,21 +1,118 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
+import {
+  AnimatePresence,
+  type MotionValue,
+  motion,
+  useSpring,
+  useTransform,
+} from "motion/react";
 import { ChevronDown } from "lucide-react";
 import { ShiningText } from "@/components/ShiningText";
+import { cn } from "@/lib/utils";
 
 const LINE_PX = 20;
 const VISIBLE_LINES_TYPING = 4;
 const VISIBLE_LINES_REOPENED = 4;
 const MAX_CODE_H_TYPING = LINE_PX * VISIBLE_LINES_TYPING;
 const MAX_CODE_H_REOPENED = LINE_PX * VISIBLE_LINES_REOPENED;
-const CHAR_MS = 3;
-const COLLAPSE_HOLD_MS = 2000;
+const COLLAPSE_HOLD_MS = 2400;
+const COUNTER_FONT_SIZE = 12;
+const COUNTER_HEIGHT = COUNTER_FONT_SIZE + 3;
 
 function lineCountFromSource(src: string): number {
   if (src.length === 0) return 0;
   return src.split("\n").length;
+}
+
+function RollingCounter({ value }: { value: number }) {
+  const safeValue = Math.max(0, Math.round(value));
+  const digits = String(safeValue).split("").map(Number);
+
+  return (
+    <span
+      className="inline-flex items-center overflow-hidden leading-none tabular-nums"
+      style={{ fontSize: COUNTER_FONT_SIZE, height: COUNTER_HEIGHT }}
+      aria-label={String(safeValue)}
+    >
+      {digits.map((_, index) => {
+        const place = 10 ** (digits.length - index - 1);
+        return <RollingDigit key={`${digits.length}-${place}`} place={place} value={safeValue} />;
+      })}
+    </span>
+  );
+}
+
+function CounterPill({
+  sign,
+  value,
+  className,
+}: {
+  sign: "+" | "-";
+  value: number;
+  className: string;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex h-[18px] shrink-0 items-center gap-[1px] rounded-full px-1.5 font-mono text-[12px] font-semibold leading-none tabular-nums",
+        className,
+      )}
+    >
+      <span className="inline-flex h-full w-[0.65ch] items-center justify-center leading-none">
+        {sign}
+      </span>
+      <RollingCounter value={value} />
+    </span>
+  );
+}
+
+function RollingDigit({ place, value }: { place: number; value: number }) {
+  const valueRoundedToPlace = Math.floor(value / place);
+  const animatedValue = useSpring(valueRoundedToPlace, {
+    stiffness: 180,
+    damping: 24,
+    mass: 0.45,
+  });
+
+  useEffect(() => {
+    animatedValue.set(valueRoundedToPlace);
+  }, [animatedValue, valueRoundedToPlace]);
+
+  return (
+    <span
+      className="relative inline-block w-[1ch] overflow-hidden"
+      style={{ height: COUNTER_HEIGHT }}
+    >
+      {Array.from({ length: 10 }, (_, number) => (
+        <RollingNumber
+          key={number}
+          mv={animatedValue}
+          number={number}
+        />
+      ))}
+    </span>
+  );
+}
+
+function RollingNumber({ mv, number }: { mv: MotionValue<number>; number: number }) {
+  const y = useTransform(mv, (latest) => {
+    const placeValue = latest % 10;
+    let offset = (10 + number - placeValue) % 10;
+    let nextY = offset * COUNTER_HEIGHT;
+    if (offset > 5) nextY -= 10 * COUNTER_HEIGHT;
+    return nextY;
+  });
+
+  return (
+    <motion.span
+      style={{ y }}
+      className="absolute inset-0 flex items-center justify-center"
+    >
+      {number}
+    </motion.span>
+  );
 }
 
 /**
@@ -53,6 +150,7 @@ export function VibeMiniCodeBox({
   const [manuallyOpen, setManuallyOpen] = useState(false);
   const collapsedNotifiedRef = useRef(!!archived);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (archived) {
@@ -64,12 +162,14 @@ export function VibeMiniCodeBox({
     if (!active || collapsed) return;
     if (revealed < code.length) {
       const left = code.length - revealed;
-      const step = left > 1500 ? 3 : left > 600 ? 2 : 1;
-      const id = window.setTimeout(
-        () => setRevealed((r) => Math.min(r + step, code.length)),
-        CHAR_MS,
-      );
-      return () => window.clearTimeout(id);
+      const step = left > 8000 ? 2400 : left > 3500 ? 1400 : left > 1500 ? 720 : 180;
+      rafRef.current = window.requestAnimationFrame(() => {
+        setRevealed((r) => Math.min(r + step, code.length));
+      });
+      return () => {
+        if (rafRef.current != null) window.cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      };
     }
     if (!segmentComplete) return;
     const id = window.setTimeout(() => setCollapsed(true), COLLAPSE_HOLD_MS);
@@ -104,26 +204,29 @@ export function VibeMiniCodeBox({
     return shown.split("\n");
   }, [shown]);
 
-  /** Header "+" matches gutter line count (lines in `shown`), not the model's `added` attribute. */
-  const targetPlus = lines.length;
+  const actualAdded = useMemo(() => lineCountFromSource(code), [code]);
+  const finalAdded = actualAdded || added;
+  const shownLineCount = lineCountFromSource(shown);
+  const targetPlus =
+    archived || (segmentComplete && revealed >= code.length)
+      ? finalAdded
+      : Math.min(finalAdded, shownLineCount);
+  const finalRemoved = removed === finalAdded && removed > 0 ? 0 : removed;
   const targetMinus =
-    archived || (segmentComplete && revealed >= code.length) ? removed : 0;
+    archived || (segmentComplete && revealed >= code.length) ? finalRemoved : 0;
 
-  const plusAnimRef = useRef(archived ? lineCountFromSource(code) : 0);
-  const minusAnimRef = useRef(archived ? removed : 0);
-  const [displayAdded, setDisplayAdded] = useState(() =>
-    archived ? lineCountFromSource(code) : 0,
-  );
-  const [displayRemoved, setDisplayRemoved] = useState(() => (archived ? removed : 0));
+  const plusAnimRef = useRef(archived ? finalAdded : 0);
+  const minusAnimRef = useRef(archived ? finalRemoved : 0);
+  const [displayAdded, setDisplayAdded] = useState(() => (archived ? finalAdded : 0));
+  const [displayRemoved, setDisplayRemoved] = useState(() => (archived ? finalRemoved : 0));
 
   useEffect(() => {
     if (!archived) return;
-    const n = lineCountFromSource(code);
-    plusAnimRef.current = n;
-    minusAnimRef.current = removed;
-    setDisplayAdded(n);
-    setDisplayRemoved(removed);
-  }, [archived, code, removed]);
+    plusAnimRef.current = finalAdded;
+    minusAnimRef.current = finalRemoved;
+    setDisplayAdded(finalAdded);
+    setDisplayRemoved(finalRemoved);
+  }, [archived, finalAdded, finalRemoved]);
 
   useEffect(() => {
     if (archived) return;
@@ -156,14 +259,18 @@ export function VibeMiniCodeBox({
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: active ? 1 : 0.7, y: 0 }}
-      transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-      className="w-full max-w-[560px]"
+      layout
+      initial={{ opacity: 0, y: 10, scale: 0.992 }}
+      animate={{ opacity: active || archived ? 1 : 0.76, y: 0 }}
+      transition={{ duration: 0.36, ease: [0.22, 1, 0.36, 1] }}
+      className="w-full max-w-[640px]"
     >
       <motion.div
         transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-        className="overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-[0_2px_10px_rgba(15,23,42,0.05)]"
+        className={cn(
+	        "overflow-hidden rounded-lg border border-slate-200/80 bg-white/[0.97] shadow-[0_1px_0_rgba(15,23,42,0.035),0_14px_34px_rgba(15,23,42,0.055)]",
+          active && !collapsed && "ring-1 ring-blue-500/10",
+        )}
         style={{ contain: "layout paint" }}
       >
         <div
@@ -182,9 +289,9 @@ export function VibeMiniCodeBox({
               : undefined
           }
           className={
-            "flex items-center justify-between gap-2 px-4 py-2 text-[13px] bg-white text-left transition-colors select-none " +
+	            "flex items-center justify-between gap-2 bg-white/[0.96] px-3.5 py-2 text-left text-[13px] transition-colors select-none " +
             (headerInteractive
-              ? "cursor-pointer hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+	              ? "cursor-pointer hover:bg-slate-50/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
               : "")
           }
         >
@@ -194,17 +301,21 @@ export function VibeMiniCodeBox({
                 text={file}
                 preset="thinkingChat"
                 play
-                className="text-[13px] font-medium truncate max-w-[180px] sm:max-w-[280px]"
+                className="max-w-[220px] truncate text-[13px] font-medium sm:max-w-[360px]"
               />
             ) : (
               <span className="truncate text-[13px] font-medium text-slate-700">{file}</span>
             )}
-            <span className="shrink-0 text-[12px] font-medium tabular-nums text-emerald-600">
-              +{displayAdded}
-            </span>
-            <span className="shrink-0 text-[12px] font-medium tabular-nums text-rose-500">
-              -{displayRemoved}
-            </span>
+            <CounterPill
+              sign="+"
+              value={displayAdded}
+              className="bg-emerald-50/90 text-emerald-700"
+            />
+            <CounterPill
+              sign="-"
+              value={displayRemoved}
+              className="bg-rose-50/90 text-rose-600"
+            />
           </span>
           {headerInteractive ? (
             <motion.span
@@ -222,14 +333,14 @@ export function VibeMiniCodeBox({
           {isOpen && (
             <motion.div
               key="code"
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
+              initial={{ height: 0, opacity: 0, y: -2 }}
+              animate={{ height: "auto", opacity: 1, y: 0 }}
+              exit={{ height: 0, opacity: 0, y: -2 }}
               transition={{
-                height: { duration: 0.3, ease: [0.22, 1, 0.36, 1] },
-                opacity: { duration: 0.2 },
+                height: { duration: 0.42, ease: [0.22, 1, 0.36, 1] },
+                opacity: { duration: 0.24 },
               }}
-              className="overflow-hidden border-t border-slate-100/90"
+	              className="overflow-hidden border-t border-slate-100/90 bg-slate-50/[0.45]"
             >
               <div
                 ref={scrollRef}
@@ -247,14 +358,21 @@ export function VibeMiniCodeBox({
                   <div className="min-h-[20px]" aria-hidden />
                 ) : (
                   lines.map((line, i) => (
-                    <div key={`${i}-${revealed}`} className="flex min-h-[20px] gap-2">
+                    <motion.div
+                      key={`line-${i}`}
+                      layout="position"
+                      initial={{ opacity: 0, y: 5 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                      className="flex min-h-[20px] gap-2"
+                    >
                       <span className="w-8 shrink-0 select-none text-right font-mono text-[10px] tabular-nums leading-[20px] text-slate-400">
                         {i + 1}
                       </span>
                       <span className="min-w-0 flex-1 break-words font-mono text-[12px] leading-[20px] text-slate-700 whitespace-pre-wrap">
                         {line}
                       </span>
-                    </div>
+                    </motion.div>
                   ))
                 )}
               </div>

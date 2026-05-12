@@ -5,6 +5,13 @@ export type VibeParsedSegment =
   | { type: "run"; body: string; complete: boolean }
   | { type: "text"; body: string };
 
+const HIDDEN_HARNESS_NAMES =
+  /\b(?:open[\s-]?code|opencode|aider|archon)\b/gi;
+
+export function sanitizeVibeAgentContent(raw: string): string {
+  return raw.replace(HIDDEN_HARNESS_NAMES, "the coding agent");
+}
+
 /**
  * Sandbox AI-supplied paths so they can never accidentally reference real Clyra source files
  * on disk. All paths are forced into a synthetic `vibe-project/` namespace, traversal segments
@@ -35,9 +42,9 @@ export function sandboxVibePath(rawPath: string): string {
 const M = {
   thinkS: "<<<VIBE_THINKING>>>",
   thinkE: "<<<END_VIBE_THINKING>>>",
-  anaS: /<<<VIBE_ANALYZE path="([^"]*)">>>/,
+  anaS: /<<<VIBE_ANALYZE path="([^"]*)">>+/,
   anaE: "<<<END_VIBE_ANALYZE>>>",
-  codeS: /<<<VIBE_CODE file="([^"]*)" added="(\d+)" removed="(\d+)">>>/,
+  codeS: /<<<VIBE_CODE file="([^"]*)" added="(\d+)" removed="(\d+)">>+/,
   codeE: "<<<END_VIBE_CODE>>>",
   runS: "<<<VIBE_RUN>>>",
   runE: "<<<END_VIBE_RUN>>>",
@@ -53,6 +60,7 @@ function pushText(segments: VibeParsedSegment[], buf: string) {
  * Incomplete trailing segments are still emitted with complete:false and partial body.
  */
 export function parseVibeAgentContent(raw: string): VibeParsedSegment[] {
+  raw = sanitizeVibeAgentContent(raw);
   const segments: VibeParsedSegment[] = [];
   let i = 0;
   let textBuf = "";

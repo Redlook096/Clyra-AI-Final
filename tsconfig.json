@@ -26,6 +26,7 @@
   "exclude": [
     "dist",
     "node_modules",
+    "vendor",
     "vibe-sandbox"
   ]
 }

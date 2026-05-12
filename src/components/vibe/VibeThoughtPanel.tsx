@@ -4,24 +4,26 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronRight } from "lucide-react";
 import { ShiningText } from "@/components/ShiningText";
+import { cn } from "@/lib/utils";
 
-const HOLD_MS = 2000;
+const HOLD_MS = 1000;
 const MAX_BODY_PX = 168;
 
-/** Characters to reveal per animation frame for ultra-smooth, fast typing. */
-const CHARS_PER_FRAME_FAST = 2;
-const CHARS_PER_FRAME_BURST = 5;
-const BURST_THRESHOLD = 180;
+/**
+ * Type quickly enough to feel live, while still pacing the text through rAF so it
+ * does not jump straight to a completed paragraph.
+ */
+const MS_PER_CHARACTER = 7;
 
-type Phase = "typing" | "dwell" | "folded";
+type Phase = "shining" | "typing" | "dwell" | "folded";
 
 /**
  * Inline Cursor-style Thought UI.
- * - Header: chevron + "Thinking" (shimmer) → typed body → 2s dwell → folds to "Thought" + chevron right.
+ * - Header: chevron + "Thinking" (shimmer) → typed body → 1s dwell → folds to "Thought" + chevron right.
  * - Body is the model's raw THINKING block (or a follow-up reflection beat).
  *
- * Typing uses requestAnimationFrame so the reveal stays buttery even when many segments are
- * mounted, with a small per-frame burst on long bodies so we don't take 30s to render a long thought.
+ * Typing uses requestAnimationFrame and advances one character at a time so the reasoning
+ * feels genuinely live instead of skipping straight to the end.
  */
 export function VibeThoughtPanel({
   body,
@@ -38,11 +40,14 @@ export function VibeThoughtPanel({
   archived?: boolean;
 }) {
   const [revealed, setRevealed] = useState(() => (archived ? body.length : 0));
-  const [phase, setPhase] = useState<Phase>(() => (archived ? "folded" : "typing"));
-  const [expanded, setExpanded] = useState(() => !archived);
+  const [phase, setPhase] = useState<Phase>(() =>
+    archived ? "folded" : "shining",
+  );
+  const [expanded, setExpanded] = useState(false);
   const notifiedRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
+  const shiningDelayRef = useRef(260 + Math.random() * 120);
 
   useEffect(() => {
     if (archived) {
@@ -52,20 +57,36 @@ export function VibeThoughtPanel({
     }
   }, [archived, body.length]);
 
+  // Shining → typing transition after random delay.
+  useEffect(() => {
+    if (archived) return;
+    if (!active || phase !== "shining") return;
+    const id = window.setTimeout(() => {
+      setPhase("typing");
+      setExpanded(true);
+    }, shiningDelayRef.current);
+    return () => window.clearTimeout(id);
+  }, [archived, active, phase]);
+
   // rAF-driven typing — runs only while active + still typing.
   useEffect(() => {
     if (archived) return;
     if (!active || phase !== "typing") return;
     let cancelled = false;
+    let last = performance.now();
+    let carry = 0;
 
-    const tick = () => {
+    const tick = (now: number) => {
       if (cancelled) return;
-      setRevealed((r) => {
-        if (r >= body.length) return r;
-        const left = body.length - r;
-        const step = left > BURST_THRESHOLD ? CHARS_PER_FRAME_BURST : CHARS_PER_FRAME_FAST;
-        return Math.min(r + step, body.length);
-      });
+      carry += now - last;
+      last = now;
+      if (carry >= MS_PER_CHARACTER) {
+        carry = carry % MS_PER_CHARACTER;
+        setRevealed((r) => {
+          if (r >= body.length) return r;
+          return Math.min(r + 1, body.length);
+        });
+      }
       rafRef.current = window.requestAnimationFrame(tick);
     };
     rafRef.current = window.requestAnimationFrame(tick);
@@ -119,14 +140,29 @@ export function VibeThoughtPanel({
     el.scrollTo({ top: targetTop, behavior: "smooth" });
   }, [archived, revealed]);
 
-  const open = phase === "typing" || phase === "dwell" || expanded;
-  const showLiveLabel = phase === "typing" || phase === "dwell";
+  const open =
+    phase === "typing" ||
+    phase === "dwell" ||
+    (expanded && phase !== "shining");
+  const showLiveLabel =
+    phase === "shining" || phase === "typing" || phase === "dwell";
   const slice = body.slice(0, revealed);
 
-  const chevronSpring = { type: "spring" as const, stiffness: 380, damping: 36, mass: 0.32 };
+  const chevronSpring = {
+    type: "spring" as const,
+    stiffness: 380,
+    damping: 36,
+    mass: 0.32,
+  };
 
   return (
-    <div className="flex w-full max-w-full flex-col gap-1 text-[14px]">
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: active || archived ? 1 : 0.72, y: 0 }}
+      transition={{ duration: 0.3, ease: [0.22, 1, 0.36, 1] }}
+      className="flex w-full max-w-[640px] flex-col gap-1 text-[14px]"
+    >
       <div className="flex items-center gap-2 py-0.5" aria-live="polite">
         {showLiveLabel ? (
           <>
@@ -137,13 +173,13 @@ export function VibeThoughtPanel({
             >
               <ChevronRight className="h-4 w-4" aria-hidden />
             </motion.span>
-            <ShiningText text="Thinking" preset="thinkingChat" />
+            <ShiningText text="Reasoning" preset="thinkingChat" />
           </>
         ) : (
           <button
             type="button"
             onClick={() => setExpanded((e) => !e)}
-            className="group flex w-fit items-center gap-2 rounded-lg py-0.5 pl-0.5 pr-2 text-left transition-colors hover:bg-slate-100/70"
+            className="group flex w-fit items-center gap-2 rounded-md py-0.5 pl-0.5 pr-2 text-left transition-colors hover:bg-slate-100/70"
           >
             <motion.span
               className="flex shrink-0 text-slate-400 transition-colors group-hover:text-slate-500"
@@ -152,7 +188,9 @@ export function VibeThoughtPanel({
             >
               <ChevronRight className="h-4 w-4" />
             </motion.span>
-            <span className="text-[13px] font-medium text-slate-500">Thought</span>
+            <span className="text-[13px] font-medium text-slate-500">
+              Reasoning
+            </span>
           </button>
         )}
       </div>
@@ -161,22 +199,27 @@ export function VibeThoughtPanel({
         {open && (
           <motion.div
             key="thought-panel"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
+            initial={{ height: 0, opacity: 0, y: -2 }}
+            animate={{ height: "auto", opacity: 1, y: 0 }}
+            exit={{ height: 0, opacity: 0, y: -2 }}
             transition={{
               type: "spring",
-              bounce: 0.04,
-              stiffness: 220,
-              damping: 42,
-              opacity: { duration: 0.18 },
+              bounce: 0.03,
+              stiffness: 180,
+              damping: 34,
+              opacity: { duration: 0.24 },
             }}
             className="overflow-hidden"
           >
             <div className="flex gap-3 py-2 pl-0.5 pr-1">
               <div
                 aria-hidden
-                className="mt-0.5 w-px shrink-0 self-stretch bg-gradient-to-b from-slate-200 via-slate-200/80 to-transparent"
+                className={cn(
+                  "mt-0.5 w-px shrink-0 self-stretch bg-gradient-to-b to-transparent",
+                  active
+                    ? "from-blue-300 via-slate-200"
+                    : "from-slate-200 via-slate-200/80",
+                )}
               />
               <div
                 ref={scrollRef}
@@ -184,10 +227,6 @@ export function VibeThoughtPanel({
                 style={{
                   maxHeight: MAX_BODY_PX,
                   contain: "layout style paint",
-                  maskImage:
-                    "linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,1) 14%, rgba(0,0,0,1) 86%, rgba(0,0,0,0.55) 100%)",
-                  WebkitMaskImage:
-                    "linear-gradient(to bottom, rgba(0,0,0,0.55) 0%, rgba(0,0,0,1) 14%, rgba(0,0,0,1) 86%, rgba(0,0,0,0.55) 100%)",
                 }}
               >
                 {slice}
@@ -196,6 +235,6 @@ export function VibeThoughtPanel({
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
+    </motion.div>
   );
 }

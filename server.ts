@@ -7,6 +7,8 @@ const _envRoot = process.cwd();
 dotenv.config({ path: path.join(_envRoot, ".env") });
 dotenv.config({ path: path.join(_envRoot, ".env.local"), override: true });
 import { Readable } from "node:stream";
+import { spawn } from "node:child_process";
+import { homedir } from "node:os";
 
 async function startServer() {
   const app = express();
@@ -19,24 +21,30 @@ async function startServer() {
     res.json({ status: "ok" });
   });
 
-  app.post("/api/deepseek/chat", async (req, res) => {
+  const handleClyraChat = async (
+    req: express.Request,
+    res: express.Response,
+  ) => {
     const apiKey = process.env.DEEPSEEK_API_KEY;
     if (!apiKey) {
       res.status(503).json({
         error:
-          "DEEPSEEK_API_KEY is not set. Add it to .env or .env.local (server reads this file on startup).",
+          "Clyra API is not configured. Add DEEPSEEK_API_KEY to .env or .env.local (server reads this file on startup).",
       });
       return;
     }
     try {
-      const upstream = await fetch("https://api.deepseek.com/chat/completions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`,
+      const upstream = await fetch(
+        "https://api.deepseek.com/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify(req.body),
         },
-        body: JSON.stringify(req.body),
-      });
+      );
 
       const contentType = upstream.headers.get("content-type");
       if (contentType) res.setHeader("Content-Type", contentType);
@@ -52,23 +60,151 @@ async function startServer() {
         return;
       }
 
-      Readable.fromWeb(upstream.body as import("stream/web").ReadableStream).pipe(res);
+      Readable.fromWeb(
+        upstream.body as import("stream/web").ReadableStream,
+      ).pipe(res);
     } catch (err) {
-      console.error("DeepSeek proxy error:", err);
+      console.error("Clyra chat proxy error:", err);
       if (!res.headersSent) {
-        res.status(502).json({ error: "Failed to reach DeepSeek API" });
+        res.status(502).json({ error: "Failed to reach Clyra chat API" });
       } else {
         res.end();
       }
     }
+  };
+
+  app.post("/api/clyra/chat", handleClyraChat);
+  app.post("/api/deepseek/chat", handleClyraChat);
+
+  // ===== AI Clipper API =====
+
+  app.post("/api/clipper/configure", (req, res) => {
+    // Store subtitle config in memory (or just acknowledge)
+    const defaults = {
+      font_size: 52,
+      font: "Impact",
+      text_colour: "#FFFFFF",
+      stroke_colour: "#000000",
+      position: "bottom-centre",
+    };
+    const cfg = { ...defaults, ...(req.body || {}) };
+    res.json({ success: true, config: cfg });
   });
+
+  app.post("/api/clipper/start", async (req, res) => {
+    const { url, config: cfg } = req.body || {};
+    if (!url) {
+      res.status(400).json({ error: "YouTube URL is required" });
+      return;
+    }
+
+    // SSE headers
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    });
+
+    const send = (type: string, data: Record<string, unknown>) => {
+      res.write(`data: ${JSON.stringify({ type, ...data })}\n\n`);
+    };
+
+    const scriptPath = path.join(process.cwd(), "clipper-pipeline.py");
+
+    try {
+      // Step 1: Download
+      send("progress", {
+        step: "download",
+        status: "running",
+        message: "Downloading video...",
+      });
+
+      const { execSync } = await import("node:child_process");
+
+      // Check if ffmpeg exists
+      try {
+        execSync("which ffmpeg", { stdio: "pipe" });
+      } catch {
+        send("error", {
+          step: "download",
+          message:
+            "ffmpeg is not installed. Install it with: brew install ffmpeg",
+        });
+        res.end();
+        return;
+      }
+
+      // Run the Python pipeline script
+      const homeBin = path.join(homedir(), "bin");
+      const proc = spawn("python3", [scriptPath, url, JSON.stringify(cfg)], {
+        env: {
+          ...process.env,
+          PYTHONUNBUFFERED: "1",
+          PATH: `${process.env.PATH || ""}:${homeBin}`,
+        },
+        stdio: ["pipe", "pipe", "pipe"],
+      });
+
+      let buffer = "";
+      proc.stdout.on("data", (chunk: Buffer) => {
+        buffer += chunk.toString();
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          try {
+            const data = JSON.parse(trimmed);
+            send(data.type || "progress", data);
+          } catch {
+            send("log", { message: trimmed });
+          }
+        }
+      });
+
+      proc.stderr.on("data", (chunk: Buffer) => {
+        send("log", { message: chunk.toString().trim() });
+      });
+
+      proc.on("close", (code: number | null) => {
+        if (code === 0) {
+          send("complete", {
+            message: "Clip ready!",
+            output: "./output/final_clip.mp4",
+          });
+        } else {
+          send("error", { message: `Pipeline failed with code ${code}` });
+        }
+        res.end();
+      });
+
+      proc.on("error", (err: Error) => {
+        send("error", { message: err.message });
+        res.end();
+      });
+    } catch (err) {
+      send("error", {
+        message: err instanceof Error ? err.message : String(err),
+      });
+      res.end();
+    }
+  });
+
+  // Serve output files
+  app.use("/output", express.static(path.join(process.cwd(), "output")));
 
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");
+    const hmrPort = Number(process.env.HMR_PORT) || 24678;
     const vite = await createViteServer({
       server: {
         middlewareMode: true,
-        hmr: process.env.DISABLE_HMR === "true" ? false : undefined,
+        hmr: {
+          host: "localhost",
+          port: hmrPort,
+          clientPort: hmrPort,
+        },
       },
       appType: "spa",
     });

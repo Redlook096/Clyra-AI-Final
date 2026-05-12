@@ -1,8 +1,6 @@
 "use client";
 
 import {
-  lazy,
-  Suspense,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -30,27 +28,38 @@ import {
   AlertCircle,
   X,
 } from "lucide-react";
-import { buildVibePreviewSrcDoc, pickPrimaryPreviewPath } from "@/lib/buildVibePreviewSrcDoc";
+import {
+  buildVibePreviewSrcDoc,
+  pickPrimaryPreviewPath,
+} from "@/lib/buildVibePreviewSrcDoc";
 import { sandboxVibePath } from "@/lib/parseVibeAgentContent";
 import { cn } from "@/lib/utils";
 
 const STORAGE_KEY = "clyra_vibe_preview_files";
-
-const Editor = lazy(() =>
-  import("@monaco-editor/react").then((m) => ({ default: m.Editor })),
-);
 
 type Props = {
   filesByPath: Record<string, string>;
   className?: string;
   /** Patch streamed files into the editor map without wiping user-added paths (active vibe stream). */
   mergeFilesFromStream?: boolean;
-  onAutoFix?: (error: { message: string; stack?: string; label?: string }) => void;
+  onAutoFix?: (error: {
+    message: string;
+    stack?: string;
+    label?: string;
+  }) => void;
   setToastMessage?: (message: string) => void;
   onReferenceElement?: (label: string) => void;
 };
 
 type WorkspaceMode = "preview" | "code";
+
+type AgentCursorState = {
+  visible: boolean;
+  x: number;
+  y: number;
+  label: string;
+  clicking: boolean;
+};
 
 type TreeNode = {
   name: string;
@@ -77,7 +86,38 @@ function collectDirsFromFiles(files: Record<string, string>): Set<string> {
   return dirs;
 }
 
-function buildTree(files: Record<string, string>, extraDirs: Set<string>): TreeNode {
+function inferPreviewTestPrompt(files: Record<string, string>) {
+  const haystack = Object.entries(files)
+    .map(([path, body]) => `${path}\n${body.slice(0, 3000)}`)
+    .join("\n")
+    .toLowerCase();
+  if (/calculator|usecalculator|calculatorbuttons/.test(haystack))
+    return "calculator";
+  if (/platformer|gamecanvas|usegameloop|player|gravity|coin/.test(haystack))
+    return "2d platformer game";
+  if (/landing|hero|pricing|testimonial/.test(haystack)) return "landing page";
+  return "interactive app";
+}
+
+function recordsEqual(a: Record<string, string>, b: Record<string, string>) {
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) return false;
+  return aKeys.every((key) => a[key] === b[key]);
+}
+
+function filesSignature(files: Record<string, string>) {
+  return JSON.stringify(
+    Object.keys(files)
+      .sort()
+      .map((key) => [key, files[key]]),
+  );
+}
+
+function buildTree(
+  files: Record<string, string>,
+  extraDirs: Set<string>,
+): TreeNode {
   const dirs = collectDirsFromFiles(files);
   for (const d of extraDirs) {
     const n = normDir(d);
@@ -145,67 +185,25 @@ function buildTree(files: Record<string, string>, extraDirs: Set<string>): TreeN
   return root;
 }
 
-function inferLanguage(path: string): string {
-  const lower = path.toLowerCase();
-  const dot = lower.lastIndexOf(".");
-  const ext = dot >= 0 ? lower.slice(dot) : "";
-  const map: Record<string, string> = {
-    ".tsx": "typescript",
-    ".ts": "typescript",
-    ".mts": "typescript",
-    ".cts": "typescript",
-    ".jsx": "javascript",
-    ".js": "javascript",
-    ".mjs": "javascript",
-    ".cjs": "javascript",
-    ".json": "json",
-    ".css": "css",
-    ".scss": "scss",
-    ".less": "less",
-    ".html": "html",
-    ".htm": "html",
-    ".md": "markdown",
-    ".mdx": "markdown",
-    ".py": "python",
-    ".rb": "ruby",
-    ".go": "go",
-    ".rs": "rust",
-    ".java": "java",
-    ".kt": "kotlin",
-    ".swift": "swift",
-    ".cs": "csharp",
-    ".fs": "fsharp",
-    ".php": "php",
-    ".vue": "html",
-    ".svelte": "html",
-    ".yaml": "yaml",
-    ".yml": "yaml",
-    ".xml": "xml",
-    ".sql": "sql",
-    ".graphql": "graphql",
-    ".gql": "graphql",
-    ".toml": "ini",
-    ".ini": "ini",
-    ".sh": "shell",
-    ".bash": "shell",
-    ".zsh": "shell",
-    ".dockerfile": "dockerfile",
-    ".cpp": "cpp",
-    ".cc": "cpp",
-    ".cxx": "cpp",
-    ".hpp": "cpp",
-    ".c": "c",
-    ".h": "c",
-  };
-  if (lower.endsWith("dockerfile") || lower.split("/").pop() === "dockerfile") return "dockerfile";
-  return map[ext] ?? "plaintext";
-}
-
 function FileGlyph({ path }: { path: string }) {
   const p = path.toLowerCase();
-  if (p.endsWith(".json")) return <FileJson className="h-3.5 w-3.5 shrink-0 text-amber-600/90" strokeWidth={1.75} />;
-  if (p.endsWith(".md")) return <FileText className="h-3.5 w-3.5 shrink-0 text-sky-600/90" strokeWidth={1.75} />;
-  return <File className="h-3.5 w-3.5 shrink-0 text-slate-500" strokeWidth={1.75} />;
+  if (p.endsWith(".json"))
+    return (
+      <FileJson
+        className="h-3.5 w-3.5 shrink-0 text-amber-600/90"
+        strokeWidth={1.75}
+      />
+    );
+  if (p.endsWith(".md"))
+    return (
+      <FileText
+        className="h-3.5 w-3.5 shrink-0 text-sky-600/90"
+        strokeWidth={1.75}
+      />
+    );
+  return (
+    <File className="h-3.5 w-3.5 shrink-0 text-slate-500" strokeWidth={1.75} />
+  );
 }
 
 function TreeRows({
@@ -233,14 +231,20 @@ function TreeRows({
               <button
                 type="button"
                 onClick={() => toggle(n.path)}
-                className="flex w-full items-center gap-0.5 rounded px-1 py-[3px] text-left text-[12.5px] text-slate-600 hover:bg-slate-200/60"
+	                className="flex w-full items-center gap-0.5 rounded-md px-1 py-[3px] text-left text-[12.5px] text-slate-600 transition-colors hover:bg-white/[0.85]"
                 style={{ paddingLeft: 6 + depth * 12 }}
               >
                 <ChevronRight
-                  className={cn("h-3 w-3 shrink-0 text-slate-400 transition-transform", open && "rotate-90")}
+                  className={cn(
+                    "h-3 w-3 shrink-0 text-slate-400 transition-transform",
+                    open && "rotate-90",
+                  )}
                   strokeWidth={2}
                 />
-                <Folder className="h-3.5 w-3.5 shrink-0 text-slate-500/90" strokeWidth={1.75} />
+                <Folder
+                  className="h-3.5 w-3.5 shrink-0 text-slate-500/90"
+                  strokeWidth={1.75}
+                />
                 <span className="min-w-0 truncate">{n.name}</span>
               </button>
               {open ? (
@@ -263,8 +267,10 @@ function TreeRows({
             type="button"
             onClick={() => onPick(n.path)}
             className={cn(
-              "flex w-full items-center gap-1.5 rounded px-1 py-[3px] text-left text-[12.5px]",
-              active ? "bg-slate-300/50 text-slate-900" : "text-slate-600 hover:bg-slate-200/50",
+	              "flex w-full items-center gap-1.5 rounded-md px-1 py-[3px] text-left text-[12.5px] transition-all",
+	              active
+	                ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200/70"
+	                : "text-slate-600 hover:bg-white/[0.85]",
             )}
             style={{ paddingLeft: 10 + depth * 12 }}
           >
@@ -292,29 +298,54 @@ export function VibeLivePreviewPanel({
 }: Props) {
   const [mergedFiles, setMergedFiles] = useState<Record<string, string>>(() => {
     const next: Record<string, string> = {};
-    for (const [path, body] of Object.entries(filesByPath)) next[sandboxVibePath(path)] = body;
+    for (const [path, body] of Object.entries(filesByPath))
+      next[sandboxVibePath(path)] = body;
     return next;
   });
   const [virtualDirs, setVirtualDirs] = useState<Set<string>>(() => new Set());
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({ "": true });
-  const [iframeReload, setIframeReload] = useState(0);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({
+    "": true,
+  });
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("preview");
   const [addressInput, setAddressInput] = useState("");
-  const [lastError, setLastError] = useState<{ message: string; stack?: string; label?: string } | null>(null);
+  const [lastError, setLastError] = useState<{
+    message: string;
+    stack?: string;
+    label?: string;
+  } | null>(null);
   const [isTesting, setIsTesting] = useState(false);
   const [testResult, setTestResult] = useState<any>(null);
   const [sessionUrl, setSessionUrl] = useState("");
-  const [sessionStatus, setSessionStatus] = useState<"idle" | "syncing" | "ready" | "offline">("idle");
+  const [sessionStatus, setSessionStatus] = useState<
+    "idle" | "syncing" | "ready" | "offline"
+  >("idle");
   const [previewNotice, setPreviewNotice] = useState<string | null>(null);
   const [previewLoaded, setPreviewLoaded] = useState(false);
   const [isPreviewFullscreen, setIsPreviewFullscreen] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
+  const [agentCursor, setAgentCursor] = useState<AgentCursorState>({
+    visible: false,
+    x: 46,
+    y: 40,
+    label: "Headful Mode",
+    clicking: false,
+  });
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const lastSessionSignatureRef = useRef<string | null>(null);
+  const cursorTimeoutsRef = useRef<number[]>([]);
 
   useEffect(() => {
     setWorkspaceMode("preview");
     setLastError(null);
   }, [filesByPath]);
+
+  useEffect(
+    () => () => {
+      for (const id of cursorTimeoutsRef.current) window.clearTimeout(id);
+      cursorTimeoutsRef.current = [];
+    },
+    [],
+  );
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
@@ -325,7 +356,10 @@ export function VibeLivePreviewPanel({
           label: event.data.label,
         });
       } else if (event.data?.type === "VIBE_FOCUS_SELECT") {
-        const label = typeof event.data.label === "string" ? event.data.label : "preview element";
+        const label =
+          typeof event.data.label === "string"
+            ? event.data.label
+            : "preview element";
         onReferenceElement?.(label);
         setFocusMode(false);
       }
@@ -346,8 +380,11 @@ export function VibeLivePreviewPanel({
   }, []);
 
   useEffect(() => {
-    iframeRef.current?.contentWindow?.postMessage({ type: "VIBE_FOCUS_MODE", enabled: focusMode }, "*");
-  }, [focusMode, iframeReload, sessionUrl, previewLoaded]);
+    iframeRef.current?.contentWindow?.postMessage(
+      { type: "VIBE_FOCUS_MODE", enabled: focusMode },
+      "*",
+    );
+  }, [focusMode, sessionUrl, previewLoaded]);
 
   useEffect(() => {
     if (mergeFilesFromStream) {
@@ -356,16 +393,25 @@ export function VibeLivePreviewPanel({
         for (const k of Object.keys(filesByPath)) {
           next[sandboxVibePath(k)] = filesByPath[k]!;
         }
-        return next;
+        return recordsEqual(prev, next) ? prev : next;
       });
     } else {
       const next: Record<string, string> = {};
-      for (const [path, body] of Object.entries(filesByPath)) next[sandboxVibePath(path)] = body;
-      setMergedFiles(next);
+      for (const [path, body] of Object.entries(filesByPath))
+        next[sandboxVibePath(path)] = body;
+      setMergedFiles((prev) => (recordsEqual(prev, next) ? prev : next));
     }
   }, [filesByPath, mergeFilesFromStream]);
 
-  const defaultPath = useMemo(() => pickPrimaryPreviewPath(mergedFiles), [mergedFiles]);
+  const mergedFilesSignature = useMemo(
+    () => filesSignature(mergedFiles),
+    [mergedFiles],
+  );
+
+  const defaultPath = useMemo(
+    () => pickPrimaryPreviewPath(mergedFiles),
+    [mergedFiles],
+  );
   const [activePath, setActivePath] = useState(defaultPath);
 
   useEffect(() => {
@@ -390,7 +436,10 @@ export function VibeLivePreviewPanel({
     return new URL("/?vibe_embed=1", window.location.origin).href;
   }, []);
 
-  const previewSrcDoc = useMemo(() => buildVibePreviewSrcDoc(mergedFiles), [mergedFiles]);
+  const previewSrcDoc = useMemo(
+    () => buildVibePreviewSrcDoc(mergedFiles),
+    [mergedFiles],
+  );
 
   useLayoutEffect(() => {
     try {
@@ -401,20 +450,29 @@ export function VibeLivePreviewPanel({
   }, [mergedFiles]);
 
   useEffect(() => {
-    const id = window.setTimeout(() => setIframeReload((k) => k + 1), 120);
-    setPreviewLoaded(false);
-    return () => window.clearTimeout(id);
-  }, [mergedFiles]);
-
-  useEffect(() => {
     if (Object.keys(mergedFiles).length === 0) {
       setSessionUrl("");
       setSessionStatus("idle");
+      lastSessionSignatureRef.current = null;
+      return;
+    }
+    if (
+      lastSessionSignatureRef.current === mergedFilesSignature &&
+      sessionUrl
+    ) {
       return;
     }
     const controller = new AbortController();
+    let timedOut = false;
+    const syncTimeout = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 8000);
     const id = window.setTimeout(async () => {
       setSessionStatus("syncing");
+      setPreviewLoaded(false);
+      setLastError(null);
+      setTestResult(null);
       try {
         const response = await fetch(`${SANDBOX_DEV_HOST}/api/session`, {
           method: "POST",
@@ -422,26 +480,41 @@ export function VibeLivePreviewPanel({
           body: JSON.stringify({ files: mergedFiles }),
           signal: controller.signal,
         });
-        if (!response.ok) throw new Error(`Sandbox sync failed: ${response.status}`);
+        if (!response.ok)
+          throw new Error(`Sandbox sync failed: ${response.status}`);
         const result = (await response.json()) as { url?: string };
-        if (!result.url) throw new Error("Sandbox server did not return a preview URL");
+        if (!result.url)
+          throw new Error("Sandbox server did not return a preview URL");
+        lastSessionSignatureRef.current = mergedFilesSignature;
         setSessionUrl(result.url);
         setAddressInput(result.url);
         setSessionStatus("ready");
+        setLastError(null);
+        setTestResult(null);
         setPreviewNotice(null);
       } catch (error) {
-        if (controller.signal.aborted) return;
-        console.warn("Vibe sandbox server unavailable; falling back to inline preview.", error);
+        if (controller.signal.aborted && !timedOut) return;
+        console.warn(
+          "Vibe sandbox server unavailable; falling back to inline preview.",
+          error,
+        );
         setSessionUrl("");
         setSessionStatus("offline");
-        setPreviewNotice("Sandbox offline. Inline fallback is active.");
+        setPreviewNotice(
+          timedOut
+            ? "Sandbox sync timed out. Inline fallback is active."
+            : "Sandbox offline. Inline fallback is active.",
+        );
+      } finally {
+        window.clearTimeout(syncTimeout);
       }
     }, 220);
     return () => {
       controller.abort();
       window.clearTimeout(id);
+      window.clearTimeout(syncTimeout);
     };
-  }, [SANDBOX_DEV_HOST, mergedFiles]);
+  }, [SANDBOX_DEV_HOST, mergedFiles, mergedFilesSignature, sessionUrl]);
 
   const toggleDir = useCallback((path: string) => {
     setExpanded((e) => ({ ...e, [path]: e[path] === false ? true : false }));
@@ -466,7 +539,10 @@ export function VibeLivePreviewPanel({
   }, []);
 
   const handleNewFile = useCallback(() => {
-    const base = activePath && mergedFiles[activePath] !== undefined ? parentDir(activePath) : "";
+    const base =
+      activePath && mergedFiles[activePath] !== undefined
+        ? parentDir(activePath)
+        : "";
     const suggestion = base ? `${base}/Untitled.tsx` : "src/Untitled.tsx";
     const rel = window.prompt("New file path", suggestion)?.trim();
     if (!rel) return;
@@ -477,7 +553,10 @@ export function VibeLivePreviewPanel({
   }, [activePath, mergedFiles, parentDir, ensureExpandedPath]);
 
   const handleNewFolder = useCallback(() => {
-    const base = activePath && mergedFiles[activePath] !== undefined ? parentDir(activePath) : "";
+    const base =
+      activePath && mergedFiles[activePath] !== undefined
+        ? parentDir(activePath)
+        : "";
     const suggestion = base ? `${base}/new-folder` : "src/new-folder";
     const rel = window.prompt("New folder path", suggestion)?.trim();
     if (!rel) return;
@@ -490,26 +569,55 @@ export function VibeLivePreviewPanel({
 
   const editorValue = mergedFiles[activePath] ?? "";
 
+  const runAgentCursorReplay = useCallback(() => {
+    for (const id of cursorTimeoutsRef.current) window.clearTimeout(id);
+    cursorTimeoutsRef.current = [];
+    const steps: Array<Partial<AgentCursorState> & { at: number }> = [
+      { at: 0, visible: true, x: 18, y: 22, label: "Opening preview", clicking: false },
+      { at: 650, x: 48, y: 38, label: "Scanning UI", clicking: false },
+      { at: 1250, x: 66, y: 58, label: "Checking interactions", clicking: true },
+      { at: 1700, clicking: false },
+      { at: 2200, x: 34, y: 70, label: "Testing controls", clicking: true },
+      { at: 2700, clicking: false },
+      { at: 3400, x: 72, y: 28, label: "Validating render", clicking: false },
+    ];
+    for (const step of steps) {
+      const id = window.setTimeout(() => {
+        setAgentCursor((prev) => ({ ...prev, ...step, visible: true }));
+      }, step.at);
+      cursorTimeoutsRef.current.push(id);
+    }
+  }, []);
+
   const testPreview = useCallback(async () => {
     if (Object.keys(mergedFiles).length === 0) return;
+    const inferredPrompt = inferPreviewTestPrompt(mergedFiles);
     setIsTesting(true);
     setTestResult(null);
+    setPreviewNotice(`Headful Mode: testing ${inferredPrompt}`);
+    runAgentCursorReplay();
     try {
       const response = await fetch(`${SANDBOX_DEV_HOST}/api/test-preview`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: sessionUrl || `${SANDBOX_DEV_HOST}/`, files: mergedFiles, testPrompt: "landing page" }),
+        body: JSON.stringify({
+          url: sessionUrl || `${SANDBOX_DEV_HOST}/`,
+          files: mergedFiles,
+          testPrompt: inferredPrompt,
+          headfulMode: true,
+        }),
       });
-      if (!response.ok) throw new Error(`Preview test failed: ${response.status}`);
+      if (!response.ok)
+        throw new Error(`Preview test failed: ${response.status}`);
       const result = await response.json();
       setTestResult(result);
       if (result.success && !result.blank) {
-        setPreviewNotice("Headless preview test passed.");
+        setPreviewNotice("Headful Mode preview test passed.");
         setToastMessage?.("Vibe preview test passed");
       } else {
-        const reason =
-          result.blank ? "Preview looked blank in the headless test." :
-          result.pageErrors?.[0] ?? "Preview test found errors.";
+        const reason = result.blank
+          ? "Preview looked blank in Headful Mode."
+          : (result.pageErrors?.[0] ?? "Preview test found errors.");
         setPreviewNotice(reason);
         setToastMessage?.("Preview test found errors");
       }
@@ -520,8 +628,18 @@ export function VibeLivePreviewPanel({
       setToastMessage?.("Preview test failed");
     } finally {
       setIsTesting(false);
+      const id = window.setTimeout(() => {
+        setAgentCursor((prev) => ({ ...prev, visible: false, clicking: false }));
+      }, 1200);
+      cursorTimeoutsRef.current.push(id);
     }
-  }, [SANDBOX_DEV_HOST, mergedFiles, sessionUrl, setToastMessage]);
+  }, [
+    SANDBOX_DEV_HOST,
+    mergedFiles,
+    runAgentCursorReplay,
+    sessionUrl,
+    setToastMessage,
+  ]);
 
   const reload = useCallback(() => {
     try {
@@ -537,7 +655,9 @@ export function VibeLivePreviewPanel({
         /* cross-origin */
       }
     }
-    setIframeReload((k) => k + 1);
+    if (iframeRef.current) {
+      iframeRef.current.src = iframeRef.current.src;
+    }
   }, [mergedFiles]);
 
   const goBack = useCallback(() => {
@@ -578,8 +698,11 @@ export function VibeLivePreviewPanel({
       } catch {
         /* ignore */
       }
-      setIframeReload((k) => k + 1);
-      if (addressInput.startsWith(SANDBOX_DEV_HOST)) setSessionUrl(addressInput);
+      if (iframeRef.current) {
+        iframeRef.current.src = iframeRef.current.src;
+      }
+      if (addressInput.startsWith(SANDBOX_DEV_HOST))
+        setSessionUrl(addressInput);
     },
     [addressInput, mergedFiles, SANDBOX_DEV_HOST],
   );
@@ -607,11 +730,17 @@ export function VibeLivePreviewPanel({
     return "Preview ready";
   }, [isTesting, lastError, sessionStatus]);
 
+  const showPreviewSyncOverlay = sessionStatus === "syncing" && !sessionUrl;
+
   const requestAutoFix = useCallback(() => {
     const message =
       lastError ??
       (testResult?.blank
-        ? { label: "blank preview", message: "The Vibe live preview rendered blank in a headless browser test." }
+        ? {
+            label: "blank preview",
+            message:
+              "The Vibe live preview rendered blank in a headless browser test.",
+          }
         : testResult?.pageErrors?.length
           ? { label: "preview test", message: testResult.pageErrors.join("\n") }
           : testResult?.error
@@ -626,17 +755,18 @@ export function VibeLivePreviewPanel({
   return (
     <div
       className={cn(
-        "flex h-full min-h-0 min-w-0 max-h-full flex-1 flex-col bg-[#f6f6f6]",
-        isPreviewFullscreen && "fixed inset-0 z-[300] h-dvh max-h-none shadow-2xl",
+	        "flex h-full min-h-0 min-w-0 max-h-full flex-1 flex-col bg-[#f7f8fb]",
+        isPreviewFullscreen &&
+          "fixed inset-0 z-[300] h-dvh max-h-none shadow-2xl",
         className,
       )}
       data-invert-ignore
     >
-      <header className="flex h-11 shrink-0 items-center gap-2 border-b border-slate-200/70 bg-[#f4f4f5] px-2.5 shadow-[inset_0_-1px_0_rgba(255,255,255,0.75)]">
+	      <header className="flex h-11 shrink-0 items-center gap-2 border-b border-slate-200/75 bg-white/[0.88] px-2.5 shadow-[inset_0_-1px_0_rgba(255,255,255,0.8)] backdrop-blur-xl">
         <button
           type="button"
           onClick={goBack}
-          className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white hover:text-slate-800"
+	          className="hidden rounded-lg p-1.5 text-slate-500 transition-all hover:bg-slate-100/80 hover:text-slate-800 hover:shadow-sm lg:inline-flex"
           aria-label="Back"
         >
           <ChevronLeft className="h-4.5 w-4.5" strokeWidth={2.2} />
@@ -644,7 +774,7 @@ export function VibeLivePreviewPanel({
         <button
           type="button"
           onClick={goForward}
-          className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white hover:text-slate-800"
+	          className="hidden rounded-lg p-1.5 text-slate-500 transition-all hover:bg-slate-100/80 hover:text-slate-800 hover:shadow-sm lg:inline-flex"
           aria-label="Forward"
         >
           <ChevronRight className="h-4.5 w-4.5" strokeWidth={2.2} />
@@ -652,27 +782,27 @@ export function VibeLivePreviewPanel({
         <button
           type="button"
           onClick={reload}
-          className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white hover:text-slate-800"
+	          className="hidden rounded-lg p-1.5 text-slate-500 transition-all hover:bg-slate-100/80 hover:text-slate-800 hover:shadow-sm lg:inline-flex"
           aria-label="Reload"
         >
           <RotateCw className="h-4.5 w-4.5" strokeWidth={2} />
         </button>
 
-        <form onSubmit={handleAddressSubmit} className="mx-1 flex min-w-0 flex-1 items-center">
+	        <form
+	          onSubmit={handleAddressSubmit}
+	          className="mx-1 hidden min-w-0 flex-1 items-center lg:flex"
+        >
           <input
             type="text"
             value={addressInput}
             onChange={(e) => setAddressInput(e.target.value)}
             placeholder="http://localhost:5174/sessions/..."
-            className="h-8 min-w-0 flex-1 rounded-full border border-slate-300/80 bg-white px-4 text-center font-mono text-[12px] text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-300/70"
+	            className="h-8 min-w-0 flex-1 rounded-full border border-slate-200/90 bg-white/95 px-4 text-center font-mono text-[12px] text-slate-700 shadow-[inset_0_1px_0_rgba(255,255,255,0.8),0_8px_20px_rgba(15,23,42,0.045)] outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-300/60"
             spellCheck={false}
             autoComplete="off"
             aria-label="Preview URL"
           />
-          <button
-            type="submit"
-            className="sr-only"
-          >
+          <button type="submit" className="sr-only">
             Go to preview URL
           </button>
         </form>
@@ -681,8 +811,10 @@ export function VibeLivePreviewPanel({
           type="button"
           onClick={() => setFocusMode((enabled) => !enabled)}
           className={cn(
-            "rounded-lg p-1.5 transition-colors",
-            focusMode ? "bg-blue-50 text-blue-600 ring-1 ring-blue-200" : "text-slate-500 hover:bg-white hover:text-slate-800",
+	            "hidden rounded-lg p-1.5 transition-all lg:inline-flex",
+	            focusMode
+	              ? "bg-blue-50 text-blue-600 ring-1 ring-blue-200"
+	              : "text-slate-500 hover:bg-slate-100/80 hover:text-slate-800 hover:shadow-sm",
           )}
           aria-label="Inspect preview elements"
           title="Inspect preview elements"
@@ -693,23 +825,37 @@ export function VibeLivePreviewPanel({
           type="button"
           onClick={testPreview}
           disabled={isTesting}
-          className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white hover:text-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
+	          className="hidden rounded-lg p-1.5 text-slate-500 transition-all hover:bg-slate-100/80 hover:text-slate-800 hover:shadow-sm disabled:cursor-not-allowed disabled:opacity-50 lg:inline-flex"
           aria-label="Test preview"
-          title="Run headless preview test"
+          title="Run Headful Mode preview test"
         >
           <Sparkles className="h-4.5 w-4.5" strokeWidth={2} />
         </button>
         <button
           type="button"
           onClick={() => setIsPreviewFullscreen((full) => !full)}
-          className="rounded-lg p-1.5 text-slate-500 transition-colors hover:bg-white hover:text-slate-800"
-          aria-label={isPreviewFullscreen ? "Exit full screen preview" : "Full screen preview"}
-          title={isPreviewFullscreen ? "Exit full screen" : "Full screen preview"}
+	          className="hidden rounded-lg p-1.5 text-slate-500 transition-all hover:bg-slate-100/80 hover:text-slate-800 hover:shadow-sm lg:inline-flex"
+          aria-label={
+            isPreviewFullscreen
+              ? "Exit full screen preview"
+              : "Full screen preview"
+          }
+          title={
+            isPreviewFullscreen ? "Exit full screen" : "Full screen preview"
+          }
         >
-          {isPreviewFullscreen ? <Minimize2 className="h-4.5 w-4.5" strokeWidth={2} /> : <Maximize2 className="h-4.5 w-4.5" strokeWidth={2} />}
+          {isPreviewFullscreen ? (
+            <Minimize2 className="h-4.5 w-4.5" strokeWidth={2} />
+          ) : (
+            <Maximize2 className="h-4.5 w-4.5" strokeWidth={2} />
+          )}
         </button>
 
-        <div className="ml-1 flex shrink-0 rounded-full border border-slate-300/70 bg-white p-[2px] shadow-sm" role="tablist" aria-label="Workspace">
+        <div
+	          className="ml-1 flex shrink-0 rounded-full border border-slate-200/90 bg-white/95 p-[2px] shadow-[0_8px_20px_rgba(15,23,42,0.055)] lg:ml-auto"
+          role="tablist"
+          aria-label="Workspace"
+        >
           <button
             type="button"
             role="tab"
@@ -717,10 +863,15 @@ export function VibeLivePreviewPanel({
             onClick={() => setWorkspaceMode("preview")}
             className={cn(
               "flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-semibold text-slate-500 transition-all duration-200",
-              workspaceMode === "preview" ? "bg-slate-900 text-white shadow-sm" : "hover:text-slate-700",
+              workspaceMode === "preview"
+                ? "bg-slate-900 text-white shadow-sm"
+                : "hover:text-slate-700",
             )}
           >
-            <LayoutTemplate className="h-3 w-3 shrink-0 opacity-90" strokeWidth={2} />
+            <LayoutTemplate
+              className="h-3 w-3 shrink-0 opacity-90"
+              strokeWidth={2}
+            />
             {sessionStatus === "syncing" ? "Syncing" : "Preview"}
           </button>
           <button
@@ -730,7 +881,9 @@ export function VibeLivePreviewPanel({
             onClick={() => setWorkspaceMode("code")}
             className={cn(
               "flex items-center gap-1 rounded-full px-2 py-0.5 text-[10.5px] font-semibold text-slate-500 transition-all duration-200",
-              workspaceMode === "code" ? "bg-slate-900 text-white shadow-sm" : "hover:text-slate-700",
+              workspaceMode === "code"
+                ? "bg-slate-900 text-white shadow-sm"
+                : "hover:text-slate-700",
             )}
           >
             <Code2 className="h-3 w-3 shrink-0 opacity-90" strokeWidth={2} />
@@ -741,9 +894,9 @@ export function VibeLivePreviewPanel({
 
       <div className="flex min-h-0 min-w-0 flex-1 flex-row overflow-hidden">
         {workspaceMode === "code" ? (
-          <aside className="flex w-[200px] shrink-0 flex-col border-r border-slate-200/70 bg-[#f0f0f0] transition-[width,opacity] duration-300 ease-out">
+	          <aside className="flex w-[220px] shrink-0 flex-col border-r border-slate-200/75 bg-[#f4f6f9] transition-[width,opacity] duration-300 ease-out">
             <div className="flex items-center justify-between gap-1 border-b border-slate-200/60 px-2 py-1.5">
-              <span className="truncate text-[11px] font-medium uppercase tracking-wide text-slate-500">
+	              <span className="truncate text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                 {projectLabel}
               </span>
               <div className="flex shrink-0 items-center gap-0.5">
@@ -751,7 +904,7 @@ export function VibeLivePreviewPanel({
                   type="button"
                   title="New file"
                   onClick={handleNewFile}
-                  className="rounded p-1 text-slate-500 hover:bg-slate-200/70 hover:text-slate-800"
+	                  className="rounded-md p-1 text-slate-500 transition-colors hover:bg-white hover:text-slate-800"
                 >
                   <FilePlus className="h-3.5 w-3.5" strokeWidth={1.85} />
                 </button>
@@ -759,7 +912,7 @@ export function VibeLivePreviewPanel({
                   type="button"
                   title="New folder"
                   onClick={handleNewFolder}
-                  className="rounded p-1 text-slate-500 hover:bg-slate-200/70 hover:text-slate-800"
+	                  className="rounded-md p-1 text-slate-500 transition-colors hover:bg-white hover:text-slate-800"
                 >
                   <FolderPlus className="h-3.5 w-3.5" strokeWidth={1.85} />
                 </button>
@@ -780,100 +933,51 @@ export function VibeLivePreviewPanel({
 
         <div
           className={cn(
-            "grid h-full min-h-0 min-w-0 flex-1 bg-white",
-            workspaceMode === "code"
-              ? "grid-rows-[minmax(0,1fr)_minmax(0,1fr)]"
-              : "grid-rows-[minmax(0,1fr)]",
+	            "grid h-full min-h-0 min-w-0 flex-1 bg-white",
+            "grid-rows-[minmax(0,1fr)]",
           )}
         >
-          {workspaceMode === "code" ? (
-            <div className="flex min-h-0 flex-col border-b border-slate-200/60">
-              <Suspense
-                fallback={
-                  <div className="flex min-h-[120px] flex-1 items-center justify-center bg-[#fafafa] text-[12px] text-slate-400">
-                    Editor…
-                  </div>
-                }
-              >
-                <div className="min-h-0 flex-1">
-                  <Editor
-                    key={activePath}
-                    height="100%"
-                    path={activePath || "untitled.tsx"}
-                    language={inferLanguage(activePath || ".tsx")}
-                    value={editorValue}
-                    theme="clyraSuggest"
-                    beforeMount={(monaco) => {
-                      monaco.editor.defineTheme("clyraSuggest", {
-                        base: "vs",
-                        inherit: true,
-                        rules: [],
-                        colors: {
-                          "editorSuggestWidget.background": "#ffffff",
-                          "editorSuggestWidget.border": "#e2e8f0",
-                          "editorSuggestWidget.foreground": "#334155",
-                          "editorSuggestWidget.highlightForeground": "#0f172a",
-                          "editorSuggestWidget.selectedBackground": "#e8eeff",
-                          "editorSuggestWidget.selectedForeground": "#0f172a",
-                          "editorSuggestWidget.selectedIconForeground": "#6366f1",
-                          "editorSuggestWidget.focusHighlightForeground": "#4338ca",
-                          "editorHoverWidget.background": "#ffffff",
-                          "editorHoverWidget.border": "#e2e8f0",
-                        },
-                      });
-                    }}
-                    onChange={(v) => {
-                      const next = v ?? "";
-                      setMergedFiles((m) => {
-                        if (!activePath) return m;
-                        return { ...m, [activePath]: next };
-                      });
-                    }}
-                    options={{
-                      readOnly: false,
-                      minimap: { enabled: false },
-                      fontSize: 12,
-                      scrollBeyondLastLine: false,
-                      wordWrap: "on",
-                      folding: true,
-                      lineNumbers: "on",
-                      renderLineHighlight: "line",
-                      padding: { top: 8, bottom: 8 },
-                      smoothScrolling: true,
-                      cursorSmoothCaretAnimation: "on",
-                      automaticLayout: true,
-                      tabSize: 2,
-                      quickSuggestions: { other: true, comments: true, strings: true },
-                      quickSuggestionsDelay: 4,
-                      suggestOnTriggerCharacters: true,
-                      suggestSelection: "first",
-                      parameterHints: { enabled: true },
-                      wordBasedSuggestions: "allDocuments",
-                      acceptSuggestionOnEnter: "on",
-                      tabCompletion: "on",
-                      snippetSuggestions: "top",
-                      inlineSuggest: { enabled: true },
-                      suggest: {
-                        showIcons: true,
-                        showStatusBar: false,
-                        insertMode: "replace",
-                      },
-                      unicodeHighlight: { ambiguousCharacters: false },
-                    }}
-                  />
-                </div>
-              </Suspense>
-            </div>
-          ) : null}
+	          {workspaceMode === "code" ? (
+	            <div className="flex min-h-0 flex-col bg-[#fbfcfe]">
+	              <div className="flex h-10 shrink-0 items-center justify-between gap-3 border-b border-slate-200/75 bg-white px-3">
+	                <div className="flex min-w-0 items-center gap-2">
+	                  <FileGlyph path={activePath} />
+	                  <span className="truncate font-mono text-[12px] font-semibold text-slate-700">
+	                    {activePath || "untitled.tsx"}
+	                  </span>
+	                </div>
+	                <span className="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+	                  Editable
+	                </span>
+	              </div>
+	              <textarea
+	                key={activePath}
+	                value={editorValue}
+	                onChange={(event) => {
+	                  const next = event.target.value;
+	                  setMergedFiles((m) => {
+	                    if (!activePath) return m;
+	                    return { ...m, [activePath]: next };
+	                  });
+	                }}
+	                spellCheck={false}
+	                className="min-h-0 flex-1 resize-none overflow-auto bg-[#fbfcfe] px-4 py-3 font-mono text-[12px] leading-5 text-slate-800 outline-none scrollbar-none selection:bg-blue-100"
+	                aria-label="Code editor"
+	              />
+	            </div>
+	          ) : null}
 
-          <div className="relative flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden bg-white">
-            {(!previewLoaded || lastError) && (
-              <div className="pointer-events-none absolute inset-0 z-30 overflow-hidden bg-white/80 backdrop-blur-[1px]">
-                <div className="absolute inset-x-0 top-0 h-1/3 animate-[vibe-scan_2.6s_ease-in-out_infinite] bg-gradient-to-b from-transparent via-blue-400/45 to-transparent blur-xl" />
-                <div className="absolute left-1/2 top-1/2 h-16 w-48 -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-100/70 blur-2xl" />
+          {workspaceMode === "preview" ? (
+	          <div className="relative flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden bg-white">
+            {showPreviewSyncOverlay && (
+              <div className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center bg-white/80">
+                <div className="flex items-center gap-2 text-slate-400 text-sm font-medium">
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-slate-600" />
+                  Loading preview
+                </div>
               </div>
             )}
-            <div className="absolute left-3 top-3 z-40 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-full border border-slate-200/75 bg-white/90 px-2 py-1 text-[11px] font-medium text-slate-600 shadow-[0_8px_24px_rgba(15,23,42,0.08)] backdrop-blur">
+	            <div className="absolute left-3 top-3 z-40 flex max-w-[calc(100%-1.5rem)] items-center gap-2 rounded-full border border-slate-200/75 bg-white/[0.96] px-2 py-1 text-[11px] font-medium text-slate-600 shadow-[0_12px_30px_rgba(15,23,42,0.10)] backdrop-blur-xl">
               <span
                 className={cn(
                   "h-1.5 w-1.5 shrink-0 rounded-full",
@@ -886,8 +990,15 @@ export function VibeLivePreviewPanel({
                 aria-hidden
               />
               <span className="truncate">{healthText}</span>
-              {previewNotice ? <span className="hidden max-w-[260px] truncate text-slate-400 sm:inline">{previewNotice}</span> : null}
-              {(lastError || testResult?.success === false || testResult?.blank) && onAutoFix ? (
+              {previewNotice ? (
+                <span className="hidden max-w-[260px] truncate text-slate-400 sm:inline">
+                  {previewNotice}
+                </span>
+              ) : null}
+              {(lastError ||
+                testResult?.success === false ||
+                testResult?.blank) &&
+              onAutoFix ? (
                 <button
                   type="button"
                   onClick={requestAutoFix}
@@ -899,16 +1010,50 @@ export function VibeLivePreviewPanel({
               ) : null}
             </div>
             <iframe
-              key={`vibe-preview-${iframeReload}`}
+              key="vibe-preview-stable"
               title="Vibe live preview"
               ref={iframeRef}
               src={sessionUrl || undefined}
-              srcDoc={sessionUrl ? undefined : previewSrcDoc}
+              srcDoc={
+                !sessionUrl && sessionStatus === "offline"
+                  ? previewSrcDoc
+                  : undefined
+              }
               onLoad={() => setPreviewLoaded(true)}
               className="relative z-20 block min-h-0 min-w-0 w-full flex-1 border-0 bg-white"
               sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
               referrerPolicy="no-referrer"
             />
+
+            {agentCursor.visible ? (
+              <div
+                className="pointer-events-none absolute z-50 transition-[left,top,transform,opacity] duration-500 ease-out"
+                style={{
+                  left: `${agentCursor.x}%`,
+                  top: `${agentCursor.y}%`,
+                  transform: `translate(-10px, -8px) scale(${agentCursor.clicking ? 0.92 : 1})`,
+                }}
+                aria-hidden
+              >
+                <div className="relative">
+                  <div
+                    className="h-9 w-9 bg-black shadow-[0_10px_28px_rgba(15,23,42,0.28)]"
+                    style={{
+                      clipPath:
+                        "polygon(11% 0%, 100% 45%, 61% 57%, 47% 100%, 28% 91%, 42% 52%, 0% 35%)",
+                      transform: "rotate(-8deg)",
+                      borderRadius: "8px",
+                    }}
+                  />
+                  {agentCursor.clicking ? (
+                    <span className="absolute left-4 top-4 h-7 w-7 animate-ping rounded-full border-2 border-black/50" />
+                  ) : null}
+                  <span className="absolute left-7 top-7 whitespace-nowrap rounded-full border border-slate-200 bg-white/95 px-2 py-1 text-[10.5px] font-semibold text-slate-700 shadow-lg">
+                    {agentCursor.label}
+                  </span>
+                </div>
+              </div>
+            ) : null}
 
             {lastError && workspaceMode === "preview" && (
               <div className="absolute bottom-4 left-4 right-4 z-50">
@@ -918,16 +1063,18 @@ export function VibeLivePreviewPanel({
                       <div className="flex h-6 w-6 items-center justify-center rounded-full bg-red-50">
                         <AlertCircle className="h-4 w-4" />
                       </div>
-                      <span className="text-[13px] font-semibold tracking-tight">Runtime Error Detected</span>
+                      <span className="text-[13px] font-semibold tracking-tight">
+                        Runtime Error Detected
+                      </span>
                     </div>
-                    <button 
+                    <button
                       onClick={() => setLastError(null)}
                       className="rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
                     >
                       <X className="h-4 w-4" />
                     </button>
                   </div>
-                  
+
                   <div className="rounded-lg bg-red-50/50 px-3 py-2">
                     <p className="font-mono text-[11px] leading-relaxed text-red-700/90 line-clamp-2">
                       {lastError.message}
@@ -958,6 +1105,7 @@ export function VibeLivePreviewPanel({
               </div>
             )}
           </div>
+          ) : null}
         </div>
       </div>
     </div>

@@ -1,5 +1,6 @@
 import dotenv from "dotenv";
 import express, { type Express } from "express";
+import crypto from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { chromium } from "playwright";
@@ -15,6 +16,7 @@ const MAX_FILES = 80;
 const MAX_FILE_BYTES = 512 * 1024;
 const SESSION_TTL_MS = 1000 * 60 * 60 * 3;
 const ALLOWED_ORIGINS = new Set(["http://localhost:3000", "http://localhost:5173", "http://localhost:5174", "null"]);
+const SESSION_CACHE = new Map<string, { sessionId: string; url: string; files: VibeFiles }>();
 const FOCUS_MODE_SCRIPT = String.raw`<script>
 (() => {
   let enabled = false;
@@ -180,7 +182,7 @@ async function writeSandboxFiles(sessionDir: string, rawFiles: VibeFiles): Promi
     if (!sanitized[appRel]) {
       sanitized[appRel] = `export default function App() {\n  return <main style={{ padding: 24, fontFamily: "system-ui" }}>No React component was generated.</main>;\n}\n`;
     }
-    sanitized["src/__vibe_main.tsx"] = `import React from "react";\nimport { createRoot } from "react-dom/client";\nimport App from "${relativeImport("src", appRel)}";\nimport "./__vibe_reset.css";\n\ncreateRoot(document.getElementById("root")!).render(<App />);\n`;
+    sanitized["src/__vibe_main.tsx"] = `import React from "react";\nimport { createRoot } from "react-dom/client";\nimport App from "${relativeImport("src", appRel)}";\nimport "./__vibe_reset.css";\n\nconst rootElement = document.getElementById("root");\nif (!rootElement) throw new Error("Vibe preview root element was not found.");\nconst vibeWindow = window as typeof window & { __vibePreviewRoot?: ReturnType<typeof createRoot> };\nvibeWindow.__vibePreviewRoot ??= createRoot(rootElement);\nvibeWindow.__vibePreviewRoot.render(<App />);\n`;
     sanitized["src/__vibe_reset.css"] =
       "html,body,#root{min-height:100%;margin:0}body{background:#fff;color:#0f172a;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}*{box-sizing:border-box}\n";
     sanitized["index.html"] = `<!doctype html>\n<html lang="en">\n<head>\n  <meta charset="UTF-8" />\n  <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n  <title>Vibe Preview</title>\n  <script src="https://cdn.tailwindcss.com"></script>\n</head>\n<body>\n  <div id="root"></div>\n  <script type="module" src="/sessions/__SESSION_ID__/src/__vibe_main.tsx"></script>\n</body>\n</html>\n`;
@@ -200,13 +202,33 @@ async function writeSandboxFiles(sessionDir: string, rawFiles: VibeFiles): Promi
   return sanitized;
 }
 
+function hashFiles(files: VibeFiles): string {
+  const payload = JSON.stringify(
+    Object.keys(files)
+      .sort()
+      .map((key) => [key, String(files[key] ?? "")]),
+  );
+  return crypto.createHash("sha256").update(payload).digest("hex");
+}
+
 async function createSession(files: VibeFiles): Promise<{ sessionId: string; url: string; files: VibeFiles }> {
+  const cacheKey = hashFiles(files);
+  const cached = SESSION_CACHE.get(cacheKey);
+  if (cached) {
+    const dir = path.join(SESSION_ROOT, cached.sessionId);
+    const exists = await fs.stat(dir).then((stat) => stat.isDirectory()).catch(() => false);
+    if (exists) return cached;
+    SESSION_CACHE.delete(cacheKey);
+  }
+
   const sessionId = `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
   const sessionDir = path.join(SESSION_ROOT, sessionId);
   await emptyDir(sessionDir);
   const sanitized = await writeSandboxFiles(sessionDir, files);
   if (Object.keys(sanitized).length === 0) throw new Error("No previewable files were generated.");
-  return { sessionId, url: `/sessions/${sessionId}/index.html`, files: sanitized };
+  const session = { sessionId, url: `/sessions/${sessionId}/index.html`, files: sanitized };
+  SESSION_CACHE.set(cacheKey, session);
+  return session;
 }
 
 export async function startVibeServer(port = Number(process.env.VIBE_PORT) || 5174): Promise<VibeServerHandle> {
@@ -254,6 +276,7 @@ export async function startVibeServer(port = Number(process.env.VIBE_PORT) || 51
     try {
       const files = req.body?.files as VibeFiles | undefined;
       const testPrompt = String(req.body?.testPrompt ?? "");
+      const headfulMode = Boolean(req.body?.headfulMode);
       let url = String(req.body?.url ?? "");
       if (files && typeof files === "object") {
         const session = await createSession(files);
@@ -274,11 +297,21 @@ export async function startVibeServer(port = Number(process.env.VIBE_PORT) || 51
       page.on("pageerror", (err) => pageErrors.push(err.message));
       await page.goto(url, { waitUntil: "networkidle", timeout: 30_000 });
       await page.waitForTimeout(700);
+      if (headfulMode) {
+        await page.mouse.move(180, 160, { steps: 12 });
+        await page.waitForTimeout(160);
+        await page.mouse.move(760, 430, { steps: 18 });
+        await page.mouse.down();
+        await page.waitForTimeout(120);
+        await page.mouse.up();
+        await page.mouse.move(420, 610, { steps: 16 });
+      }
 
       const visibleText = await page.locator("body").innerText({ timeout: 5000 }).catch(() => "");
       const screenshot = await page.screenshot({ fullPage: true });
       const blank = visibleText.trim().length === 0;
       let calculatorTest: { success: boolean; result?: string; error?: string; test: string } | null = null;
+      let platformerTest: { success: boolean; details?: string; error?: string; test: string } | null = null;
       if (testPrompt.toLowerCase().includes("calculator")) {
         try {
           await page.getByRole("button", { name: "1" }).click({ timeout: 5000 });
@@ -292,16 +325,42 @@ export async function startVibeServer(port = Number(process.env.VIBE_PORT) || 51
           calculatorTest = { success: false, error: error instanceof Error ? error.message : String(error), test: "1 + 2 = 3" };
         }
       }
+      if (/(platformer|game|2d)/i.test(testPrompt)) {
+        try {
+          const canvasCount = await page.locator("canvas").count();
+          await page.keyboard.press("ArrowRight");
+          await page.keyboard.press("Space");
+          await page.waitForTimeout(450);
+          const hasGameText = /score|coin|jump|level|player|platform/i.test(visibleText);
+          platformerTest = {
+            success: canvasCount > 0 || hasGameText,
+            details: `canvas=${canvasCount}, gameText=${hasGameText}`,
+            test: "render game surface and accept keyboard input",
+          };
+        } catch (error) {
+          platformerTest = {
+            success: false,
+            error: error instanceof Error ? error.message : String(error),
+            test: "render game surface and accept keyboard input",
+          };
+        }
+      }
 
       res.json({
-        success: !blank && pageErrors.length === 0,
+        success:
+          !blank &&
+          pageErrors.length === 0 &&
+          (calculatorTest ? calculatorTest.success : true) &&
+          (platformerTest ? platformerTest.success : true),
         url,
         title: await page.title(),
+        mode: headfulMode ? "headful-replay" : "headless",
         blank,
         visibleText: visibleText.slice(0, 1000),
         consoleMessages,
         pageErrors,
         calculatorTest,
+        platformerTest,
         screenshot: `data:image/png;base64,${screenshot.toString("base64")}`,
         timestamp: new Date().toISOString(),
       });
@@ -312,11 +371,20 @@ export async function startVibeServer(port = Number(process.env.VIBE_PORT) || 51
     }
   });
 
+  const vibeHmrPort = Number(process.env.VIBE_HMR_PORT) || 24679;
   const vite = await createViteServer({
     configFile: false,
     root: VIBE_SANDBOX_DIR,
     appType: "spa",
-    server: { middlewareMode: true, hmr: false, fs: { strict: true, allow: [VIBE_SANDBOX_DIR, path.join(envRoot, "node_modules")] } },
+    server: {
+      middlewareMode: true,
+      hmr: {
+        host: "localhost",
+        port: vibeHmrPort,
+        clientPort: vibeHmrPort,
+      },
+      fs: { strict: true, allow: [VIBE_SANDBOX_DIR, path.join(envRoot, "node_modules")] },
+    },
     resolve: { alias: { "@": path.join(VIBE_SANDBOX_DIR, "src") } },
     optimizeDeps: { entries: [] },
     clearScreen: false,

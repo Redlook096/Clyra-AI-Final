@@ -6,6 +6,7 @@ import {defineConfig, loadEnv} from 'vite';
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
   const geminiKey = env.GEMINI_API_KEY ?? env.VITE_GEMINI_API_KEY ?? '';
+  const hmrPort = Number(process.env.HMR_PORT) || 24678;
   return {
     plugins: [react(), tailwindcss()],
     define: {
@@ -32,10 +33,20 @@ export default defineConfig(({mode}) => {
         },
       },
     },
+    optimizeDeps: {
+      entries: ['index.html'],
+    },
     server: {
-      // HMR is disabled in AI Studio via DISABLE_HMR env var.
-      // Do not modifyâfile watching is disabled to prevent flickering during agent edits.
-      hmr: process.env.DISABLE_HMR !== 'true',
+      // The Vibe sandbox runs its own Vite middleware; keep the shell HMR port
+      // explicit so the two live preview channels never collide.
+      hmr: {
+        host: 'localhost',
+        port: hmrPort,
+        clientPort: hmrPort,
+      },
+      watch: {
+        ignored: ['**/vibe-sandbox/**'],
+      },
     },
   };
 });

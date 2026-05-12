@@ -15,12 +15,16 @@ function orderPaths(paths: string[]): string[] {
   return [...paths].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
 }
 
+function isPreviewSourcePath(path: string): boolean {
+  return /\.(tsx|jsx|ts|js)$/i.test(path) && !/(^|\/)(plan|readme)\.md$/i.test(path);
+}
+
 export function pickPrimaryPreviewPath(files: Record<string, string>): string {
-  const keys = Object.keys(files);
-  const comp = keys.find((k) => /\/components\/.+\.tsx$/i.test(k) && !/App\.tsx$/i.test(k));
-  if (comp) return comp;
+  const keys = Object.keys(files).filter(isPreviewSourcePath);
   const app = keys.find((k) => /App\.tsx$/i.test(k));
   if (app) return app;
+  const comp = keys.find((k) => /\/components\/.+\.tsx$/i.test(k));
+  if (comp) return comp;
   return keys[0] ?? "";
 }
 
@@ -70,7 +74,7 @@ function stripModuleImports(src: string): string {
  */
 function stripVibeProtocolMarkers(src: string): string {
   return src
-    .replace(/<<<VIBE_[A-Z_]+(?:\s+[^>]*)?>>>/g, "")
+    .replace(/<<<VIBE_[A-Z_]+(?:\s+[^>]*)?>>+/g, "")
     .replace(/<<<END_VIBE_[A-Z_]+>>>/g, "");
 }
 
@@ -117,7 +121,7 @@ function preparePrimaryMount(src: string): { code: string; mount: string } {
 }
 
 export function buildVibePreviewSrcDoc(filesByPath: Record<string, string>): string {
-  const paths = orderPaths(Object.keys(filesByPath));
+  const paths = orderPaths(Object.keys(filesByPath).filter(isPreviewSourcePath));
   if (paths.length === 0) {
     return `<!DOCTYPE html><html><body style="font:14px system-ui;padding:16px;color:#64748b">No code to preview.</body></html>`;
   }
@@ -152,7 +156,8 @@ try {
   }
   var __mountEl = document.getElementById('root');
   __mountEl.innerHTML = '';
-  var __root = ReactDOM.createRoot(__mountEl);
+  window.__vibePreviewRoot = window.__vibePreviewRoot || ReactDOM.createRoot(__mountEl);
+  var __root = window.__vibePreviewRoot;
   __root.render(React.createElement(${mount}, null));
 } catch (e) {
   var __err = document.createElement('div');

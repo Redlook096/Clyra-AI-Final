@@ -4,8 +4,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronDown, Terminal } from "lucide-react";
 import { ShiningText } from "@/components/ShiningText";
+import { cn } from "@/lib/utils";
 
-const HOLD_MS = 2000;
+const HOLD_MS = 2400;
 
 /**
  * Single-row "Run Command" card. Same shape/look as a collapsed VibeMiniCodeBox so the
@@ -62,17 +63,20 @@ export function VibeRunBlock({
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 6 }}
-      animate={{ opacity: active ? 1 : 0.7, y: 0 }}
-      transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-      className="w-full max-w-[560px] rounded-2xl border border-slate-200/90 bg-white shadow-[0_2px_10px_rgba(15,23,42,0.05)] overflow-hidden"
+      initial={{ opacity: 0, y: 10, scale: 0.992 }}
+      animate={{ opacity: active || archived ? 1 : 0.76, y: 0 }}
+      transition={{ duration: 0.36, ease: [0.22, 1, 0.36, 1] }}
+      className={cn(
+	        "w-full max-w-[640px] overflow-hidden rounded-lg border border-slate-200/80 bg-white/[0.97] shadow-[0_1px_0_rgba(15,23,42,0.035),0_14px_34px_rgba(15,23,42,0.055)]",
+        active && !done && "ring-1 ring-blue-500/10",
+      )}
       data-invert-ignore
       style={{ contain: "layout paint" }}
     >
       <button
         type="button"
         onClick={() => done && setExpanded((value) => !value)}
-        className="flex w-full items-center gap-2 px-4 py-2 text-left text-[13px] transition-colors hover:bg-slate-50"
+	        className="flex w-full items-center gap-2 px-3.5 py-2 text-left text-[13px] transition-colors hover:bg-slate-50/90"
         aria-expanded={open}
       >
         <Terminal className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden />
@@ -82,7 +86,7 @@ export function VibeRunBlock({
             text={command}
             preset="thinkingChat"
             play
-            className="font-mono text-[12.5px] truncate max-w-[360px]"
+            className="max-w-[420px] truncate font-mono text-[12.5px]"
           />
         ) : (
           <span className="font-mono text-[12.5px] text-slate-700 truncate">{command}</span>
@@ -103,8 +107,8 @@ export function VibeRunBlock({
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-            className="overflow-hidden border-t border-slate-100"
+            transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
+	            className="overflow-hidden border-t border-slate-100 bg-slate-50/[0.45]"
           >
             <pre className="max-h-44 overflow-auto whitespace-pre-wrap px-4 py-3 font-mono text-[11.5px] leading-relaxed text-slate-600 scrollbar-none">
               {body.trim()}

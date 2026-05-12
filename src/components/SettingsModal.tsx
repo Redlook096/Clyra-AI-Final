@@ -267,6 +267,15 @@ export function SettingsModal({
 
                                 {activeTab === 'Intelligence' && (
                                     <div className="flex flex-col">
+                                        <div className="flex items-center justify-between py-4 border-b border-slate-100">
+                                            <div className="flex flex-col pr-8">
+                                                <span className="text-[14px] text-slate-800 font-medium">Clyra API Routing</span>
+                                                <span className="text-[13px] text-slate-500 mt-0.5">Provider and model selection are managed automatically by the app</span>
+                                            </div>
+                                            <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-[12px] font-semibold text-blue-700">
+                                                Auto
+                                            </span>
+                                        </div>
                                         <div className="flex flex-col py-4 border-b border-slate-100 gap-3">
                                             <div className="flex items-center justify-between mt-1">
                                                 <div className="flex flex-col">
