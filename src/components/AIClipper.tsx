@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useEffect, useRef, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Youtube,
   Scissors,
@@ -13,7 +13,7 @@ import {
   ChevronRight,
   ArrowLeft,
   Play,
-} from 'lucide-react';
+} from "lucide-react";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -24,11 +24,11 @@ interface AIClipperProps {
 }
 
 interface SubtitleConfig {
-  fontSize: '36' | '52' | '68';
-  font: 'Impact' | 'Arial' | 'Helvetica' | 'Montserrat';
+  fontSize: "36" | "52" | "68";
+  font: "Impact" | "Arial" | "Helvetica" | "Montserrat";
   textColor: string;
   strokeColor: string;
-  position: 'bottom' | 'center' | 'top';
+  position: "bottom" | "center" | "top";
 }
 
 interface PipelineStep {
@@ -37,7 +37,7 @@ interface PipelineStep {
   activeLabel: string;
   doneLabel: string;
   detail?: string;
-  status: 'idle' | 'active' | 'done';
+  status: "idle" | "active" | "done";
 }
 
 interface ClipResult {
@@ -52,69 +52,70 @@ interface ClipResult {
 
 type AppStep = 0 | 1 | 2 | 3;
 
-const FONT_SIZE_PILLS: { label: string; value: SubtitleConfig['fontSize'] }[] = [
-  { label: 'Small', value: '36' },
-  { label: 'Medium', value: '52' },
-  { label: 'Large', value: '68' },
+const FONT_SIZE_PILLS: { label: string; value: SubtitleConfig["fontSize"] }[] =
+  [
+    { label: "Small", value: "36" },
+    { label: "Medium", value: "52" },
+    { label: "Large", value: "68" },
+  ];
+
+const FONT_OPTIONS: SubtitleConfig["font"][] = [
+  "Impact",
+  "Arial",
+  "Helvetica",
+  "Montserrat",
 ];
 
-const FONT_OPTIONS: SubtitleConfig['font'][] = [
-  'Impact',
-  'Arial',
-  'Helvetica',
-  'Montserrat',
-];
-
-const POSITION_PILLS: { label: string; value: SubtitleConfig['position'] }[] = [
-  { label: 'Bottom', value: 'bottom' },
-  { label: 'Center', value: 'center' },
-  { label: 'Top', value: 'top' },
+const POSITION_PILLS: { label: string; value: SubtitleConfig["position"] }[] = [
+  { label: "Bottom", value: "bottom" },
+  { label: "Center", value: "center" },
+  { label: "Top", value: "top" },
 ];
 
 const DEFAULT_CONFIG: SubtitleConfig = {
-  fontSize: '52',
-  font: 'Impact',
-  textColor: '#FFFFFF',
-  strokeColor: '#000000',
-  position: 'bottom',
+  fontSize: "52",
+  font: "Impact",
+  textColor: "#FFFFFF",
+  strokeColor: "#000000",
+  position: "bottom",
 };
 
-const PIPELINE_STEPS: Omit<PipelineStep, 'status' | 'detail'>[] = [
+const PIPELINE_STEPS: Omit<PipelineStep, "status" | "detail">[] = [
   {
     id: 1,
-    label: 'Downloading video',
-    activeLabel: 'Downloading video...',
-    doneLabel: 'Downloaded',
+    label: "Downloading video",
+    activeLabel: "Downloading video...",
+    doneLabel: "Downloaded",
   },
   {
     id: 2,
-    label: 'Transcribing audio with Whisper',
-    activeLabel: 'Transcribing audio with Whisper...',
-    doneLabel: 'Transcribed',
+    label: "Transcribing audio with Whisper",
+    activeLabel: "Transcribing audio with Whisper...",
+    doneLabel: "Transcribed",
   },
   {
     id: 3,
-    label: 'AI analyzing for best clip',
-    activeLabel: 'AI analyzing for best clip...',
-    doneLabel: 'Found best moment',
+    label: "AI analyzing for best clip",
+    activeLabel: "AI analyzing for best clip...",
+    doneLabel: "Found best moment",
   },
   {
     id: 4,
-    label: 'Clipping video',
-    activeLabel: 'Clipping video...',
-    doneLabel: 'Clipped',
+    label: "Clipping video",
+    activeLabel: "Clipping video...",
+    doneLabel: "Clipped",
   },
   {
     id: 5,
-    label: 'Generating subtitles',
-    activeLabel: 'Generating subtitles...',
-    doneLabel: 'Subtitles ready',
+    label: "Generating subtitles",
+    activeLabel: "Generating subtitles...",
+    doneLabel: "Subtitles ready",
   },
   {
     id: 6,
-    label: 'Burning subtitles into video',
-    activeLabel: 'Burning subtitles into video...',
-    doneLabel: 'Final clip ready',
+    label: "Burning subtitles into video",
+    activeLabel: "Burning subtitles into video...",
+    doneLabel: "Final clip ready",
   },
 ];
 
@@ -138,7 +139,7 @@ function ProgressBar({ progress }: { progress: number }) {
         className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 rounded-full"
         initial={{ width: 0 }}
         animate={{ width: `${progress}%` }}
-        transition={{ duration: 0.5, ease: 'easeOut' }}
+        transition={{ duration: 0.5, ease: "easeOut" }}
       />
     </div>
   );
@@ -165,16 +166,16 @@ function PipelineRow({
       <div className="flex flex-col items-center">
         <div
           className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 border-2 transition-colors duration-500 ${
-            step.status === 'done'
-              ? 'bg-emerald-500/20 border-emerald-500'
-              : step.status === 'active'
-                ? 'bg-blue-500/20 border-blue-500'
-                : 'bg-gray-800 border-gray-700'
+            step.status === "done"
+              ? "bg-emerald-500/20 border-emerald-500"
+              : step.status === "active"
+                ? "bg-blue-500/20 border-blue-500"
+                : "bg-gray-800 border-gray-700"
           }`}
         >
-          {step.status === 'done' ? (
+          {step.status === "done" ? (
             <Check className="w-4 h-4 text-emerald-400" />
-          ) : step.status === 'active' ? (
+          ) : step.status === "active" ? (
             <Loader2 className="w-4 h-4 text-blue-400 animate-spin" />
           ) : (
             <div className="w-2 h-2 rounded-full bg-gray-600" />
@@ -183,7 +184,7 @@ function PipelineRow({
         {!isLast && (
           <div
             className={`w-[2px] h-8 transition-colors duration-500 ${
-              step.status === 'done' ? 'bg-emerald-500/30' : 'bg-gray-700'
+              step.status === "done" ? "bg-emerald-500/30" : "bg-gray-700"
             }`}
           />
         )}
@@ -193,20 +194,20 @@ function PipelineRow({
       <div className="flex-1 pt-1">
         <p
           className={`text-sm font-medium transition-colors duration-300 ${
-            step.status === 'done'
-              ? 'text-emerald-300'
-              : step.status === 'active'
-                ? 'text-blue-300'
-                : 'text-gray-500'
+            step.status === "done"
+              ? "text-emerald-300"
+              : step.status === "active"
+                ? "text-blue-300"
+                : "text-gray-500"
           }`}
         >
-          {step.status === 'active'
+          {step.status === "active"
             ? step.activeLabel
-            : step.status === 'done'
+            : step.status === "done"
               ? `${step.doneLabel} ✓`
               : step.label}
         </p>
-        {step.detail && step.status === 'done' && (
+        {step.detail && step.status === "done" && (
           <motion.p
             className="text-xs text-gray-500 mt-0.5"
             initial={{ opacity: 0 }}
@@ -228,10 +229,10 @@ function PipelineRow({
 export default function AIClipper({ onClose }: AIClipperProps) {
   // --- State ---
   const [step, setStep] = useState<AppStep>(0);
-  const [youtubeUrl, setYoutubeUrl] = useState('');
+  const [youtubeUrl, setYoutubeUrl] = useState("");
   const [config, setConfig] = useState<SubtitleConfig>(DEFAULT_CONFIG);
   const [pipelineSteps, setPipelineSteps] = useState<PipelineStep[]>(
-    PIPELINE_STEPS.map((s) => ({ ...s, status: 'idle' as const }))
+    PIPELINE_STEPS.map((s) => ({ ...s, status: "idle" as const })),
   );
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<ClipResult | null>(null);
@@ -240,68 +241,143 @@ export default function AIClipper({ onClose }: AIClipperProps) {
   // Prevent scroll when processing is active
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Ref to track latest pipeline steps without causing stale closures in SSE handler
+  const pipelineStepsRef = useRef(pipelineSteps);
+  pipelineStepsRef.current = pipelineSteps;
+
   // --- URL validation ---
   const urlValid = isValidYouTubeUrl(youtubeUrl.trim());
 
-  // --- Simulate pipeline (replace with real SSE in production) ---
+  // --- Real SSE pipeline via /api/clipper/start ---
   const runPipeline = useCallback(async () => {
     setError(null);
     setResult(null);
     const freshSteps = PIPELINE_STEPS.map((s) => ({
       ...s,
-      status: 'idle' as const,
+      status: "idle" as const,
     }));
     setPipelineSteps(freshSteps);
     setProgress(0);
 
-    // Simulated details that would come from the backend
-    const mockDetails = [
-      'Video: "How AI Is Changing The World" (12:34)',
-      '3,200 words transcribed in 2.1s',
-      'Timestamp 4:22–5:07 — highest emotional peak',
-      'Clip length: 45 seconds',
-      '12 subtitle phrases generated',
-      'Burned at 60fps with GPU encoding',
-    ];
+    try {
+      // Build config for backend (use snake_case keys matching Python)
+      const backendConfig = {
+        font_size: parseInt(config.fontSize),
+        font: config.font,
+        text_colour: config.textColor,
+        stroke_colour: config.strokeColor,
+        position:
+          config.position === "bottom"
+            ? "bottom-centre"
+            : config.position === "center"
+              ? "centre"
+              : "top-centre",
+      };
 
-    for (let i = 0; i < PIPELINE_STEPS.length; i++) {
-      // Mark current step as active
-      setPipelineSteps((prev) =>
-        prev.map((s, idx) =>
-          idx === i ? { ...s, status: 'active' as const } : s
-        )
-      );
+      const response = await fetch("/api/clipper/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: youtubeUrl.trim(), config: backendConfig }),
+      });
 
-      // Simulate processing delay
-      await new Promise((r) => setTimeout(r, 1400 + Math.random() * 800));
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(
+          (errData as any).error || `Server error: ${response.status}`,
+        );
+      }
 
-      // Mark current step as done
-      setPipelineSteps((prev) =>
-        prev.map((s, idx) =>
-          idx === i
-            ? { ...s, status: 'done' as const, detail: mockDetails[i] }
-            : s
-        )
-      );
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error("No response stream");
 
-      // Update progress
-      setProgress(Math.round(((i + 1) / PIPELINE_STEPS.length) * 100));
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith("data: ")) continue;
+
+          try {
+            const event = JSON.parse(trimmed.slice(6));
+
+            if (event.type === "error") {
+              throw new Error(event.message || "Pipeline error");
+            }
+
+            if (event.type === "progress") {
+              // Map backend step names to pipeline step indices
+              const stepMap: Record<string, number> = {
+                download: 0,
+                transcribe: 1,
+                analyze: 2,
+                clip: 3,
+                subtitles: 4,
+                burn: 5,
+              };
+              const stepIdx = stepMap[event.step] ?? -1;
+
+              if (event.status === "running" && stepIdx >= 0) {
+                setPipelineSteps((prev) =>
+                  prev.map((s, idx) =>
+                    idx === stepIdx ? { ...s, status: "active" as const } : s,
+                  ),
+                );
+              }
+
+              if (event.status === "complete" && stepIdx >= 0) {
+                const detail = event.message || event.reason || "";
+                setPipelineSteps((prev) =>
+                  prev.map((s, idx) =>
+                    idx === stepIdx
+                      ? { ...s, status: "done" as const, detail }
+                      : s,
+                  ),
+                );
+                setProgress(
+                  Math.round(((stepIdx + 1) / PIPELINE_STEPS.length) * 100),
+                );
+              }
+            }
+
+            if (event.type === "complete") {
+              setResult({
+                videoTitle: (event as any).title || "YouTube Video",
+                originalDuration: (event as any).original_duration || "Unknown",
+                clipDuration: (event as any).clip_duration || "Unknown",
+                aiReasoning:
+                  (event as any).reason || "AI-selected viral moment",
+                thumbnailUrl: "",
+                subtitleStyle: `${config.font} ${config.fontSize}px — ${config.position}`,
+                outputPath: (event as any).output || "./output/final_clip.mp4",
+              });
+              setProgress(100);
+              setStep(3);
+            }
+          } catch (parseErr) {
+            // Re-throw pipeline errors, ignore non-JSON lines
+            if (
+              parseErr instanceof Error &&
+              parseErr.message.includes("Pipeline")
+            ) {
+              throw parseErr;
+            }
+          }
+        }
+      }
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "An unknown error occurred";
+      setError(message);
     }
-
-    // Simulated result
-    setResult({
-      videoTitle: 'How AI Is Changing The World',
-      originalDuration: '12:34',
-      clipDuration: '0:45',
-      aiReasoning:
-        'This 45-second segment at 4:22 had the highest emotional intensity score — combining a dramatic reveal, audience reaction spike, and a quotable one-liner that maximises shareability across social platforms.',
-      thumbnailUrl: '',
-      subtitleStyle: `${config.font} ${config.fontSize}px — ${config.position}`,
-      outputPath: './output/final_clip.mp4',
-    });
-
-    setStep(3);
-  }, [config]);
+  }, [youtubeUrl, config]);
 
   // --- Handlers ---
   const handleUrlSubmit = (e: React.FormEvent) => {
@@ -312,7 +388,6 @@ export default function AIClipper({ onClose }: AIClipperProps) {
 
   const handleConfigContinue = () => {
     setStep(2);
-    // Kick off the pipeline after transition
     setTimeout(() => runPipeline(), 300);
   };
 
@@ -321,9 +396,11 @@ export default function AIClipper({ onClose }: AIClipperProps) {
   };
 
   const handleRestart = () => {
-    setYoutubeUrl('');
+    setYoutubeUrl("");
     setConfig(DEFAULT_CONFIG);
-    setPipelineSteps(PIPELINE_STEPS.map((s) => ({ ...s, status: 'idle' as const })));
+    setPipelineSteps(
+      PIPELINE_STEPS.map((s) => ({ ...s, status: "idle" as const })),
+    );
     setProgress(0);
     setResult(null);
     setError(null);
@@ -331,9 +408,11 @@ export default function AIClipper({ onClose }: AIClipperProps) {
   };
 
   const handleNewVideo = () => {
-    setYoutubeUrl('');
+    setYoutubeUrl("");
     setConfig(DEFAULT_CONFIG);
-    setPipelineSteps(PIPELINE_STEPS.map((s) => ({ ...s, status: 'idle' as const })));
+    setPipelineSteps(
+      PIPELINE_STEPS.map((s) => ({ ...s, status: "idle" as const })),
+    );
     setProgress(0);
     setResult(null);
     setError(null);
@@ -342,13 +421,20 @@ export default function AIClipper({ onClose }: AIClipperProps) {
 
   const handleTryAgain = () => {
     setError(null);
-    runPipeline();
+    setResult(null);
+    const freshSteps = PIPELINE_STEPS.map((s) => ({
+      ...s,
+      status: "idle" as const,
+    }));
+    setPipelineSteps(freshSteps);
+    setProgress(0);
+    setTimeout(() => runPipeline(), 300);
   };
 
   // --- Render helpers ---
   const renderStepIndicator = () => (
     <div className="flex items-center justify-center gap-3 mb-10">
-      {(['URL', 'Style', 'Process', 'Result'] as const).map((label, i) => {
+      {(["URL", "Style", "Process", "Result"] as const).map((label, i) => {
         const isActive = step === i;
         const isPast = step > i;
         return (
@@ -356,19 +442,19 @@ export default function AIClipper({ onClose }: AIClipperProps) {
             <div
               className={`flex items-center gap-2 text-xs font-medium transition-colors duration-300 ${
                 isActive
-                  ? 'text-blue-400'
+                  ? "text-blue-400"
                   : isPast
-                    ? 'text-emerald-400'
-                    : 'text-gray-600'
+                    ? "text-emerald-400"
+                    : "text-gray-600"
               }`}
             >
               <span
                 className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold border transition-colors duration-300 ${
                   isActive
-                    ? 'bg-blue-500/20 border-blue-500 text-blue-400'
+                    ? "bg-blue-500/20 border-blue-500 text-blue-400"
                     : isPast
-                      ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400'
-                      : 'bg-gray-800 border-gray-700 text-gray-600'
+                      ? "bg-emerald-500/20 border-emerald-500 text-emerald-400"
+                      : "bg-gray-800 border-gray-700 text-gray-600"
                 }`}
               >
                 {isPast ? <Check className="w-3 h-3" /> : i + 1}
@@ -391,7 +477,7 @@ export default function AIClipper({ onClose }: AIClipperProps) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      transition={{ duration: 0.35, ease: 'easeOut' }}
+      transition={{ duration: 0.35, ease: "easeOut" }}
       className="flex flex-col items-center justify-center flex-1 px-6"
     >
       {/* Icon */}
@@ -465,7 +551,7 @@ export default function AIClipper({ onClose }: AIClipperProps) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      transition={{ duration: 0.35, ease: 'easeOut' }}
+      transition={{ duration: 0.35, ease: "easeOut" }}
       className="flex flex-col items-center flex-1 px-6 py-8"
     >
       <motion.h2
@@ -505,8 +591,8 @@ export default function AIClipper({ onClose }: AIClipperProps) {
                 }
                 className={`flex-1 py-2.5 rounded-lg text-sm font-medium border transition-all duration-200 ${
                   config.fontSize === pill.value
-                    ? 'bg-blue-500/15 border-blue-500/50 text-blue-300'
-                    : 'bg-gray-800/50 border-gray-700 text-gray-400 hover:border-gray-600 hover:text-gray-300'
+                    ? "bg-blue-500/15 border-blue-500/50 text-blue-300"
+                    : "bg-gray-800/50 border-gray-700 text-gray-400 hover:border-gray-600 hover:text-gray-300"
                 }`}
               >
                 {pill.label}
@@ -528,7 +614,7 @@ export default function AIClipper({ onClose }: AIClipperProps) {
             onChange={(e) =>
               setConfig((c) => ({
                 ...c,
-                font: e.target.value as SubtitleConfig['font'],
+                font: e.target.value as SubtitleConfig["font"],
               }))
             }
             className="w-full py-2.5 px-4 rounded-lg bg-gray-800/50 border border-gray-700 text-white text-sm focus:outline-none focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/30 transition-all duration-200 appearance-none cursor-pointer"
@@ -602,8 +688,8 @@ export default function AIClipper({ onClose }: AIClipperProps) {
                 }
                 className={`flex-1 py-2.5 rounded-lg text-sm font-medium border transition-all duration-200 ${
                   config.position === pill.value
-                    ? 'bg-blue-500/15 border-blue-500/50 text-blue-300'
-                    : 'bg-gray-800/50 border-gray-700 text-gray-400 hover:border-gray-600 hover:text-gray-300'
+                    ? "bg-blue-500/15 border-blue-500/50 text-blue-300"
+                    : "bg-gray-800/50 border-gray-700 text-gray-400 hover:border-gray-600 hover:text-gray-300"
                 }`}
               >
                 {pill.label}
@@ -623,12 +709,12 @@ export default function AIClipper({ onClose }: AIClipperProps) {
               fontSize: `${Math.min(Number(config.fontSize), 68) * 0.45}px`,
               color: config.textColor,
               WebkitTextStroke:
-                config.strokeColor !== '#000000'
+                config.strokeColor !== "#000000"
                   ? `2px ${config.strokeColor}`
                   : undefined,
               textShadow:
-                config.strokeColor === '#000000'
-                  ? '-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000'
+                config.strokeColor === "#000000"
+                  ? "-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000"
                   : undefined,
             }}
             className="font-bold leading-tight"
@@ -671,7 +757,7 @@ export default function AIClipper({ onClose }: AIClipperProps) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      transition={{ duration: 0.35, ease: 'easeOut' }}
+      transition={{ duration: 0.35, ease: "easeOut" }}
       className="flex flex-col flex-1 px-6 py-8"
     >
       {/* Header */}
@@ -723,7 +809,7 @@ export default function AIClipper({ onClose }: AIClipperProps) {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -20 }}
-        transition={{ duration: 0.35, ease: 'easeOut' }}
+        transition={{ duration: 0.35, ease: "easeOut" }}
         className="flex flex-col items-center flex-1 px-6 py-8 overflow-y-auto"
       >
         {/* Success badge */}
@@ -731,7 +817,12 @@ export default function AIClipper({ onClose }: AIClipperProps) {
           className="w-14 h-14 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center mb-5"
           initial={{ scale: 0 }}
           animate={{ scale: 1 }}
-          transition={{ type: 'spring', stiffness: 200, damping: 18, delay: 0.1 }}
+          transition={{
+            type: "spring",
+            stiffness: 200,
+            damping: 18,
+            delay: 0.1,
+          }}
         >
           <Check className="w-7 h-7 text-emerald-400" />
         </motion.div>
@@ -872,7 +963,8 @@ export default function AIClipper({ onClose }: AIClipperProps) {
         Something Went Wrong
       </h2>
       <p className="text-sm text-gray-400 mb-8 text-center max-w-md leading-relaxed">
-        {error ?? 'An unexpected error occurred while processing your clip. Please try again.'}
+        {error ??
+          "An unexpected error occurred while processing your clip. Please try again."}
       </p>
       <div className="flex items-center gap-3">
         <button
@@ -907,7 +999,9 @@ export default function AIClipper({ onClose }: AIClipperProps) {
       <header className="flex items-center justify-between px-6 py-4 border-b border-gray-800/60 shrink-0">
         <div className="flex items-center gap-3">
           <button
-            onClick={step === 0 ? onClose : step === 1 ? () => setStep(0) : undefined}
+            onClick={
+              step === 0 ? onClose : step === 1 ? () => setStep(0) : undefined
+            }
             className="w-8 h-8 rounded-lg bg-gray-800/50 border border-gray-700 flex items-center justify-center text-gray-400 hover:text-white hover:border-gray-600 transition-all duration-200"
           >
             {step === 0 || step === 3 ? (
@@ -938,17 +1032,17 @@ export default function AIClipper({ onClose }: AIClipperProps) {
       {/* Body — full height minus header */}
       <div className="flex-1 flex flex-col overflow-y-auto">
         <AnimatePresence mode="wait">
-          {error !== null && step === 2 ? (
-            renderError()
-          ) : step === 0 ? (
-            renderUrlInput()
-          ) : step === 1 ? (
-            renderSubtitleConfig()
-          ) : step === 2 ? (
-            renderProcessing()
-          ) : step === 3 ? (
-            renderResult()
-          ) : null}
+          {error !== null && step === 2
+            ? renderError()
+            : step === 0
+              ? renderUrlInput()
+              : step === 1
+                ? renderSubtitleConfig()
+                : step === 2
+                  ? renderProcessing()
+                  : step === 3
+                    ? renderResult()
+                    : null}
         </AnimatePresence>
       </div>
     </motion.div>

@@ -886,7 +886,7 @@ export default function App() {
       prefix: "/vibe",
     },
     {
-      id: "clipper",
+      id: "clip",
       icon: (isActive: boolean) => (
         <div className="relative flex items-center justify-center w-[18px]">
           <svg
@@ -907,38 +907,11 @@ export default function App() {
           </svg>
         </div>
       ),
-      label: "AI Clipper",
-      description: "Clip viral moments from YouTube videos",
-      prefix: "/clip",
-    },
-    {
-      id: "clip",
-      icon: (isActive) => (
-        <div className="relative flex items-center justify-center w-full h-full text-slate-700">
-          <motion.div
-            animate={
-              isActive
-                ? { scale: [1, 1.15, 1], rotate: [0, 5, 0] }
-                : { scale: 1, rotate: 0 }
-            }
-            transition={{ repeat: Infinity, duration: 1.5, ease: "easeOut" }}
-          >
-            <Play className="w-4 h-4" />
-          </motion.div>
-          {isActive && (
-            <motion.div
-              initial={{ scale: 0.8, opacity: 0.5 }}
-              animate={{ scale: 2, opacity: 0 }}
-              transition={{ repeat: Infinity, duration: 1.5, ease: "easeOut" }}
-              className="absolute inset-0 border border-slate-700 rounded-md"
-            />
-          )}
-        </div>
-      ),
       label: "AI Clip",
-      description: "Clip most viral moments with AI generated subtitles",
+      description: "Clip viral moments from YouTube",
       prefix: "/clip",
     },
+
     {
       id: "browse",
       icon: (isActive) => (
@@ -4365,8 +4338,8 @@ Please analyze the code you just wrote and fix this error.`;
   );
 
   const handleSendMessage = async () => {
-    if (selectedCommand?.id === "clipper") {
-      // Clipper handles its own flow - don't send as message
+    if (selectedCommand?.id === "clip") {
+      // AI Clip handles its own flow - don't send as message
       return;
     }
     if (value.trim() || selectedCommand) {
@@ -5258,7 +5231,7 @@ Please analyze the code you just wrote and fix this error.`;
                       ),
                 )}
               >
-                {selectedCommand?.id === "clipper" ? (
+                {selectedCommand?.id === "clip" ? (
                   <AIClipper onClose={() => setSelectedCommand(null)} />
                 ) : messages.length === 0 ? (
                   <motion.div
@@ -5409,7 +5382,7 @@ Please analyze the code you just wrote and fix this error.`;
                 )}
 
                 <AnimatePresence>
-                  {!isFullscreen && selectedCommand?.id !== "clipper" && (
+                  {!isFullscreen && selectedCommand?.id !== "clip" && (
                     <motion.div
                       layout
                       ref={inputContainerRef}
