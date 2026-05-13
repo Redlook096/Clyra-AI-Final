@@ -105,7 +105,7 @@ def get_video_resolution(video_path):
     _ffprobe = FFMPEG.replace("ffmpeg", "ffprobe") if "ffmpeg" in FFMPEG else "ffprobe"
     cmd = [_ffprobe, "-i", video_path]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=25)
         for line in result.stderr.split("\n"):
             if "Stream" in line and "Video" in line:
                 match = re.search(r"(\d{2,4})x(\d{2,4})", line)
@@ -327,7 +327,7 @@ def step_keyframes(yt, duration, tmp_dir):
         audio_stream = yt.streams.filter(only_audio=True).first()
     audio_url = audio_stream.url if audio_stream else stream_url
 
-    num_frames = 4
+    num_frames = 2  # Reduced for speed
     frame_paths = []
     frame_data = []
 
@@ -348,7 +348,7 @@ def step_keyframes(yt, duration, tmp_dir):
                     "3",
                     frame_path,
                 ],
-                timeout=15,
+                timeout=25,
             )
             frame_paths.append((t, frame_path))
             frame_data.append(
@@ -490,12 +490,12 @@ def step_analyze(title, duration, segments, moment_type, frame_data=None):
         clip_start = max(0, duration * section[0])
         clip_end = min(duration, max(clip_start + 35, duration * section[1]))
 
-        # Ensure 30-60s
+        # Ensure 30-45s for speed
         clip_duration = clip_end - clip_start
         if clip_duration < 30:
             clip_end = min(duration, clip_start + 35)
-        if clip_duration > 60:
-            clip_end = clip_start + 60
+        if clip_duration > 45:
+            clip_end = clip_start + 45
 
         clip_start = round(clip_start, 1)
         clip_end = round(clip_end, 1)
@@ -519,9 +519,9 @@ def step_analyze(title, duration, segments, moment_type, frame_data=None):
             clip_end = min(float(duration), 30.0)
             clip_duration = clip_end - clip_start
 
-    if clip_duration > 60:
-        clip_end = clip_start + 60.0
-        clip_duration = 60.0
+    if clip_duration > 45:
+        clip_end = clip_start + 45.0
+        clip_duration = 45.0
 
     # Guard against out-of-range
     clip_start = max(0.0, clip_start)
@@ -542,49 +542,55 @@ def step_analyze(title, duration, segments, moment_type, frame_data=None):
     return clip_start, clip_end, reason
 
 
-def step_download_clip(stream_url, audio_url, clip_start, clip_duration, tmp_dir):
-    """Step 6 — download only the clip portion from both video and audio streams."""
-    log(
-        "clip",
-        "running",
-        message=f"Downloading {round(clip_duration)}s clip from stream...",
-    )
+def step_download_clip(yt, clip_start, clip_duration, tmp_dir):
+    """Step 6 — download low-res progressive locally, then clip (fast)."""
+    log("clip", "running", message=f"Downloading {round(clip_duration)}s clip...")
 
     clip_path = os.path.join(tmp_dir, "clip.mp4")
-    _ = run_ffmpeg(
-        [
-            "-y",
-            "-ss",
-            str(clip_start),
-            "-i",
-            stream_url,
-            "-ss",
-            str(clip_start),
-            "-i",
-            audio_url,
-            "-t",
-            str(clip_duration),
-            "-c:v",
-            "libx264",
-            "-preset",
-            "ultrafast",
-            "-crf",
-            "23",
-            "-c:a",
-            "aac",
-            "-b:a",
-            "192k",
-            "-movflags",
-            "+faststart",
-            "-map",
-            "0:v:0",
-            "-map",
-            "1:a:0",
-            "-shortest",
-            clip_path,
-        ],
-        timeout=180,
+
+    # Download smallest progressive stream (has audio+video, fast)
+    prog = (
+        yt.streams.filter(progressive=True, file_extension="mp4")
+        .order_by("resolution")
+        .first()
     )
+    if not prog:
+        prog = yt.streams.filter(progressive=True).first()
+
+    if prog:
+        fname = f"src_{int(clip_start)}.mp4"
+        log("clip", "progress", message=f"Downloading {prog.resolution} source...")
+        prog.download(output_path=tmp_dir, filename=fname)
+        src_path = os.path.join(tmp_dir, fname)
+        # Clip locally (instant!)
+        _ = run_ffmpeg(
+            [
+                "-y",
+                "-ss",
+                str(clip_start),
+                "-i",
+                src_path,
+                "-t",
+                str(clip_duration),
+                "-c:v",
+                "libx264",
+                "-preset",
+                "ultrafast",
+                "-crf",
+                "23",
+                "-c:a",
+                "aac",
+                "-b:a",
+                "128k",
+                "-movflags",
+                "+faststart",
+                clip_path,
+            ],
+            timeout=30,
+        )
+        os.remove(src_path)
+    else:
+        error("No progressive stream available")
 
     size_mb = os.path.getsize(clip_path) / (1024 * 1024)
     log(
@@ -724,11 +730,11 @@ def step_burn(clip_path, ass_path, out_dir, clip_name="final_clip"):
             "-preset",
             "ultrafast",
             "-crf",
-            "18",
+            "23",
             "-c:a",
             "aac",
             "-b:a",
-            "192k",
+            "128k",
             "-movflags",
             "+faststart",
             out_path,
@@ -929,11 +935,9 @@ def main():
             frame_data,
         )
 
-        # --- Step 6: Download clip from stream ---
+        # --- Step 6: Download clip from progressive stream ---
         clip_duration = clip_end - clip_start
-        clip_path = step_download_clip(
-            stream_url, audio_url, clip_start, clip_duration, tmp_dir
-        )
+        clip_path = step_download_clip(yt, clip_start, clip_duration, tmp_dir)
 
         # --- Step 7: Accurate subtitles via Whisper on clip only ---
         clip_words = step_transcribe_clip(clip_path, clip_start, clip_end)
