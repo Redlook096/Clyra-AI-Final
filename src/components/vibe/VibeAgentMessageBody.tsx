@@ -30,7 +30,9 @@ type StoredVibeFlowState = {
 
 const vibeFlowStateByMessage = new Map<string, StoredVibeFlowState>();
 
-function getStoredFlowState(messageId?: string): StoredVibeFlowState | undefined {
+function getStoredFlowState(
+  messageId?: string,
+): StoredVibeFlowState | undefined {
   return messageId ? vibeFlowStateByMessage.get(messageId) : undefined;
 }
 
@@ -82,9 +84,15 @@ export function VibeAgentMessageBody({
     filesByPath: Record<string, string>,
   ) => void;
 }) {
-  const safeContent = useMemo(() => sanitizeVibeAgentContent(content), [content]);
+  const safeContent = useMemo(
+    () => sanitizeVibeAgentContent(content),
+    [content],
+  );
   const hasDelims = safeContent.includes("<<<VIBE_");
-  const segments = useMemo(() => parseVibeAgentContent(safeContent), [safeContent]);
+  const segments = useMemo(
+    () => parseVibeAgentContent(safeContent),
+    [safeContent],
+  );
   const fallbackMarkdown = !hasDelims && content.length > 0;
 
   const isPlanMd = (seg: VibeParsedSegment) =>
@@ -281,7 +289,7 @@ export function VibeAgentMessageBody({
             advanceTimeoutRef.current = window.setTimeout(() => {
               advanceTimeoutRef.current = null;
               go();
-            }, 1800);
+            }, 800);
           } else if (codeJustFinished) {
             // Code block collapsed — dwell before next step
             advanceTimeoutRef.current = window.setTimeout(() => {

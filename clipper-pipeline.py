@@ -26,6 +26,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from datetime import timedelta
 
 # ---------------------------------------------------------------------------
@@ -390,6 +391,35 @@ def step_analyze(title, duration, segments, moment_type, frame_data=None):
             "progress",
             warning=f"AI call failed, using fallback: {str(exc)[:80]}",
         )
+        # Fallback with variety — different run = different segment
+        seed = int(time.time() * 1000) % 100
+        # Pick from different sections of the video based on seed
+        sections = [
+            (0.05, 0.15),  # early
+            (0.15, 0.25),  # early-mid
+            (0.25, 0.35),  # mid
+            (0.35, 0.50),  # mid-late
+            (0.50, 0.65),  # late-mid
+            (0.60, 0.75),  # late
+            (0.70, 0.85),  # very late
+            (0.10, 0.20),  # varied
+            (0.30, 0.45),  # varied
+            (0.55, 0.70),  # varied
+        ]
+        section = sections[seed % len(sections)]
+        clip_start = max(0, duration * section[0])
+        clip_end = min(duration, max(clip_start + 35, duration * section[1]))
+
+        # Ensure 30-60s
+        clip_duration = clip_end - clip_start
+        if clip_duration < 30:
+            clip_end = min(duration, clip_start + 35)
+        if clip_duration > 60:
+            clip_end = clip_start + 60
+
+        clip_start = round(clip_start, 1)
+        clip_end = round(clip_end, 1)
+        reason = f"Auto-selected {moment_type} segment (seed {seed})"
 
     # --- Enforce 30-60 second rule ---
     clip_duration = clip_end - clip_start
@@ -524,6 +554,14 @@ def step_subtitles(all_words, clip_start, clip_end, cfg, tmp_dir):
                 }
             )
 
+    # Filter out words that are just punctuation or too short
+    filtered_words = []
+    for w in clip_words:
+        text = re.sub(r"[^\w\s]", "", w["word"].strip()).upper()
+        if text and len(text) >= 1 and not text.isspace():
+            filtered_words.append({"word": text, "start": w["start"], "end": w["end"]})
+    clip_words = filtered_words
+
     if not clip_words:
         log(
             "subtitles",
@@ -560,7 +598,7 @@ def step_subtitles(all_words, clip_start, clip_end, cfg, tmp_dir):
                 next_start = float(clip_words[i + 1]["start"])
                 if e > next_start:
                     e = max(s + 0.05, next_start - 0.02)
-            text = re.sub(r"[^\w\s]", "", w["word"].strip()).upper()
+            text = w["word"]  # Already cleaned in second pass above
             if text:
                 f.write(f"Dialogue: 0,{ts_ass(s)},{ts_ass(e)},Word,,{text}\n")
 

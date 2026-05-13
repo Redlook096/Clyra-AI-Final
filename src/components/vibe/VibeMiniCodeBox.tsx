@@ -38,7 +38,13 @@ function RollingCounter({ value }: { value: number }) {
     >
       {digits.map((_, index) => {
         const place = 10 ** (digits.length - index - 1);
-        return <RollingDigit key={`${digits.length}-${place}`} place={place} value={safeValue} />;
+        return (
+          <RollingDigit
+            key={`${digits.length}-${place}`}
+            place={place}
+            value={safeValue}
+          />
+        );
       })}
     </span>
   );
@@ -86,17 +92,19 @@ function RollingDigit({ place, value }: { place: number; value: number }) {
       style={{ height: COUNTER_HEIGHT }}
     >
       {Array.from({ length: 10 }, (_, number) => (
-        <RollingNumber
-          key={number}
-          mv={animatedValue}
-          number={number}
-        />
+        <RollingNumber key={number} mv={animatedValue} number={number} />
       ))}
     </span>
   );
 }
 
-function RollingNumber({ mv, number }: { mv: MotionValue<number>; number: number }) {
+function RollingNumber({
+  mv,
+  number,
+}: {
+  mv: MotionValue<number>;
+  number: number;
+}) {
   const y = useTransform(mv, (latest) => {
     const placeValue = latest % 10;
     let offset = (10 + number - placeValue) % 10;
@@ -162,7 +170,8 @@ export function VibeMiniCodeBox({
     if (!active || collapsed) return;
     if (revealed < code.length) {
       const left = code.length - revealed;
-      const step = left > 8000 ? 2400 : left > 3500 ? 1400 : left > 1500 ? 720 : 180;
+      const step =
+        left > 8000 ? 4800 : left > 3500 ? 2800 : left > 1500 ? 1440 : 360;
       rafRef.current = window.requestAnimationFrame(() => {
         setRevealed((r) => Math.min(r + step, code.length));
       });
@@ -217,8 +226,12 @@ export function VibeMiniCodeBox({
 
   const plusAnimRef = useRef(archived ? finalAdded : 0);
   const minusAnimRef = useRef(archived ? finalRemoved : 0);
-  const [displayAdded, setDisplayAdded] = useState(() => (archived ? finalAdded : 0));
-  const [displayRemoved, setDisplayRemoved] = useState(() => (archived ? finalRemoved : 0));
+  const [displayAdded, setDisplayAdded] = useState(() =>
+    archived ? finalAdded : 0,
+  );
+  const [displayRemoved, setDisplayRemoved] = useState(() =>
+    archived ? finalRemoved : 0,
+  );
 
   useEffect(() => {
     if (!archived) return;
@@ -268,7 +281,7 @@ export function VibeMiniCodeBox({
       <motion.div
         transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
         className={cn(
-	        "overflow-hidden rounded-lg border border-slate-200/80 bg-white/[0.97] shadow-[0_1px_0_rgba(15,23,42,0.035),0_14px_34px_rgba(15,23,42,0.055)]",
+          "overflow-hidden rounded-lg border border-slate-200/80 bg-white/[0.97] shadow-[0_1px_0_rgba(15,23,42,0.035),0_14px_34px_rgba(15,23,42,0.055)]",
           active && !collapsed && "ring-1 ring-blue-500/10",
         )}
         style={{ contain: "layout paint" }}
@@ -277,7 +290,9 @@ export function VibeMiniCodeBox({
           role={headerInteractive ? "button" : undefined}
           tabIndex={headerInteractive ? 0 : -1}
           aria-expanded={headerInteractive ? isOpen : undefined}
-          onClick={headerInteractive ? () => setManuallyOpen((o) => !o) : undefined}
+          onClick={
+            headerInteractive ? () => setManuallyOpen((o) => !o) : undefined
+          }
           onKeyDown={
             headerInteractive
               ? (e) => {
@@ -289,9 +304,9 @@ export function VibeMiniCodeBox({
               : undefined
           }
           className={
-	            "flex items-center justify-between gap-2 bg-white/[0.96] px-3.5 py-2 text-left text-[13px] transition-colors select-none " +
+            "flex items-center justify-between gap-2 bg-white/[0.96] px-3.5 py-2 text-left text-[13px] transition-colors select-none " +
             (headerInteractive
-	              ? "cursor-pointer hover:bg-slate-50/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
+              ? "cursor-pointer hover:bg-slate-50/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
               : "")
           }
         >
@@ -304,7 +319,9 @@ export function VibeMiniCodeBox({
                 className="max-w-[220px] truncate text-[13px] font-medium sm:max-w-[360px]"
               />
             ) : (
-              <span className="truncate text-[13px] font-medium text-slate-700">{file}</span>
+              <span className="truncate text-[13px] font-medium text-slate-700">
+                {file}
+              </span>
             )}
             <CounterPill
               sign="+"
@@ -320,7 +337,12 @@ export function VibeMiniCodeBox({
           {headerInteractive ? (
             <motion.span
               animate={{ rotate: isOpen ? 0 : -90 }}
-              transition={{ type: "spring", stiffness: 380, damping: 36, mass: 0.32 }}
+              transition={{
+                type: "spring",
+                stiffness: 380,
+                damping: 36,
+                mass: 0.32,
+              }}
               className="shrink-0 text-slate-400"
               aria-hidden
             >
@@ -340,7 +362,7 @@ export function VibeMiniCodeBox({
                 height: { duration: 0.42, ease: [0.22, 1, 0.36, 1] },
                 opacity: { duration: 0.24 },
               }}
-	              className="overflow-hidden border-t border-slate-100/90 bg-slate-50/[0.45]"
+              className="overflow-hidden border-t border-slate-100/90 bg-slate-50/[0.45]"
             >
               <div
                 ref={scrollRef}

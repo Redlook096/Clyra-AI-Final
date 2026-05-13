@@ -236,6 +236,7 @@ function useAutoResizeTextarea({
     const textarea = textareaRef.current;
     if (textarea) {
       textarea.style.height = `${minHeight}px`;
+      textarea.style.willChange = "height";
     }
   }, [minHeight]);
 
@@ -708,18 +709,22 @@ export default function App() {
       if (!el) return;
       chatNearBottomRef.current = true;
 
+      const effectiveBehavior: ScrollBehavior = hasActiveMessageStream
+        ? "auto"
+        : behavior;
+
       window.requestAnimationFrame(() => {
         chatBottomRef.current?.scrollIntoView({
           block: "end",
-          behavior,
+          behavior: effectiveBehavior,
         });
         el.scrollTo({
           top: el.scrollHeight,
-          behavior,
+          behavior: effectiveBehavior,
         });
       });
     },
-    [autoScroll],
+    [autoScroll, hasActiveMessageStream],
   );
 
   useLayoutEffect(() => {
@@ -4636,7 +4641,7 @@ Please analyze the code you just wrote and fix this error.`;
               initial={{ width: 0, opacity: 0 }}
               animate={{ width: 240, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
-              transition={{ duration: 0.36, ease: [0.22, 1, 0.36, 1] }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
               className="relative z-[100] flex h-full shrink-0 flex-col overflow-hidden border-r border-slate-200/70 bg-white/[0.88] shadow-[inset_-1px_0_0_rgba(255,255,255,0.78)] backdrop-blur-2xl"
               style={{ willChange: "width, opacity" }}
             >
@@ -5391,7 +5396,7 @@ Please analyze the code you just wrote and fix this error.`;
                             stiffness: 280,
                             damping: 30,
                             mass: 0.55,
-                            duration: 0.42 * animationSpeed,
+                            duration: 0.29 * animationSpeed,
                           }}
                           className={cn(
                             "flex w-full",
@@ -5471,7 +5476,7 @@ Please analyze the code you just wrote and fix this error.`;
                       transition={{
                         type: "spring",
                         bounce: 0,
-                        duration: 0.6 * animationSpeed,
+                        duration: 0.42 * animationSpeed,
                       }}
                       className={cn(
                         "w-full shrink-0 relative z-20 transition-all duration-300",

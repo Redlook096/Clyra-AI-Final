@@ -10,7 +10,7 @@ const MS_PER_CHARACTER = 7;
  * Tiny one- or two-sentence narration line that the agent emits between blocks
  * (e.g. "Now let me run lint to verify.").
  *
-   * - Appears as a smooth narration beat.
+ * - Appears as a smooth narration beat.
  * - Once typed AND the model has flushed it (a later segment exists), holds briefly then signals
  *   the parent so the next agent step can start.
  */
@@ -44,9 +44,15 @@ export function VibeTextLine({
     let cancelled = false;
     let last = performance.now();
     let carry = 0;
+    let frameSkip = 0;
 
     const tick = (now: number) => {
       if (cancelled) return;
+      frameSkip++;
+      if (frameSkip % 2 !== 0) {
+        rafRef.current = window.requestAnimationFrame(tick);
+        return;
+      }
       carry += now - last;
       last = now;
       let keepGoing = true;

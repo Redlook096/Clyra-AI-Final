@@ -47,7 +47,7 @@ export function VibeThoughtPanel({
   const notifiedRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
-  const shiningDelayRef = useRef(260 + Math.random() * 120);
+  const shiningDelayRef = useRef(1200 + Math.random() * 1500);
 
   useEffect(() => {
     if (archived) {
@@ -75,9 +75,15 @@ export function VibeThoughtPanel({
     let cancelled = false;
     let last = performance.now();
     let carry = 0;
+    let frameCount = 0;
 
     const tick = (now: number) => {
       if (cancelled) return;
+      frameCount++;
+      if (frameCount % 2 !== 0) {
+        rafRef.current = window.requestAnimationFrame(tick);
+        return;
+      }
       carry += now - last;
       last = now;
       if (carry >= MS_PER_CHARACTER) {
