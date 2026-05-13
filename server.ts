@@ -122,10 +122,28 @@ async function startServer() {
 
       const { execSync } = await import("node:child_process");
 
-      // Check if ffmpeg exists
+      // Check if ffmpeg exists (also check ~/bin)
+      const homeBin = path.join(homedir(), "bin");
+      const ffmpegPath = path.join(homeBin, "ffmpeg");
+      let ffmpegOk = false;
       try {
-        execSync("which ffmpeg", { stdio: "pipe" });
+        execSync(`"${ffmpegPath}" -version`, { stdio: "pipe" });
+        ffmpegOk = true;
       } catch {
+        try {
+          execSync("which ffmpeg", {
+            stdio: "pipe",
+            env: {
+              ...process.env,
+              PATH: `${process.env.PATH || ""}:${homeBin}`,
+            },
+          });
+          ffmpegOk = true;
+        } catch {
+          // ffmpeg not found
+        }
+      }
+      if (!ffmpegOk) {
         send("error", {
           step: "download",
           message:
@@ -136,7 +154,6 @@ async function startServer() {
       }
 
       // Run the Python pipeline script
-      const homeBin = path.join(homedir(), "bin");
       const proc = spawn("python3", [scriptPath, url, JSON.stringify(cfg)], {
         env: {
           ...process.env,

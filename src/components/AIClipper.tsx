@@ -464,7 +464,7 @@ export default function AIClipper({ onClose }: AIClipperProps) {
                 clip: 5,
                 subtitles: 6,
                 burn: 7,
-                caption: 7,
+                caption: 8,
               };
               const stepIdx = stepMap[event.step] ?? -1;
 
