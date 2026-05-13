@@ -182,8 +182,84 @@ def step_audio(yt, tmp_dir):
     return audio_path
 
 
-def step_transcribe(audio_path):
-    """Step 3 — Whisper transcription with word-level timestamps."""
+def step_transcribe_captions(yt, tmp_dir):
+    """Step 2 & 3 — get transcript from YouTube captions (fast) or fall back to Whisper."""
+    log("transcribe", "running", message="Getting transcript from YouTube captions...")
+
+    try:
+        # Try to get auto-generated English captions
+        captions = yt.captions
+        caption_track = None
+        for code in ["a.en", "en", "en-US", "en-GB"]:
+            if code in captions:
+                caption_track = captions[code]
+                break
+        if not caption_track and captions:
+            caption_track = list(captions.values())[0]
+
+        if caption_track:
+            # Get the caption XML
+            caption_xml = caption_track.xml_captions
+            # Parse XML to extract words with timestamps
+            import xml.etree.ElementTree as ET
+
+            root = ET.fromstring(caption_xml)
+
+            all_words = []
+            segments = []
+
+            for child in root:
+                if child.tag == "text":
+                    start_str = child.get("start", "0")
+                    dur_str = child.get("dur", "1")
+                    text = child.text or ""
+
+                    start = float(start_str)
+                    dur = float(dur_str)
+                    end = start + dur
+
+                    # Clean and split into words, estimate word timing
+                    words_in_line = re.sub(r"[^\w\s]", "", text).strip().upper().split()
+                    if not words_in_line:
+                        continue
+
+                    word_dur = dur / len(words_in_line)
+                    for i, word in enumerate(words_in_line):
+                        if len(word) >= 1:
+                            all_words.append(
+                                {
+                                    "word": word,
+                                    "start": start + i * word_dur,
+                                    "end": start + (i + 1) * word_dur,
+                                }
+                            )
+
+                    segments.append({"start": start, "end": end, "text": text.strip()})
+
+            if all_words:
+                log(
+                    "transcribe",
+                    "complete",
+                    message=f"Captions: {len(all_words)} words from YouTube",
+                    word_count=len(all_words),
+                )
+                return segments, all_words
+    except Exception as e:
+        log(
+            "transcribe",
+            "progress",
+            message=f"YouTube captions unavailable ({str(e)[:60]}), falling back to Whisper...",
+        )
+
+    # Fallback to Whisper
+    return step_transcribe_whisper(yt, tmp_dir)
+
+
+def step_transcribe_whisper(yt, tmp_dir):
+    """Fallback: download audio and transcribe with Whisper."""
+    # Download audio
+    audio_path = step_audio(yt, tmp_dir)
+
     log("transcribe", "running", message="Transcribing with Whisper...")
 
     import whisper
@@ -198,26 +274,24 @@ def step_transcribe(audio_path):
             for w in seg["words"]:
                 all_words.append(
                     {
-                        "word": w.get("word", ""),
-                        "start": float(w.get("start", 0)),
-                        "end": float(w.get("end", 0)),
+                        "word": w["word"],
+                        "start": w["start"],
+                        "end": w["end"],
                     }
                 )
 
-    if not all_words:
-        log(
-            "transcribe",
-            "complete",
-            message="No words detected — using raw segments",
-            word_count=0,
-        )
-    else:
-        log(
-            "transcribe",
-            "complete",
-            message=f"Transcribed {len(all_words)} words",
-            word_count=len(all_words),
-        )
+    log(
+        "transcribe",
+        "complete",
+        message=f"Whisper: {len(all_words)} words",
+        word_count=len(all_words),
+    )
+
+    # Clean up audio
+    try:
+        os.remove(audio_path)
+    except:
+        pass
 
     return segments, all_words
 
@@ -226,14 +300,20 @@ def step_keyframes(yt, duration, tmp_dir):
     """Step 4 — extract 6 keyframes directly from stream URL via ffmpeg."""
     log("keyframes", "running", message="Extracting keyframes from stream...")
 
-    # Get best video stream URL (no download)
+    # Get best video stream URL (no download) — prefer 1080p for speed
     video_stream = (
         yt.streams.filter(adaptive=True, file_extension="mp4")
-        .filter(only_video=True)
-        .order_by("resolution")
-        .desc()
+        .filter(only_video=True, res="1080p")
         .first()
     )
+    if not video_stream:
+        video_stream = (
+            yt.streams.filter(adaptive=True, file_extension="mp4")
+            .filter(only_video=True)
+            .order_by("resolution")
+            .desc()
+            .first()
+        )
     if not video_stream:
         video_stream = yt.streams.filter(progressive=True).first()
     if not video_stream:
@@ -489,7 +569,7 @@ def step_download_clip(stream_url, audio_url, clip_start, clip_duration, tmp_dir
             "-preset",
             "ultrafast",
             "-crf",
-            "18",
+            "23",
             "-c:a",
             "aac",
             "-b:a",
@@ -591,14 +671,21 @@ def step_subtitles(all_words, clip_start, clip_end, cfg, tmp_dir):
             "Format: Layer,Start,End,Style,Text\n"
         )
         for i, w in enumerate(clip_words):
+            text = w["word"]
             s = float(w["start"])
             e = float(w["end"])
-            # Cap end time at next word's start to prevent overlap
+
+            # Ensure minimum word duration for readability
+            min_duration = 0.15
+            if e - s < min_duration:
+                e = s + min_duration
+
+            # Cap end time at next word's start minus small gap
             if i + 1 < len(clip_words):
                 next_start = float(clip_words[i + 1]["start"])
-                if e > next_start:
-                    e = max(s + 0.05, next_start - 0.02)
-            text = w["word"]  # Already cleaned in second pass above
+                if e > next_start - 0.03:
+                    e = max(s + 0.1, next_start - 0.03)
+
             if text:
                 f.write(f"Dialogue: 0,{ts_ass(s)},{ts_ass(e)},Word,,{text}\n")
 
@@ -820,11 +907,8 @@ def main():
         yt = YouTube(url)
         title, duration = step_info(yt)
 
-        # --- Step 2: Audio only ---
-        audio_path = step_audio(yt, tmp_dir)
-
-        # --- Step 3: Transcribe ---
-        segments, all_words = step_transcribe(audio_path)
+        # --- Step 2 & 3: Get transcript (captions or Whisper) ---
+        segments, all_words = step_transcribe_captions(yt, tmp_dir)
 
         # --- Step 4: Keyframes ---
         _, stream_url, audio_url, frame_data = step_keyframes(yt, duration, tmp_dir)

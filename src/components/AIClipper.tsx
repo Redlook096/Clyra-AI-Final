@@ -402,16 +402,16 @@ export default function AIClipper({ onClose }: AIClipperProps) {
 
     try {
       const backendConfig = {
-        font_size: parseInt(config.fontSize),
+        font_size: parseInt(config.fontSize) || 52,
         font: config.font,
         text_colour: config.textColor,
         stroke_colour: config.strokeColor,
         position:
           config.position === "bottom"
-            ? "bottom-centre"
+            ? ("bottom-centre" as const)
             : config.position === "center"
-              ? "centre"
-              : "top-centre",
+              ? ("centre" as const)
+              : ("top-centre" as const),
         moment_type: effectiveMomentType,
         clip_name: clipName.trim() || undefined,
       };
@@ -1097,71 +1097,162 @@ export default function AIClipper({ onClose }: AIClipperProps) {
   // =========================================================================
   // STEP 3 — Processing Pipeline
   // =========================================================================
-  const renderProcessing = () => (
-    <motion.div
-      key="step-processing"
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -8 }}
-      transition={{ duration: 0.3, ease: "easeOut" }}
-      className="flex flex-col flex-1 px-6 py-8"
-    >
-      {/* Header */}
-      <div className="text-center mb-8">
-        <motion.div
-          className="inline-flex items-center gap-2.5 mb-3"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-        >
-          <span className="relative flex h-2.5 w-2.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-black opacity-75" />
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-black" />
-          </span>
-          <h2 className="text-lg font-semibold text-black">
-            Processing your clip
-          </h2>
-        </motion.div>
-        <motion.div
-          className="flex items-center justify-center gap-3 text-xs text-slate-400"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.05 }}
-        >
-          <span className="inline-flex items-center gap-1">
-            <Clock className="w-3 h-3" />
-            {formatElapsed(elapsedSeconds)}
-          </span>
-          <span className="text-slate-300">·</span>
-          <span>{progress}% complete</span>
-        </motion.div>
-      </div>
+  const renderProcessing = () => {
+    const activeIdx = pipelineSteps.findIndex((s) => s.status === "active");
+    const activeStep = activeIdx >= 0 ? pipelineSteps[activeIdx] : null;
+    const lastDoneIdx = (() => {
+      for (let i = pipelineSteps.length - 1; i >= 0; i--) {
+        if (pipelineSteps[i].status === "done") return i;
+      }
+      return -1;
+    })();
 
-      {/* Gradient Progress Bar */}
-      <div className="w-full max-w-md mx-auto mb-10">
+    return (
+      <motion.div
+        key="step-processing"
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -8 }}
+        transition={{ duration: 0.3, ease: "easeOut" }}
+        className="flex flex-col flex-1"
+      >
+        {/* Gradient Progress Bar — edge-to-edge at very top */}
         <GradientProgressBar progress={progress} />
-      </div>
 
-      {/* Pipeline Steps */}
-      <div className="w-full max-w-md mx-auto space-y-1">
-        {pipelineSteps.map((ps, idx) => (
-          <PipelineRow
-            key={ps.id}
-            step={ps}
-            index={idx}
-            videoTitle={videoTitle}
-            wordCount={wordCount}
-            clipDuration={clipDuration}
-          />
-        ))}
-      </div>
-    </motion.div>
-  );
+        <div className="flex flex-col flex-1 px-6 py-6">
+          {/* Elapsed time + percentage */}
+          <motion.div
+            className="flex items-center justify-center gap-3 mb-5"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+          >
+            <span className="inline-flex items-center gap-1.5 text-sm text-slate-500">
+              <Clock className="w-3.5 h-3.5" />
+              {formatElapsed(elapsedSeconds)}
+            </span>
+            <span className="text-slate-300">·</span>
+            <span className="text-sm text-slate-500">{progress}% complete</span>
+          </motion.div>
+
+          {/* Small horizontal dots timeline */}
+          <div className="flex items-center justify-center gap-1.5 mb-8">
+            {pipelineSteps.map((ps, idx) => {
+              const isDone = ps.status === "done";
+              const isActive = ps.status === "active";
+              return (
+                <div key={ps.id} className="flex items-center gap-1.5">
+                  <motion.div
+                    className={`rounded-full transition-all duration-500 ${
+                      isDone
+                        ? "w-2 h-2 bg-emerald-400"
+                        : isActive
+                          ? "w-2.5 h-2.5 bg-black ring-2 ring-black/20"
+                          : "w-2 h-2 bg-slate-200"
+                    }`}
+                    initial={false}
+                    animate={isActive ? { scale: [1, 1.25, 1] } : {}}
+                    transition={{
+                      repeat: isActive ? Infinity : 0,
+                      duration: 1.5,
+                    }}
+                  />
+                  {idx < pipelineSteps.length - 1 && (
+                    <div
+                      className={`w-3 h-px transition-colors duration-500 ${
+                        isDone ? "bg-emerald-300" : "bg-slate-200"
+                      }`}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Large centered current step card */}
+          {activeStep ? (
+            <motion.div
+              className="flex-1 flex flex-col items-center justify-center"
+              key={activeStep.id}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.35, ease: "easeOut" }}
+            >
+              <div className="w-full max-w-sm bg-white border border-slate-200 rounded-2xl p-8 shadow-sm text-center">
+                {/* Big animated icon */}
+                <div className="mb-5 flex justify-center">
+                  <div className="w-14 h-14 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-center">
+                    <Loader2 className="w-8 h-8 text-black animate-spin" />
+                  </div>
+                </div>
+
+                {/* Step title */}
+                <h3 className="text-xl font-bold text-black mb-2">
+                  {activeStep.activeLabel}
+                </h3>
+
+                {/* Step detail */}
+                <p className="text-sm text-slate-500 leading-relaxed">
+                  {activeStep.label}
+                </p>
+
+                {/* Step number of total */}
+                <p className="text-xs text-slate-400 mt-4">
+                  Step {activeIdx + 1} of {pipelineSteps.length}
+                </p>
+              </div>
+            </motion.div>
+          ) : (
+            /* If no active step (all done or none started), show last completed */
+            <div className="flex-1 flex flex-col items-center justify-center">
+              {lastDoneIdx >= 0 ? (
+                <motion.div
+                  className="w-full max-w-sm bg-white border border-emerald-200 rounded-2xl p-8 shadow-sm text-center"
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                >
+                  <div className="mb-5 flex justify-center">
+                    <div className="w-14 h-14 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center">
+                      <CheckCircle2 className="w-8 h-8 text-emerald-500" />
+                    </div>
+                  </div>
+                  <h3 className="text-xl font-bold text-black mb-2">
+                    {pipelineSteps[lastDoneIdx].doneLabel}
+                  </h3>
+                  <p className="text-sm text-slate-500">
+                    Almost there — finalizing your clip
+                  </p>
+                </motion.div>
+              ) : (
+                <div className="w-full max-w-sm bg-white border border-slate-200 rounded-2xl p-8 shadow-sm text-center">
+                  <div className="mb-5 flex justify-center">
+                    <div className="w-14 h-14 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-center">
+                      <Loader2 className="w-8 h-8 text-black animate-spin" />
+                    </div>
+                  </div>
+                  <h3 className="text-xl font-bold text-black mb-2">
+                    Starting pipeline...
+                  </h3>
+                  <p className="text-sm text-slate-500">Connecting to server</p>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </motion.div>
+    );
+  };
 
   // =========================================================================
   // STEP 4 — Result
   // =========================================================================
-  const renderResult = () =>
-    result && (
+  const renderResult = () => {
+    if (!result) return null;
+
+    const videoUrl = result.outputPath
+      ? result.outputPath.replace("./output/", "/output/")
+      : `/output/${result.clipName || "final_clip"}.mp4`;
+
+    return (
       <motion.div
         key="step-result"
         initial={{ opacity: 0, y: 8 }}
@@ -1209,14 +1300,17 @@ export default function AIClipper({ onClose }: AIClipperProps) {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.25, duration: 0.3 }}
         >
-          {/* Thumbnail area */}
-          <div className="aspect-video bg-slate-900 flex items-center justify-center border-b border-slate-200 relative group cursor-pointer">
-            <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center group-hover:bg-white/20 transition-colors">
-              <Play className="w-7 h-7 text-white ml-0.5" />
-            </div>
-            <span className="absolute bottom-2 right-3 text-[10px] bg-black/70 text-white px-1.5 py-0.5 rounded font-mono">
-              {result.clipDuration}
-            </span>
+          {/* Real HTML5 video player */}
+          <div className="bg-slate-900 border-b border-slate-200">
+            <video
+              controls
+              src={videoUrl}
+              className="w-full rounded-t-2xl"
+              poster={result.thumbnailUrl || undefined}
+              preload="metadata"
+            >
+              Your browser does not support the video tag.
+            </video>
           </div>
 
           {/* Details */}
@@ -1249,10 +1343,10 @@ export default function AIClipper({ onClose }: AIClipperProps) {
               </div>
               <div className="bg-slate-50 rounded-lg px-3 py-2.5 border border-slate-100">
                 <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-0.5">
-                  Subtitle Style
+                  Virality Score
                 </p>
                 <p className="text-xs text-slate-700 font-medium">
-                  {result.subtitleStyle}
+                  {result.viralityScore}/10 — {result.viralityLabel}
                 </p>
               </div>
             </div>
@@ -1268,26 +1362,6 @@ export default function AIClipper({ onClose }: AIClipperProps) {
               <p className="text-xs text-slate-600 leading-relaxed">
                 {result.aiReasoning}
               </p>
-            </div>
-
-            {/* Virality Score */}
-            <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">🔥</span>
-                  <p className="text-[10px] font-medium text-amber-700 uppercase tracking-wider">
-                    Virality Score
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-2xl font-bold text-amber-800">
-                    {result.viralityScore}
-                  </span>
-                  <span className="text-[10px] font-medium text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full">
-                    {result.viralityLabel}
-                  </span>
-                </div>
-              </div>
             </div>
 
             {/* AI Caption */}
@@ -1332,7 +1406,7 @@ export default function AIClipper({ onClose }: AIClipperProps) {
           transition={{ delay: 0.4 }}
         >
           <a
-            href={result.outputPath}
+            href={videoUrl}
             download
             className="inline-flex items-center gap-2 px-7 py-3 rounded-xl text-sm font-medium bg-black text-white shadow-sm hover:bg-slate-800 hover:shadow-md active:scale-[0.98] transition-all duration-200"
           >
@@ -1348,6 +1422,7 @@ export default function AIClipper({ onClose }: AIClipperProps) {
         </motion.div>
       </motion.div>
     );
+  };
 
   // =========================================================================
   // ERROR State
