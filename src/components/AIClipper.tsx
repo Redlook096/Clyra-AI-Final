@@ -20,6 +20,7 @@ import {
   Target,
   CheckCircle2,
   Clock,
+  MessageCircle,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -56,6 +57,11 @@ interface ClipResult {
   thumbnailUrl: string;
   subtitleStyle: string;
   outputPath: string;
+  caption: string;
+  hashtags: string;
+  viralityScore: number;
+  viralityLabel: string;
+  clipName: string;
 }
 
 type MomentType =
@@ -195,6 +201,12 @@ const PIPELINE_STEPS: Omit<PipelineStep, "status" | "detail">[] = [
     label: "Finalizing",
     activeLabel: "Burning subtitles into video...",
     doneLabel: "Final clip ready",
+  },
+  {
+    id: 9,
+    label: "Generating caption",
+    activeLabel: "Generating caption...",
+    doneLabel: "Caption ready",
   },
 ];
 
@@ -340,6 +352,7 @@ export default function AIClipper({ onClose }: AIClipperProps) {
   const [videoTitle, setVideoTitle] = useState<string | undefined>();
   const [wordCount, setWordCount] = useState<number | undefined>();
   const [clipDuration, setClipDuration] = useState<string | undefined>();
+  const [clipName, setClipName] = useState("");
 
   const containerRef = useRef<HTMLDivElement>(null);
   const pipelineStepsRef = useRef(pipelineSteps);
@@ -400,6 +413,7 @@ export default function AIClipper({ onClose }: AIClipperProps) {
               ? "centre"
               : "top-centre",
         moment_type: effectiveMomentType,
+        clip_name: clipName.trim() || undefined,
       };
 
       const response = await fetch("/api/clipper/start", {
@@ -450,6 +464,7 @@ export default function AIClipper({ onClose }: AIClipperProps) {
                 clip: 5,
                 subtitles: 6,
                 burn: 7,
+                caption: 7,
               };
               const stepIdx = stepMap[event.step] ?? -1;
 
@@ -499,6 +514,11 @@ export default function AIClipper({ onClose }: AIClipperProps) {
                 thumbnailUrl: "",
                 subtitleStyle: `${config.font} ${config.fontSize}px — ${config.position}`,
                 outputPath: (event as any).output || "./output/final_clip.mp4",
+                caption: (event as any).caption || "",
+                hashtags: (event as any).hashtags || "",
+                viralityScore: (event as any).virality_score || 5,
+                viralityLabel: (event as any).virality_label || "Moderate",
+                clipName: clipName || "My Clip",
               });
               setProgress(100);
               setStep(4);
@@ -1021,6 +1041,25 @@ export default function AIClipper({ onClose }: AIClipperProps) {
           </div>
         </motion.div>
 
+        {/* Clip name input */}
+        <motion.div
+          className="w-full max-w-lg mt-6"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.32 }}
+        >
+          <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-2">
+            Clip Name (optional)
+          </label>
+          <input
+            type="text"
+            value={clipName}
+            onChange={(e) => setClipName(e.target.value)}
+            placeholder="Name your clip"
+            className="w-full py-2.5 px-4 rounded-xl text-sm border border-slate-200 bg-white text-slate-700 placeholder:text-slate-400 focus:outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 transition-all duration-200"
+          />
+        </motion.div>
+
         {/* Action buttons */}
         <motion.div
           className="flex items-center gap-3 mt-8"
@@ -1230,6 +1269,58 @@ export default function AIClipper({ onClose }: AIClipperProps) {
                 {result.aiReasoning}
               </p>
             </div>
+
+            {/* Virality Score */}
+            <div className="bg-gradient-to-r from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">🔥</span>
+                  <p className="text-[10px] font-medium text-amber-700 uppercase tracking-wider">
+                    Virality Score
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-2xl font-bold text-amber-800">
+                    {result.viralityScore}
+                  </span>
+                  <span className="text-[10px] font-medium text-amber-600 bg-amber-100 px-2 py-0.5 rounded-full">
+                    {result.viralityLabel}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* AI Caption */}
+            {result.caption && (
+              <div className="bg-slate-50 border border-slate-100 rounded-xl p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <MessageCircle className="w-3.5 h-3.5 text-slate-600" />
+                    <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">
+                      AI Caption
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(
+                        `${result.caption}\n\n${result.hashtags}`,
+                      );
+                    }}
+                    className="text-[10px] font-medium text-slate-500 hover:text-black bg-white border border-slate-200 px-2 py-1 rounded-lg transition-all duration-200"
+                  >
+                    Copy Caption
+                  </button>
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed mb-2">
+                  {result.caption}
+                </p>
+                {result.hashtags && (
+                  <p className="text-[10px] text-blue-600 font-medium">
+                    {result.hashtags}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </motion.div>
 

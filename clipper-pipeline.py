@@ -575,11 +575,11 @@ def step_subtitles(all_words, clip_start, clip_end, cfg, tmp_dir):
     return ass_path
 
 
-def step_burn(clip_path, ass_path, out_dir):
+def step_burn(clip_path, ass_path, out_dir, clip_name="final_clip"):
     """Step 8 — burn subtitles into the video."""
     log("burn", "running", message="Burning subtitles...")
 
-    out_path = os.path.join(out_dir, "final_clip.mp4")
+    out_path = os.path.join(out_dir, f"{clip_name}.mp4")
     _ = run_ffmpeg(
         [
             "-y",
@@ -612,6 +612,115 @@ def step_burn(clip_path, ass_path, out_dir):
         output_path=out_path,
     )
     return out_path
+
+
+def step_caption(all_words, clip_start, clip_end, title, moment_type):
+    """Step 9 — generate social media caption and virality score from transcript."""
+    log("caption", "running", message="Generating caption and virality score...")
+    _ = title  # reserved for future AI enhancement
+
+    # Get words in clip range
+    clip_text = []
+    word_count = 0
+    for w in all_words:
+        ws = float(w["start"])
+        we = float(w["end"])
+        if ws >= clip_start and we <= clip_end:
+            clip_text.append(re.sub(r"[^\w\s]", "", w["word"].strip()))
+            word_count += 1
+
+    full_text = " ".join(clip_text)
+
+    # Generate caption from first ~20 meaningful words
+    caption_words = [w for w in clip_text if len(w) > 2][:20]
+    caption = " ".join(caption_words) if caption_words else full_text[:120]
+
+    # Limit caption length
+    if len(caption) > 150:
+        caption = caption[:147] + "..."
+
+    # Add relevant hashtags based on moment_type
+    hashtag_map = {
+        "viral": "#mustwatch #viral #trending",
+        "funny": "#funny #comedy #lol",
+        "dramatic": "#drama #mustsee #intense",
+        "inspiring": "#inspiration #motivation #goals",
+        "surprising": "#wow #unexpected #mindblown",
+        "action": "#action #intense #hype",
+    }
+    hashtags = hashtag_map.get(moment_type, "#mustwatch #viral")
+
+    # Score virality based on several factors
+    # 1. Word density (words per second = engagement indicator)
+    clip_duration = clip_end - clip_start
+    words_per_second = word_count / max(clip_duration, 1)
+
+    # 2. Unique words ratio (vocabulary richness)
+    unique_words = len(set(clip_text))
+    unique_ratio = unique_words / max(word_count, 1)
+
+    # 3. Average word length (complexity)
+    avg_word_len = sum(len(w) for w in clip_text) / max(word_count, 1)
+
+    # 4. Has question words (engagement)
+    has_question = any(
+        w.lower() in ["what", "why", "how", "when", "where", "who"] for w in clip_text
+    )
+
+    # 5. Has emotional words
+    emotional_words = [
+        "love",
+        "hate",
+        "amazing",
+        "incredible",
+        "insane",
+        "beautiful",
+        "crazy",
+        "best",
+        "worst",
+        "never",
+        "always",
+        "shocked",
+        "stunning",
+    ]
+    emotion_count = sum(1 for w in clip_text if w.lower() in emotional_words)
+
+    # Calculate score (1-10)
+    score = 5.0  # baseline
+    score += min(2.0, words_per_second * 0.5)  # up to +2 for pace
+    score += min(1.5, unique_ratio * 3)  # up to +1.5 for variety
+    score += min(1.0, (avg_word_len - 3) * 0.5)  # up to +1 for complexity
+    score += 0.5 if has_question else 0  # +0.5 for engagement
+    score += min(1.0, emotion_count * 0.25)  # up to +1 for emotional content
+
+    virality_score = round(min(10, max(1, score)), 1)
+
+    # Virality label
+    if virality_score >= 8.0:
+        label = "🔥 Very High"
+    elif virality_score >= 6.5:
+        label = "📈 High"
+    elif virality_score >= 5.0:
+        label = "👍 Moderate"
+    elif virality_score >= 3.5:
+        label = "📉 Low"
+    else:
+        label = "❄️ Very Low"
+
+    log(
+        "caption",
+        "complete",
+        message="Caption and score generated",
+        caption=caption,
+        hashtags=hashtags,
+        virality_score=virality_score,
+        virality_label=label,
+        words_per_second=round(words_per_second, 1),
+        unique_words=unique_words,
+        word_count=word_count,
+    )
+
+    return caption, hashtags, virality_score, label
 
 
 # ---------------------------------------------------------------------------
@@ -701,7 +810,15 @@ def main():
         ass_path = step_subtitles(all_words, clip_start, clip_end, cfg, tmp_dir)
 
         # --- Step 8: Burn ---
-        _ = step_burn(clip_path, ass_path, out_dir)
+        clip_name = cfg.get("clip_name", "final_clip")
+        # Sanitize filename
+        clip_name = re.sub(r"[^\w\s-]", "", clip_name).strip()[:50] or "final_clip"
+        _ = step_burn(clip_path, ass_path, out_dir, clip_name)
+
+        # --- Step 9: Caption & Virality ---
+        caption, hashtags, virality_score, virality_label = step_caption(
+            all_words, clip_start, clip_end, title, moment_type
+        )
 
         # --- Cleanup ---
         shutil.rmtree(tmp_dir, ignore_errors=True)
@@ -712,7 +829,7 @@ def main():
             "complete",
             "complete",
             message="All done!",
-            output="./output/final_clip.mp4",
+            output=f"./output/{clip_name}.mp4",
             title=title,
             original_duration=format_time(duration),
             clip_duration=f"{round(clip_duration)}s",
@@ -723,6 +840,10 @@ def main():
             position=cfg["position"],
             reason=reason,
             moment_type=moment_type,
+            caption=caption,
+            hashtags=hashtags,
+            virality_score=virality_score,
+            virality_label=virality_label,
         )
 
     except Exception as exc:
