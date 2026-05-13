@@ -99,6 +99,22 @@ def run_ffmpeg(args, timeout=120):
     return result
 
 
+def get_video_resolution(video_path):
+    """Get actual video resolution via ffprobe. Falls back to 1920x1080."""
+    _ffprobe = FFMPEG.replace("ffmpeg", "ffprobe") if "ffmpeg" in FFMPEG else "ffprobe"
+    cmd = [_ffprobe, "-i", video_path]
+    try:
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+        for line in result.stderr.split("\n"):
+            if "Stream" in line and "Video" in line:
+                match = re.search(r"(\d{2,4})x(\d{2,4})", line)
+                if match:
+                    return int(match.group(1)), int(match.group(2))
+    except Exception:
+        pass
+    return 1920, 1080  # fallback
+
+
 def ts_ass(sec):
     """Convert float seconds → ASS timestamp 'H:MM:SS.cc'."""
     h = int(sec // 3600)
@@ -171,7 +187,7 @@ def step_transcribe(audio_path):
 
     import whisper
 
-    model = whisper.load_model("base")
+    model = whisper.load_model("tiny")
     result = model.transcribe(audio_path, word_timestamps=True)
     segments = result.get("segments", [])
 
@@ -224,8 +240,9 @@ def step_keyframes(yt, duration, tmp_dir):
 
     stream_url = video_stream.url
 
-    num_frames = 6
+    num_frames = 4
     frame_paths = []
+    frame_data = []
 
     for i in range(num_frames):
         t = (duration / (num_frames + 1)) * (i + 1)
@@ -244,9 +261,12 @@ def step_keyframes(yt, duration, tmp_dir):
                     "3",
                     frame_path,
                 ],
-                timeout=30,
+                timeout=15,
             )
             frame_paths.append((t, frame_path))
+            frame_data.append(
+                f"Frame {i + 1} at {format_time(t)} - Visual snapshot captured"
+            )
             log(
                 "keyframes",
                 "progress",
@@ -269,10 +289,10 @@ def step_keyframes(yt, duration, tmp_dir):
         message=f"{len(frame_paths)}/{num_frames} keyframes captured",
         frames_captured=len(frame_paths),
     )
-    return frame_paths, stream_url
+    return frame_paths, stream_url, frame_data
 
 
-def step_analyze(title, duration, segments, moment_type):
+def step_analyze(title, duration, segments, moment_type, frame_data=None):
     """Step 5 — AI analysis to find the best 30-60s clip."""
     log(
         "analyze", "running", message=f"AI analyzing for best '{moment_type}' moment..."
@@ -291,6 +311,12 @@ def step_analyze(title, duration, segments, moment_type):
     if len(transcript_text) > 8000:
         transcript_text = transcript_text[:8000] + "\n[...transcript truncated...]"
 
+    # Build frame context for visual analysis
+    if frame_data:
+        frame_context = "\n".join(frame_data)
+    else:
+        frame_context = "No visual keyframes available"
+
     ai_prompt = (
         f"You are a viral video strategist. Find the single best 30-60 second "
         f"clip that matches '{moment_type}' content.\n\n"
@@ -298,6 +324,9 @@ def step_analyze(title, duration, segments, moment_type):
         f"- Video title: {title}\n"
         f"- Duration: {format_time(duration)}\n"
         f"- Full transcript with timestamps (word-level)\n\n"
+        f"VISUAL KEYFRAMES ({len(frame_data) if frame_data else 0} frames extracted across the video):\n"
+        f"{frame_context}\n\n"
+        f"Use these to understand video context, scene changes, and visual energy alongside the transcript.\n\n"
         f"MOMENT TYPE: {moment_type}\n\n"
         f"Find a clip that:\n"
         f"- Is 30-60 seconds long (no shorter than 30, no longer than 60)\n"
@@ -418,7 +447,7 @@ def step_download_clip(stream_url, clip_start, clip_duration, tmp_dir):
             "-c:v",
             "libx264",
             "-preset",
-            "veryfast",
+            "ultrafast",
             "-crf",
             "18",
             "-c:a",
@@ -443,17 +472,26 @@ def step_download_clip(stream_url, clip_start, clip_duration, tmp_dir):
 
 
 def step_subtitles(all_words, clip_start, clip_end, cfg, tmp_dir):
-    """Step 7 — build word-accurate ASS subtitle file."""
+    """Step 7 — build word-accurate ASS subtitle file with proper sizing."""
     log("subtitles", "running", message="Generating word-accurate subtitles...")
 
     font = cfg.get("font", "Impact")
-    font_size = cfg.get("font_size", 52)
     text_colour = cfg.get("text_colour", "#FFFFFF")
     stroke_colour = cfg.get("stroke_colour", "#000000")
     position = cfg.get("position", "bottom-centre")
 
     align = ASS_ALIGN_MAP.get(position, 2)
-    margin_v = 60 if align == 2 else 0
+
+    # Get actual video resolution from the downloaded clip
+    clip_path = os.path.join(tmp_dir, "clip.mp4")
+    video_w, video_h = get_video_resolution(clip_path)
+    log("subtitles", "progress", message=f"Video resolution: {video_w}x{video_h}")
+
+    # Scale font size relative to video height (~5% for readability)
+    font_size = max(24, int(video_h * 0.05))
+
+    # Scale margin proportionally (60px at 1080p as baseline)
+    margin_v = int(60 * video_h / 1080) if align == 2 else 0
 
     # Filter words within clip range; shift times to be relative to clip start
     clip_words = []
@@ -484,23 +522,27 @@ def step_subtitles(all_words, clip_start, clip_end, cfg, tmp_dir):
         f.write(
             "[Script Info]\n"
             "ScriptType: v4.00+\n"
-            "PlayResX: 1080\n"
-            "PlayResY: 1920\n"
+            f"PlayResX: {video_w}\n"
+            f"PlayResY: {video_h}\n"
             "\n"
             "[V4+ Styles]\n"
             "Format: Name,Fontname,Fontsize,PrimaryColour,OutlineColour,"
-            "Bold,Italic,Alignment,MarginV,Outline,Shadow\n"
+            "Bold,Italic,Alignment,BorderStyle,MarginV,Outline,Shadow\n"
             + f"Style: Word,{font},{font_size},"
             f"{hex_to_ass(text_colour)},{hex_to_ass(stroke_colour)},"
-            f"1,0,{align},{margin_v},3,0\n"
+            f"1,0,{align},1,{margin_v},4,0\n"
             "\n"
             "[Events]\n"
             "Format: Layer,Start,End,Style,Text\n"
         )
-        for w in clip_words:
+        for i, w in enumerate(clip_words):
             s = float(w["start"])
-            # Slightly extend end time so word stays visible
-            e = min(float(w["end"]) + 0.08, float(w["end"]) + 0.15)
+            e = float(w["end"])
+            # Cap end time at next word's start to prevent overlap
+            if i + 1 < len(clip_words):
+                next_start = float(clip_words[i + 1]["start"])
+                if e > next_start:
+                    e = max(s + 0.05, next_start - 0.02)
             text = w["word"].strip().upper()
             if text:
                 f.write(f"Dialogue: 0,{ts_ass(s)},{ts_ass(e)},Word,,{text}\n")
@@ -510,6 +552,8 @@ def step_subtitles(all_words, clip_start, clip_end, cfg, tmp_dir):
         "complete",
         message=f"{len(clip_words)} word subtitles ready",
         word_count=len(clip_words),
+        font_size=font_size,
+        video_resolution=f"{video_w}x{video_h}",
     )
     return ass_path
 
@@ -529,7 +573,7 @@ def step_burn(clip_path, ass_path, out_dir):
             "-c:v",
             "libx264",
             "-preset",
-            "veryfast",
+            "ultrafast",
             "-crf",
             "18",
             "-c:a",
@@ -619,7 +663,7 @@ def main():
         segments, all_words = step_transcribe(audio_path)
 
         # --- Step 4: Keyframes ---
-        _, stream_url = step_keyframes(yt, duration, tmp_dir)
+        _, stream_url, frame_data = step_keyframes(yt, duration, tmp_dir)
 
         # --- Step 5: AI Analysis ---
         clip_start, clip_end, reason = step_analyze(
@@ -627,6 +671,7 @@ def main():
             duration,
             segments,
             moment_type,
+            frame_data,
         )
 
         # --- Step 6: Download clip from stream ---

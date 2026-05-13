@@ -27,6 +27,7 @@ import {
   Paperclip,
   Pencil,
   Play,
+  Scissors,
   Search,
   Settings,
   SquarePen,
@@ -353,6 +354,7 @@ export default function App() {
 
   const [selectedCommand, setSelectedCommand] =
     useState<CommandSuggestion | null>(null);
+  const [clips, setClips] = useState<any[]>([]);
 
   const initialAppState = useMemo(() => {
     try {
@@ -424,6 +426,7 @@ export default function App() {
     maxHeight: 200,
   });
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isClipsOpen, setIsClipsOpen] = useState(true);
   const [isProjectsOpen, setIsProjectsOpen] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
   const [isTemporaryChat, setIsTemporaryChat] = useState(false);
@@ -976,6 +979,11 @@ export default function App() {
     : commandSuggestions;
 
   useEffect(() => {
+    if (selectedCommand) {
+      setShowCommandPalette(false);
+      setActiveSuggestion(-1);
+      return;
+    }
     if (isCommandMode && filteredSuggestions.length > 0) {
       setShowCommandPalette(true);
       if (
@@ -4641,13 +4649,9 @@ Please analyze the code you just wrote and fix this error.`;
                         onClick={() => setIsSidebarOpen(false)}
                         aria-label="Close sidebar"
                         title="Close sidebar"
-                        className="group relative flex h-9 w-9 items-center justify-center rounded-full text-slate-500 transition-[background-color,box-shadow,color,transform] duration-300 hover:scale-[1.05] hover:bg-slate-100 hover:text-slate-800 hover:shadow-[0_4px_14px_rgba(15,23,42,0.06)] active:scale-[0.94]"
+                        className="flex h-9 w-9 items-center justify-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors duration-200"
                       >
-                        <span
-                          className="pointer-events-none absolute inset-0 rounded-full bg-gradient-to-br from-indigo-400/22 via-sky-400/10 to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100"
-                          aria-hidden
-                        />
-                        <X className="pointer-events-none relative w-[15px] h-[15px] stroke-[2.2]" />
+                        <X className="w-[15px] h-[15px] stroke-[2.2]" />
                       </button>
                     )}
                   </div>
@@ -4666,6 +4670,78 @@ Please analyze the code you just wrote and fix this error.`;
                       <SquarePen className="w-4 h-4 stroke-[2]" />
                       New chat
                     </button>
+                    {/* Clips section */}
+                    <button
+                      type="button"
+                      onClick={() => setIsClipsOpen((open) => !open)}
+                      className="w-full flex items-center gap-3 px-2.5 py-2 rounded-xl hover:bg-white hover:shadow-[0_8px_22px_rgba(15,23,42,0.06)] text-slate-700 transition-all duration-300 font-medium text-[13.5px]"
+                    >
+                      <Scissors className="w-4 h-4 stroke-[2]" />
+                      <span className="flex-1 text-left">Clips</span>
+                      <ChevronRight
+                        className={cn(
+                          "h-3.5 w-3.5 text-slate-400 transition-transform",
+                          isClipsOpen && "rotate-90",
+                        )}
+                      />
+                    </button>
+                    <AnimatePresence initial={false}>
+                      {isClipsOpen && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{
+                            duration: 0.22,
+                            ease: [0.22, 1, 0.36, 1],
+                          }}
+                          className="overflow-hidden pl-3"
+                        >
+                          <div className="mt-0.5 flex flex-col gap-0.5 border-l border-slate-200/70 pl-2">
+                            {clips.length > 0 ? (
+                              <AnimatePresence mode="popLayout" initial={false}>
+                                {clips.slice(0, 8).map((clip) => (
+                                  <motion.a
+                                    layout="position"
+                                    key={clip.id}
+                                    href={clip.outputPath}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    initial={{ opacity: 0, y: 8 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{
+                                      opacity: 0,
+                                      y: -12,
+                                      height: 0,
+                                      marginTop: 0,
+                                      marginBottom: 0,
+                                    }}
+                                    transition={{
+                                      duration: 0.24,
+                                      ease: [0.22, 1, 0.36, 1],
+                                    }}
+                                    className="group relative flex w-full items-center gap-1 rounded-xl px-1.5 py-1 text-[12.5px] font-medium transition-all duration-300 text-slate-500 hover:bg-white/80 hover:text-slate-800 hover:shadow-[0_6px_16px_rgba(15,23,42,0.05)]"
+                                  >
+                                    <span className="min-w-0 flex-1 truncate">
+                                      {clip.title || "Clip"}
+                                    </span>
+                                    <span className="text-[10px] text-slate-400 shrink-0">
+                                      {clip.duration || ""}
+                                    </span>
+                                  </motion.a>
+                                ))}
+                              </AnimatePresence>
+                            ) : (
+                              <div className="px-2 py-1.5 text-[12px] font-medium text-slate-400">
+                                No clips yet
+                              </div>
+                            )}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    {/* Projects section */}
                     <button
                       type="button"
                       onClick={() => setIsProjectsOpen((open) => !open)}
@@ -5074,20 +5150,12 @@ Please analyze the code you just wrote and fix this error.`;
                   aria-label="Open sidebar"
                   aria-expanded={false}
                   title="Open sidebar"
-                  className="group fixed top-4 left-4 z-[110] flex h-11 w-11 items-center justify-center rounded-full border border-transparent bg-transparent text-slate-600 shadow-none transition-[background-color,border-color,box-shadow,transform] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.06] hover:border-slate-200/70 hover:bg-white/[0.85] hover:shadow-[0_10px_28px_rgba(15,23,42,0.12)] active:scale-[0.94] sm:top-6 sm:left-6"
+                  className="fixed top-4 left-4 z-[110] flex h-10 w-10 items-center justify-center rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-700 transition-colors duration-200 sm:top-6 sm:left-6"
                 >
-                  <span
-                    className="pointer-events-none absolute inset-0 rounded-full bg-gradient-to-br from-indigo-400/28 via-sky-400/12 to-transparent opacity-0 transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:opacity-100"
-                    aria-hidden
-                  />
-                  <span
-                    className="pointer-events-none absolute inset-0 rounded-full opacity-0 shadow-[inset_0_0_0_1px_rgba(99,102,241,0.38)] transition-opacity duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:opacity-100"
-                    aria-hidden
-                  />
-                  <span className="pointer-events-none relative block h-[12px] w-[18px] opacity-95">
-                    <span className="pointer-events-none absolute left-0 top-0 h-[2px] w-full rounded-full bg-current" />
-                    <span className="pointer-events-none absolute left-0 top-[5px] h-[2px] w-full rounded-full bg-current" />
-                    <span className="pointer-events-none absolute left-0 top-[10px] h-[2px] w-full rounded-full bg-current" />
+                  <span className="relative block h-[10px] w-[16px]">
+                    <span className="absolute left-0 top-0 h-[1.5px] w-full rounded-full bg-current" />
+                    <span className="absolute left-0 top-[4px] h-[1.5px] w-full rounded-full bg-current" />
+                    <span className="absolute left-0 top-[8px] h-[1.5px] w-full rounded-full bg-current" />
                   </span>
                 </button>
               )}

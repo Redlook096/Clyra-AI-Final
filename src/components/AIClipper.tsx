@@ -13,6 +13,13 @@ import {
   ChevronRight,
   ArrowLeft,
   Play,
+  Flame,
+  SmilePlus,
+  Star,
+  Zap,
+  Target,
+  CheckCircle2,
+  Clock,
 } from "lucide-react";
 
 // ---------------------------------------------------------------------------
@@ -68,9 +75,9 @@ type AppStep = 0 | 1 | 2 | 3 | 4;
 
 const FONT_SIZE_PILLS: { label: string; value: SubtitleConfig["fontSize"] }[] =
   [
-    { label: "Small", value: "36" },
-    { label: "Medium", value: "52" },
-    { label: "Large", value: "68" },
+    { label: "S", value: "36" },
+    { label: "M", value: "52" },
+    { label: "L", value: "68" },
   ];
 
 const FONT_OPTIONS: SubtitleConfig["font"][] = [
@@ -94,46 +101,48 @@ const DEFAULT_CONFIG: SubtitleConfig = {
   position: "bottom",
 };
 
-const MOMENT_TYPES: {
+interface MomentOption {
   id: MomentType;
-  emoji: string;
+  icon: typeof Flame;
   label: string;
   description: string;
-}[] = [
+}
+
+const MOMENT_OPTIONS: MomentOption[] = [
   {
     id: "viral",
-    emoji: "🔥",
-    label: "Viral",
+    icon: Flame,
+    label: "High Energy",
     description: "Most shareable, high-energy moment",
   },
   {
     id: "funny",
-    emoji: "😂",
-    label: "Funny",
+    icon: SmilePlus,
+    label: "Humorous",
     description: "Biggest laugh of the video",
   },
   {
     id: "dramatic",
-    emoji: "🎭",
+    icon: Star,
     label: "Dramatic",
     description: "Most intense, emotional peak",
   },
   {
     id: "inspiring",
-    emoji: "✨",
-    label: "Inspiring",
+    icon: Sparkles,
+    label: "Inspirational",
     description: "Most uplifting moment",
   },
   {
     id: "surprising",
-    emoji: "😱",
+    icon: Zap,
     label: "Surprising",
     description: "Biggest twist or reveal",
   },
   {
     id: "action",
-    emoji: "⚡",
-    label: "Action",
+    icon: Target,
+    label: "Action-Packed",
     description: "Most exciting action sequence",
   },
 ];
@@ -197,16 +206,26 @@ function isValidYouTubeUrl(url: string): boolean {
   return /(?:youtube\.com\/watch\?v=|youtu\.be\/)[\w-]{11,}/i.test(url);
 }
 
+function formatElapsed(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
 
-/** A clean progress bar for the processing view. */
-function ProgressBar({ progress }: { progress: number }) {
+/** Gradient progress bar from black to slate for the processing view. */
+function GradientProgressBar({ progress }: { progress: number }) {
   return (
     <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
       <motion.div
-        className="h-full bg-indigo-600 rounded-full"
+        className="h-full rounded-full"
+        style={{
+          background:
+            "linear-gradient(90deg, #0f172a 0%, #334155 50%, #64748b 100%)",
+        }}
         initial={{ width: 0 }}
         animate={{ width: `${progress}%` }}
         transition={{ duration: 0.5, ease: "easeOut" }}
@@ -215,69 +234,61 @@ function ProgressBar({ progress }: { progress: number }) {
   );
 }
 
-/** Individual pipeline step row with animated indicator. */
+/** Individual pipeline step row — clean, no connecting lines. */
 function PipelineRow({
   step,
-  isLast,
   index,
+  videoTitle,
+  wordCount,
+  clipDuration,
 }: {
   step: PipelineStep;
-  isLast: boolean;
   index: number;
+  videoTitle?: string;
+  wordCount?: number;
+  clipDuration?: string;
 }) {
+  const isActive = step.status === "active";
+  const isDone = step.status === "done";
+
   return (
     <motion.div
-      className="flex items-start gap-4"
-      initial={{ opacity: 0, x: -12 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.4, delay: index * 0.12 }}
+      className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-500 ${
+        isActive
+          ? "bg-slate-50 ring-1 ring-slate-200 shadow-sm"
+          : isDone
+            ? "bg-transparent"
+            : "bg-transparent"
+      }`}
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.3, delay: index * 0.06 }}
     >
-      {/* Indicator column */}
-      <div className="flex flex-col items-center">
-        <div
-          className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 border-2 transition-all duration-500 ${
-            step.status === "done"
-              ? "bg-emerald-50 border-emerald-500"
-              : step.status === "active"
-                ? "bg-indigo-50 border-indigo-500"
-                : "bg-white border-slate-200"
-          }`}
-        >
-          {step.status === "done" ? (
-            <Check className="w-4 h-4 text-emerald-600" />
-          ) : step.status === "active" ? (
-            <Loader2 className="w-4 h-4 text-indigo-600 animate-spin" />
-          ) : (
-            <div className="w-2 h-2 rounded-full bg-slate-300" />
-          )}
-        </div>
-        {!isLast && (
-          <div
-            className={`w-0.5 h-8 transition-colors duration-500 ${
-              step.status === "done" ? "bg-emerald-200" : "bg-slate-200"
-            }`}
-          />
+      {/* Status icon */}
+      <div className="shrink-0 w-7 h-7 flex items-center justify-center">
+        {isDone ? (
+          <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+        ) : isActive ? (
+          <Loader2 className="w-5 h-5 text-black animate-spin" />
+        ) : (
+          <div className="w-2 h-2 rounded-full bg-slate-200" />
         )}
       </div>
 
-      {/* Label column */}
-      <div className="flex-1 pt-1">
+      {/* Label + detail */}
+      <div className="flex-1 min-w-0">
         <p
           className={`text-sm font-medium transition-colors duration-300 ${
-            step.status === "done"
-              ? "text-emerald-700"
-              : step.status === "active"
-                ? "text-indigo-700"
+            isDone
+              ? "text-slate-500"
+              : isActive
+                ? "text-black"
                 : "text-slate-400"
           }`}
         >
-          {step.status === "active"
-            ? step.activeLabel
-            : step.status === "done"
-              ? `${step.doneLabel} ✓`
-              : step.label}
+          {isActive ? step.activeLabel : isDone ? step.doneLabel : step.label}
         </p>
-        {step.detail && step.status === "done" && (
+        {isDone && step.detail && (
           <motion.p
             className="text-xs text-slate-400 mt-0.5"
             initial={{ opacity: 0 }}
@@ -286,6 +297,22 @@ function PipelineRow({
           >
             {step.detail}
           </motion.p>
+        )}
+        {/* Show real data in context */}
+        {isDone && step.id === 1 && videoTitle && (
+          <p className="text-xs text-slate-400 mt-0.5 truncate max-w-[240px]">
+            {videoTitle}
+          </p>
+        )}
+        {isDone && step.id === 3 && wordCount && (
+          <p className="text-xs text-slate-400 mt-0.5">
+            {wordCount.toLocaleString()} words transcribed
+          </p>
+        )}
+        {isDone && step.id === 5 && clipDuration && (
+          <p className="text-xs text-slate-400 mt-0.5">
+            Clip duration: {clipDuration}
+          </p>
         )}
       </div>
     </motion.div>
@@ -301,6 +328,7 @@ export default function AIClipper({ onClose }: AIClipperProps) {
   const [step, setStep] = useState<AppStep>(0);
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [momentType, setMomentType] = useState<MomentType | null>(null);
+  const [customMoment, setCustomMoment] = useState("");
   const [config, setConfig] = useState<SubtitleConfig>(DEFAULT_CONFIG);
   const [pipelineSteps, setPipelineSteps] = useState<PipelineStep[]>(
     PIPELINE_STEPS.map((s) => ({ ...s, status: "idle" as const })),
@@ -308,24 +336,56 @@ export default function AIClipper({ onClose }: AIClipperProps) {
   const [progress, setProgress] = useState(0);
   const [result, setResult] = useState<ClipResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [videoTitle, setVideoTitle] = useState<string | undefined>();
+  const [wordCount, setWordCount] = useState<number | undefined>();
+  const [clipDuration, setClipDuration] = useState<string | undefined>();
 
   const containerRef = useRef<HTMLDivElement>(null);
   const pipelineStepsRef = useRef(pipelineSteps);
   pipelineStepsRef.current = pipelineSteps;
+  const elapsedRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // --- URL validation ---
   const urlValid = isValidYouTubeUrl(youtubeUrl.trim());
+
+  // --- Elapsed time tracker ---
+  useEffect(() => {
+    if (step === 3 && error === null) {
+      setElapsedSeconds(0);
+      elapsedRef.current = setInterval(() => {
+        setElapsedSeconds((prev) => prev + 1);
+      }, 1000);
+    } else {
+      if (elapsedRef.current) {
+        clearInterval(elapsedRef.current);
+        elapsedRef.current = null;
+      }
+    }
+    return () => {
+      if (elapsedRef.current) {
+        clearInterval(elapsedRef.current);
+        elapsedRef.current = null;
+      }
+    };
+  }, [step, error]);
 
   // --- Real SSE pipeline via /api/clipper/start ---
   const runPipeline = useCallback(async () => {
     setError(null);
     setResult(null);
+    setVideoTitle(undefined);
+    setWordCount(undefined);
+    setClipDuration(undefined);
     const freshSteps = PIPELINE_STEPS.map((s) => ({
       ...s,
       status: "idle" as const,
     }));
     setPipelineSteps(freshSteps);
     setProgress(0);
+
+    // Effective moment type: custom text overrides presets
+    const effectiveMomentType = customMoment.trim() || momentType || "viral";
 
     try {
       const backendConfig = {
@@ -339,7 +399,7 @@ export default function AIClipper({ onClose }: AIClipperProps) {
             : config.position === "center"
               ? "centre"
               : "top-centre",
-        moment_type: momentType,
+        moment_type: effectiveMomentType,
       };
 
       const response = await fetch("/api/clipper/start", {
@@ -381,7 +441,6 @@ export default function AIClipper({ onClose }: AIClipperProps) {
             }
 
             if (event.type === "progress") {
-              // Map backend step names to pipeline step indices (8 steps)
               const stepMap: Record<string, number> = {
                 info: 0,
                 audio: 1,
@@ -393,6 +452,17 @@ export default function AIClipper({ onClose }: AIClipperProps) {
                 burn: 7,
               };
               const stepIdx = stepMap[event.step] ?? -1;
+
+              // Capture real data from progress events
+              if (event.step === "info" && (event as any).title) {
+                setVideoTitle((event as any).title);
+              }
+              if (event.step === "transcribe" && (event as any).word_count) {
+                setWordCount((event as any).word_count);
+              }
+              if (event.step === "clip" && (event as any).clip_duration) {
+                setClipDuration((event as any).clip_duration);
+              }
 
               if (event.status === "running" && stepIdx >= 0) {
                 setPipelineSteps((prev) =>
@@ -419,10 +489,12 @@ export default function AIClipper({ onClose }: AIClipperProps) {
 
             if (event.type === "complete") {
               setResult({
-                videoTitle: (event as any).title || "YouTube Video",
+                videoTitle:
+                  (event as any).title || videoTitle || "YouTube Video",
                 originalDuration: (event as any).original_duration || "Unknown",
-                clipDuration: (event as any).clip_duration || "Unknown",
-                momentType: (event as any).moment_type || momentType || "viral",
+                clipDuration:
+                  (event as any).clip_duration || clipDuration || "Unknown",
+                momentType: (event as any).moment_type || effectiveMomentType,
                 aiReasoning: (event as any).reason || "AI-selected moment",
                 thumbnailUrl: "",
                 subtitleStyle: `${config.font} ${config.fontSize}px — ${config.position}`,
@@ -446,7 +518,7 @@ export default function AIClipper({ onClose }: AIClipperProps) {
         err instanceof Error ? err.message : "An unknown error occurred";
       setError(message);
     }
-  }, [youtubeUrl, config, momentType]);
+  }, [youtubeUrl, config, momentType, customMoment, videoTitle, clipDuration]);
 
   // --- Handlers ---
   const handleUrlSubmit = (e: React.FormEvent) => {
@@ -456,7 +528,7 @@ export default function AIClipper({ onClose }: AIClipperProps) {
   };
 
   const handleMomentContinue = () => {
-    if (!momentType) return;
+    if (!momentType && !customMoment.trim()) return;
     setStep(2);
   };
 
@@ -480,6 +552,7 @@ export default function AIClipper({ onClose }: AIClipperProps) {
   const handleRestart = () => {
     setYoutubeUrl("");
     setMomentType(null);
+    setCustomMoment("");
     setConfig(DEFAULT_CONFIG);
     setPipelineSteps(
       PIPELINE_STEPS.map((s) => ({ ...s, status: "idle" as const })),
@@ -487,12 +560,16 @@ export default function AIClipper({ onClose }: AIClipperProps) {
     setProgress(0);
     setResult(null);
     setError(null);
+    setVideoTitle(undefined);
+    setWordCount(undefined);
+    setClipDuration(undefined);
     setStep(0);
   };
 
   const handleNewVideo = () => {
     setYoutubeUrl("");
     setMomentType(null);
+    setCustomMoment("");
     setConfig(DEFAULT_CONFIG);
     setPipelineSteps(
       PIPELINE_STEPS.map((s) => ({ ...s, status: "idle" as const })),
@@ -500,6 +577,9 @@ export default function AIClipper({ onClose }: AIClipperProps) {
     setProgress(0);
     setResult(null);
     setError(null);
+    setVideoTitle(undefined);
+    setWordCount(undefined);
+    setClipDuration(undefined);
     setStep(0);
   };
 
@@ -528,7 +608,7 @@ export default function AIClipper({ onClose }: AIClipperProps) {
               <div
                 className={`flex items-center gap-1.5 text-[11px] font-medium transition-colors duration-300 ${
                   isActive
-                    ? "text-indigo-600"
+                    ? "text-black"
                     : isPast
                       ? "text-emerald-600"
                       : "text-slate-400"
@@ -537,7 +617,7 @@ export default function AIClipper({ onClose }: AIClipperProps) {
                 <span
                   className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold border transition-all duration-300 ${
                     isActive
-                      ? "bg-indigo-50 border-indigo-500 text-indigo-600"
+                      ? "bg-slate-100 border-slate-400 text-black"
                       : isPast
                         ? "bg-emerald-50 border-emerald-500 text-emerald-600"
                         : "bg-white border-slate-200 text-slate-400"
@@ -569,26 +649,13 @@ export default function AIClipper({ onClose }: AIClipperProps) {
       transition={{ duration: 0.3, ease: "easeOut" }}
       className="flex flex-col items-center justify-center flex-1 px-6"
     >
-      {/* Icon */}
-      <motion.div
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ delay: 0.05, duration: 0.35 }}
-        className="mb-6"
-      >
-        <div className="w-14 h-14 rounded-2xl bg-indigo-50 border border-indigo-100 flex items-center justify-center shadow-sm">
-          <Scissors className="w-6 h-6 text-indigo-600" />
-        </div>
-      </motion.div>
-
-      {/* Title / Subtitle */}
       <motion.h1
-        className="text-2xl font-semibold text-slate-900 tracking-tight mb-2"
+        className="text-2xl font-semibold text-black tracking-tight mb-2"
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1, duration: 0.3 }}
       >
-        Create a Clip
+        Create Clip
       </motion.h1>
       <motion.p
         className="text-sm text-slate-500 mb-10 max-w-md text-center leading-relaxed"
@@ -596,10 +663,9 @@ export default function AIClipper({ onClose }: AIClipperProps) {
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.15, duration: 0.3 }}
       >
-        AI finds the best moment and adds word-accurate subtitles
+        Extract the most engaging moment from any video
       </motion.p>
 
-      {/* Form */}
       <motion.form
         onSubmit={handleUrlSubmit}
         className="w-full max-w-lg flex flex-col items-center gap-4"
@@ -614,7 +680,7 @@ export default function AIClipper({ onClose }: AIClipperProps) {
             value={youtubeUrl}
             onChange={(e) => setYoutubeUrl(e.target.value)}
             placeholder="Paste YouTube URL..."
-            className="w-full pl-11 pr-4 py-3.5 rounded-xl bg-white border border-slate-200 text-slate-900 text-sm placeholder-slate-400 focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 transition-all duration-200 shadow-sm"
+            className="w-full pl-11 pr-4 py-3.5 rounded-xl bg-white border border-slate-200 text-slate-900 text-sm placeholder-slate-400 focus:outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 transition-all duration-200 shadow-sm"
             autoFocus
           />
         </div>
@@ -624,7 +690,7 @@ export default function AIClipper({ onClose }: AIClipperProps) {
         <button
           type="submit"
           disabled={!urlValid}
-          className="inline-flex items-center gap-2 px-8 py-3 rounded-xl text-sm font-medium bg-indigo-600 text-white shadow-sm hover:bg-indigo-700 hover:shadow-md active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100 transition-all duration-200"
+          className="inline-flex items-center gap-2 px-8 py-3 rounded-xl text-sm font-medium bg-black text-white shadow-sm hover:bg-slate-800 hover:shadow-md active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100 transition-all duration-200"
         >
           Continue
           <ChevronRight className="w-4 h-4" />
@@ -634,7 +700,7 @@ export default function AIClipper({ onClose }: AIClipperProps) {
   );
 
   // =========================================================================
-  // STEP 1 — Moment Type Selection (NEW)
+  // STEP 1 — Moment Type Selection
   // =========================================================================
   const renderMomentType = () => (
     <motion.div
@@ -646,12 +712,12 @@ export default function AIClipper({ onClose }: AIClipperProps) {
       className="flex flex-col items-center flex-1 px-6 py-8"
     >
       <motion.h2
-        className="text-xl font-semibold text-slate-900 mb-1.5"
+        className="text-xl font-semibold text-black mb-1.5"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.05 }}
       >
-        What kind of moment?
+        What should we look for?
       </motion.h2>
       <motion.p
         className="text-sm text-slate-500 mb-8"
@@ -659,47 +725,67 @@ export default function AIClipper({ onClose }: AIClipperProps) {
         animate={{ opacity: 1 }}
         transition={{ delay: 0.1 }}
       >
-        I'll find the best one for you
+        Choose the energy you want to capture
       </motion.p>
 
-      {/* Grid of 2x3 cards */}
+      {/* Pill buttons */}
       <motion.div
-        className="w-full max-w-lg grid grid-cols-2 gap-3"
+        className="w-full max-w-lg flex flex-col gap-2"
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.15, duration: 0.3 }}
       >
-        {MOMENT_TYPES.map((mt, i) => {
-          const isSelected = momentType === mt.id;
+        {MOMENT_OPTIONS.map((mo, i) => {
+          const isSelected = momentType === mo.id && !customMoment.trim();
+          const Icon = mo.icon;
           return (
             <motion.button
-              key={mt.id}
-              onClick={() => setMomentType(mt.id)}
+              key={mo.id}
+              onClick={() => {
+                setMomentType(mo.id);
+                setCustomMoment("");
+              }}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.15 + i * 0.05, duration: 0.3 }}
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-              className={`flex flex-col items-center text-center p-5 rounded-2xl border transition-all duration-200 ${
+              whileTap={{ scale: 0.99 }}
+              className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl border transition-all duration-200 text-left ${
                 isSelected
-                  ? "bg-indigo-50 border-indigo-300 ring-2 ring-indigo-600/20 shadow-sm"
-                  : "bg-white border-slate-200 hover:bg-slate-50 hover:border-slate-300 shadow-sm"
+                  ? "bg-black text-white border-black shadow-sm"
+                  : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:border-slate-300"
               }`}
             >
-              <span className="text-3xl mb-2.5">{mt.emoji}</span>
+              <Icon
+                className={`w-4 h-4 shrink-0 ${isSelected ? "text-white" : "text-slate-500"}`}
+              />
+              <span className="text-sm font-medium">{mo.label}</span>
               <span
-                className={`text-sm font-semibold mb-1 transition-colors ${
-                  isSelected ? "text-indigo-700" : "text-slate-800"
-                }`}
+                className={`text-xs ml-auto ${isSelected ? "text-slate-300" : "text-slate-400"}`}
               >
-                {mt.label}
-              </span>
-              <span className="text-[11px] text-slate-400 leading-tight">
-                {mt.description}
+                {mo.description}
               </span>
             </motion.button>
           );
         })}
+      </motion.div>
+
+      {/* Custom text input */}
+      <motion.div
+        className="w-full max-w-lg mt-4"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.45 }}
+      >
+        <input
+          type="text"
+          value={customMoment}
+          onChange={(e) => {
+            setCustomMoment(e.target.value);
+            if (e.target.value.trim()) setMomentType(null);
+          }}
+          placeholder="Or describe what you're looking for..."
+          className="w-full px-4 py-3 rounded-xl bg-white border border-slate-200 text-slate-900 text-sm placeholder-slate-400 focus:outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 transition-all duration-200"
+        />
       </motion.div>
 
       {/* Action buttons */}
@@ -707,7 +793,7 @@ export default function AIClipper({ onClose }: AIClipperProps) {
         className="flex items-center gap-3 mt-8"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ delay: 0.4 }}
+        transition={{ delay: 0.5 }}
       >
         <button
           onClick={handleMomentBack}
@@ -720,8 +806,8 @@ export default function AIClipper({ onClose }: AIClipperProps) {
         </button>
         <button
           onClick={handleMomentContinue}
-          disabled={!momentType}
-          className="inline-flex items-center gap-2 px-8 py-3 rounded-xl text-sm font-medium bg-indigo-600 text-white shadow-sm hover:bg-indigo-700 hover:shadow-md active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100 transition-all duration-200"
+          disabled={!momentType && !customMoment.trim()}
+          className="inline-flex items-center gap-2 px-8 py-3 rounded-xl text-sm font-medium bg-black text-white shadow-sm hover:bg-slate-800 hover:shadow-md active:scale-[0.98] disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100 transition-all duration-200"
         >
           Continue
           <ChevronRight className="w-4 h-4" />
@@ -733,222 +819,241 @@ export default function AIClipper({ onClose }: AIClipperProps) {
   // =========================================================================
   // STEP 2 — Subtitle Configuration
   // =========================================================================
-  const renderSubtitleConfig = () => (
-    <motion.div
-      key="step-config"
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -8 }}
-      transition={{ duration: 0.3, ease: "easeOut" }}
-      className="flex flex-col items-center flex-1 px-6 py-8"
-    >
-      <motion.h2
-        className="text-xl font-semibold text-slate-900 mb-1.5"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.05 }}
-      >
-        Subtitle style
-      </motion.h2>
-      <motion.p
-        className="text-sm text-slate-500 mb-8"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.1 }}
-      >
-        Customise how subtitles will appear in your clip
-      </motion.p>
+  const renderSubtitleConfig = () => {
+    const previewFontSize =
+      config.position === "center"
+        ? Math.min(Number(config.fontSize), 68) * 0.55
+        : Math.min(Number(config.fontSize), 68) * 0.45;
 
+    const previewPositionClass =
+      config.position === "bottom"
+        ? "items-end pb-6"
+        : config.position === "top"
+          ? "items-start pt-6"
+          : "items-center";
+
+    return (
       <motion.div
-        className="w-full max-w-lg bg-white border border-slate-200 rounded-2xl p-6 space-y-7 shadow-sm"
-        initial={{ opacity: 0, y: 12 }}
+        key="step-config"
+        initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.15, duration: 0.3 }}
+        exit={{ opacity: 0, y: -8 }}
+        transition={{ duration: 0.3, ease: "easeOut" }}
+        className="flex flex-col items-center flex-1 px-6 py-8"
       >
-        {/* Font Size */}
-        <div>
-          <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-3">
-            Font Size
-          </label>
-          <div className="flex gap-2">
-            {FONT_SIZE_PILLS.map((pill) => (
-              <button
-                key={pill.value}
-                onClick={() =>
-                  setConfig((c) => ({ ...c, fontSize: pill.value }))
+        <motion.h2
+          className="text-xl font-semibold text-black mb-1.5"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.05 }}
+        >
+          Subtitle style
+        </motion.h2>
+        <motion.p
+          className="text-sm text-slate-500 mb-8"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.1 }}
+        >
+          Customise how subtitles will appear in your clip
+        </motion.p>
+
+        {/* Dummy video frame preview */}
+        <motion.div
+          className="w-full max-w-lg mb-7"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.15, duration: 0.3 }}
+        >
+          <div className="aspect-video bg-slate-900 rounded-xl flex items-center justify-center overflow-hidden relative">
+            {/* Subtitles preview */}
+            <div
+              className={`absolute inset-0 flex ${previewPositionClass} justify-center px-4`}
+            >
+              <p
+                style={{
+                  fontFamily: config.font,
+                  fontSize: `${previewFontSize}px`,
+                  color: config.textColor,
+                  WebkitTextStroke:
+                    config.strokeColor !== "#000000"
+                      ? `2px ${config.strokeColor}`
+                      : undefined,
+                  textShadow:
+                    config.strokeColor === "#000000"
+                      ? "-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000"
+                      : undefined,
+                }}
+                className="font-bold leading-tight text-center"
+              >
+                SUBTITLES
+              </p>
+            </div>
+            {/* Label */}
+            <span className="absolute top-3 left-3 text-[10px] text-slate-500 uppercase tracking-wider">
+              Preview
+            </span>
+          </div>
+        </motion.div>
+
+        {/* Settings */}
+        <motion.div
+          className="w-full max-w-lg space-y-5"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2, duration: 0.3 }}
+        >
+          {/* Font Size + Font in a row */}
+          <div className="flex gap-4">
+            {/* Font Size */}
+            <div className="flex-1">
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-2.5">
+                Size
+              </label>
+              <div className="flex gap-2">
+                {FONT_SIZE_PILLS.map((pill) => (
+                  <button
+                    key={pill.value}
+                    onClick={() =>
+                      setConfig((c) => ({ ...c, fontSize: pill.value }))
+                    }
+                    className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-all duration-200 ${
+                      config.fontSize === pill.value
+                        ? "bg-black text-white border-black shadow-sm"
+                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300"
+                    }`}
+                  >
+                    {pill.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Font Family */}
+            <div className="flex-[2]">
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-2.5">
+                Font
+              </label>
+              <select
+                value={config.font}
+                onChange={(e) =>
+                  setConfig((c) => ({
+                    ...c,
+                    font: e.target.value as SubtitleConfig["font"],
+                  }))
                 }
-                className={`flex-1 py-2.5 rounded-lg text-sm font-medium border transition-all duration-200 ${
-                  config.fontSize === pill.value
-                    ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
-                    : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300"
-                }`}
+                className="w-full py-2.5 px-3 rounded-lg text-sm font-medium border border-slate-200 bg-white text-slate-700 focus:outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 transition-all duration-200 cursor-pointer"
               >
-                {pill.label}
-                <span
-                  className={`block text-[10px] ${
-                    config.fontSize === pill.value
-                      ? "text-indigo-200"
-                      : "text-slate-400"
-                  }`}
-                >
-                  {pill.value}px
-                </span>
-              </button>
-            ))}
+                {FONT_OPTIONS.map((f) => (
+                  <option key={f} value={f}>
+                    {f}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
-        </div>
 
-        {/* Font Family */}
-        <div>
-          <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-3">
-            Font
-          </label>
-          <div className="flex gap-2">
-            {FONT_OPTIONS.map((font) => (
-              <button
-                key={font}
-                onClick={() => setConfig((c) => ({ ...c, font }))}
-                className={`flex-1 py-2.5 rounded-lg text-sm font-medium border transition-all duration-200 ${
-                  config.font === font
-                    ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
-                    : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300"
-                }`}
-              >
-                {font}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Colors row */}
-        <div className="grid grid-cols-2 gap-4">
-          {/* Text Color */}
-          <div>
-            <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-3">
-              Text
-            </label>
-            <div className="flex items-center gap-3">
-              <div className="relative">
+          {/* Text Color + Outline Color + Position in a row */}
+          <div className="flex gap-4 items-end">
+            {/* Text Color */}
+            <div>
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-2.5">
+                Text
+              </label>
+              <div className="flex items-center gap-2">
                 <input
                   type="color"
                   value={config.textColor}
                   onChange={(e) =>
                     setConfig((c) => ({ ...c, textColor: e.target.value }))
                   }
-                  className="w-10 h-10 rounded-lg border border-slate-200 cursor-pointer bg-transparent [&::-webkit-color-swatch-wrapper]:p-1 [&::-webkit-color-swatch]:rounded-md [&::-webkit-color-swatch]:border-0"
+                  className="w-8 h-8 rounded-full border border-slate-200 cursor-pointer bg-transparent [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:rounded-full [&::-webkit-color-swatch]:border-0"
                 />
+                <span className="text-[10px] text-slate-400 font-mono uppercase">
+                  {config.textColor}
+                </span>
               </div>
-              <span className="text-xs text-slate-400 font-mono">
-                {config.textColor.toUpperCase()}
-              </span>
             </div>
-          </div>
 
-          {/* Stroke Color */}
-          <div>
-            <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-3">
-              Outline
-            </label>
-            <div className="flex items-center gap-3">
-              <div className="relative">
+            {/* Outline Color */}
+            <div>
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-2.5">
+                Outline
+              </label>
+              <div className="flex items-center gap-2">
                 <input
                   type="color"
                   value={config.strokeColor}
                   onChange={(e) =>
                     setConfig((c) => ({ ...c, strokeColor: e.target.value }))
                   }
-                  className="w-10 h-10 rounded-lg border border-slate-200 cursor-pointer bg-transparent [&::-webkit-color-swatch-wrapper]:p-1 [&::-webkit-color-swatch]:rounded-md [&::-webkit-color-swatch]:border-0"
+                  className="w-8 h-8 rounded-full border border-slate-200 cursor-pointer bg-transparent [&::-webkit-color-swatch-wrapper]:p-0 [&::-webkit-color-swatch]:rounded-full [&::-webkit-color-swatch]:border-0"
                 />
+                <span className="text-[10px] text-slate-400 font-mono uppercase">
+                  {config.strokeColor}
+                </span>
               </div>
-              <span className="text-xs text-slate-400 font-mono">
-                {config.strokeColor.toUpperCase()}
-              </span>
+            </div>
+
+            {/* Position */}
+            <div className="flex-1">
+              <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-2.5">
+                Position
+              </label>
+              <div className="flex gap-2">
+                {POSITION_PILLS.map((pill) => (
+                  <button
+                    key={pill.value}
+                    onClick={() =>
+                      setConfig((c) => ({ ...c, position: pill.value }))
+                    }
+                    className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-all duration-200 ${
+                      config.position === pill.value
+                        ? "bg-black text-white border-black shadow-sm"
+                        : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300"
+                    }`}
+                  >
+                    {pill.label}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
+        </motion.div>
 
-        {/* Position */}
-        <div>
-          <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-3">
-            Position
-          </label>
-          <div className="flex gap-2">
-            {POSITION_PILLS.map((pill) => (
-              <button
-                key={pill.value}
-                onClick={() =>
-                  setConfig((c) => ({ ...c, position: pill.value }))
-                }
-                className={`flex-1 py-2.5 rounded-lg text-sm font-medium border transition-all duration-200 ${
-                  config.position === pill.value
-                    ? "bg-indigo-600 text-white border-indigo-600 shadow-sm"
-                    : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50 hover:border-slate-300"
-                }`}
-              >
-                {pill.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Preview snippet */}
-        <div className="rounded-xl bg-slate-900 border border-slate-800 p-4 text-center overflow-hidden">
-          <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-2">
-            Preview
-          </p>
-          <p
-            style={{
-              fontFamily: config.font,
-              fontSize: `${Math.min(Number(config.fontSize), 68) * 0.45}px`,
-              color: config.textColor,
-              WebkitTextStroke:
-                config.strokeColor !== "#000000"
-                  ? `2px ${config.strokeColor}`
-                  : undefined,
-              textShadow:
-                config.strokeColor === "#000000"
-                  ? "-1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000"
-                  : undefined,
-            }}
-            className="font-bold leading-tight"
+        {/* Action buttons */}
+        <motion.div
+          className="flex items-center gap-3 mt-8"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.35 }}
+        >
+          <button
+            onClick={handleConfigBack}
+            className="px-5 py-2.5 rounded-xl text-sm font-medium text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-all duration-200"
           >
-            THIS IS HOW YOUR SUBTITLES WILL LOOK
-          </p>
-        </div>
+            <span className="inline-flex items-center gap-1.5">
+              <ArrowLeft className="w-3.5 h-3.5" />
+              Back
+            </span>
+          </button>
+          <button
+            onClick={handleUseDefaults}
+            className="px-5 py-2.5 rounded-xl text-sm font-medium text-slate-500 hover:text-slate-700 transition-all duration-200"
+          >
+            Use Defaults
+          </button>
+          <button
+            onClick={handleConfigContinue}
+            className="inline-flex items-center gap-2 px-8 py-3 rounded-xl text-sm font-medium bg-black text-white shadow-sm hover:bg-slate-800 hover:shadow-md active:scale-[0.98] transition-all duration-200"
+          >
+            <Sparkles className="w-4 h-4" />
+            Start Clipping
+          </button>
+        </motion.div>
       </motion.div>
-
-      {/* Action buttons */}
-      <motion.div
-        className="flex items-center gap-3 mt-8"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.35 }}
-      >
-        <button
-          onClick={handleConfigBack}
-          className="px-5 py-2.5 rounded-xl text-sm font-medium text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-all duration-200"
-        >
-          <span className="inline-flex items-center gap-1.5">
-            <ArrowLeft className="w-3.5 h-3.5" />
-            Back
-          </span>
-        </button>
-        <button
-          onClick={handleUseDefaults}
-          className="px-5 py-2.5 rounded-xl text-sm font-medium text-slate-500 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-all duration-200"
-        >
-          Use Defaults
-        </button>
-        <button
-          onClick={handleConfigContinue}
-          className="inline-flex items-center gap-2 px-8 py-3 rounded-xl text-sm font-medium bg-indigo-600 text-white shadow-sm hover:bg-indigo-700 hover:shadow-md active:scale-[0.98] transition-all duration-200"
-        >
-          <Sparkles className="w-4 h-4" />
-          Start Clipping
-        </button>
-      </motion.div>
-    </motion.div>
-  );
+    );
+  };
 
   // =========================================================================
   // STEP 3 — Processing Pipeline
@@ -965,38 +1070,48 @@ export default function AIClipper({ onClose }: AIClipperProps) {
       {/* Header */}
       <div className="text-center mb-8">
         <motion.div
-          className="inline-flex items-center gap-2 mb-3"
+          className="inline-flex items-center gap-2.5 mb-3"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
         >
-          <Wand2 className="w-5 h-5 text-indigo-600" />
-          <h2 className="text-lg font-semibold text-slate-900">
-            Creating your clip...
+          <span className="relative flex h-2.5 w-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-black opacity-75" />
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-black" />
+          </span>
+          <h2 className="text-lg font-semibold text-black">
+            Processing your clip
           </h2>
         </motion.div>
-        <motion.p
-          className="text-xs text-slate-400"
+        <motion.div
+          className="flex items-center justify-center gap-3 text-xs text-slate-400"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.05 }}
         >
-          {progress}% complete
-        </motion.p>
+          <span className="inline-flex items-center gap-1">
+            <Clock className="w-3 h-3" />
+            {formatElapsed(elapsedSeconds)}
+          </span>
+          <span className="text-slate-300">·</span>
+          <span>{progress}% complete</span>
+        </motion.div>
       </div>
 
-      {/* Progress Bar */}
+      {/* Gradient Progress Bar */}
       <div className="w-full max-w-md mx-auto mb-10">
-        <ProgressBar progress={progress} />
+        <GradientProgressBar progress={progress} />
       </div>
 
       {/* Pipeline Steps */}
-      <div className="w-full max-w-md mx-auto space-y-0">
+      <div className="w-full max-w-md mx-auto space-y-1">
         {pipelineSteps.map((ps, idx) => (
           <PipelineRow
             key={ps.id}
             step={ps}
-            isLast={idx === pipelineSteps.length - 1}
             index={idx}
+            videoTitle={videoTitle}
+            wordCount={wordCount}
+            clipDuration={clipDuration}
           />
         ))}
       </div>
@@ -1032,12 +1147,12 @@ export default function AIClipper({ onClose }: AIClipperProps) {
         </motion.div>
 
         <motion.h2
-          className="text-xl font-semibold text-slate-900 mb-1"
+          className="text-xl font-semibold text-black mb-1"
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.15 }}
         >
-          Your clip is ready!
+          Your clip is ready
         </motion.h2>
         <motion.p
           className="text-sm text-slate-500 mb-8"
@@ -1079,15 +1194,7 @@ export default function AIClipper({ onClose }: AIClipperProps) {
               </div>
               <div className="bg-slate-50 rounded-lg px-3 py-2.5 border border-slate-100">
                 <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-0.5">
-                  Original Duration
-                </p>
-                <p className="text-xs text-slate-700 font-medium">
-                  {result.originalDuration}
-                </p>
-              </div>
-              <div className="bg-slate-50 rounded-lg px-3 py-2.5 border border-slate-100">
-                <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-0.5">
-                  Clip Duration
+                  Duration
                 </p>
                 <p className="text-xs text-slate-700 font-medium">
                   {result.clipDuration}
@@ -1101,28 +1208,26 @@ export default function AIClipper({ onClose }: AIClipperProps) {
                   {result.momentType}
                 </p>
               </div>
+              <div className="bg-slate-50 rounded-lg px-3 py-2.5 border border-slate-100">
+                <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-0.5">
+                  Subtitle Style
+                </p>
+                <p className="text-xs text-slate-700 font-medium">
+                  {result.subtitleStyle}
+                </p>
+              </div>
             </div>
 
             {/* AI Reasoning */}
-            <div className="bg-indigo-50/60 border border-indigo-100 rounded-xl p-4">
+            <div className="bg-slate-50 border border-slate-100 rounded-xl p-4">
               <div className="flex items-center gap-2 mb-2">
-                <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-                <p className="text-[10px] font-medium text-indigo-600 uppercase tracking-wider">
+                <Target className="w-3.5 h-3.5 text-slate-600" />
+                <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">
                   Why This Moment
                 </p>
               </div>
               <p className="text-xs text-slate-600 leading-relaxed">
                 {result.aiReasoning}
-              </p>
-            </div>
-
-            {/* Subtitle style summary */}
-            <div className="bg-slate-50 rounded-lg px-3 py-2.5 border border-slate-100">
-              <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-0.5">
-                Subtitle Style
-              </p>
-              <p className="text-xs text-slate-700 font-medium">
-                {result.subtitleStyle}
               </p>
             </div>
           </div>
@@ -1138,22 +1243,16 @@ export default function AIClipper({ onClose }: AIClipperProps) {
           <a
             href={result.outputPath}
             download
-            className="inline-flex items-center gap-2 px-7 py-3 rounded-xl text-sm font-medium bg-indigo-600 text-white shadow-sm hover:bg-indigo-700 hover:shadow-md active:scale-[0.98] transition-all duration-200"
+            className="inline-flex items-center gap-2 px-7 py-3 rounded-xl text-sm font-medium bg-black text-white shadow-sm hover:bg-slate-800 hover:shadow-md active:scale-[0.98] transition-all duration-200"
           >
             <Download className="w-4 h-4" />
             Download Clip
           </a>
           <button
             onClick={handleRestart}
-            className="px-5 py-3 rounded-xl text-sm font-medium text-slate-600 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 transition-all duration-200"
+            className="px-5 py-3 rounded-xl text-sm font-medium text-slate-500 hover:text-slate-700 transition-all duration-200"
           >
-            Clip Another
-          </button>
-          <button
-            onClick={handleNewVideo}
-            className="px-5 py-3 rounded-xl text-sm font-medium text-slate-500 bg-transparent border border-slate-200 hover:border-slate-300 hover:text-slate-700 transition-all duration-200"
-          >
-            New Video
+            Create Another
           </button>
         </motion.div>
       </motion.div>
@@ -1173,7 +1272,7 @@ export default function AIClipper({ onClose }: AIClipperProps) {
       <div className="w-16 h-16 rounded-2xl bg-red-50 border border-red-200 flex items-center justify-center mb-6">
         <AlertCircle className="w-8 h-8 text-red-500" />
       </div>
-      <h2 className="text-xl font-semibold text-slate-900 mb-2">
+      <h2 className="text-xl font-semibold text-black mb-2">
         Something Went Wrong
       </h2>
       <p className="text-sm text-slate-500 mb-8 text-center max-w-md leading-relaxed">
@@ -1183,7 +1282,7 @@ export default function AIClipper({ onClose }: AIClipperProps) {
       <div className="flex items-center gap-3">
         <button
           onClick={handleTryAgain}
-          className="inline-flex items-center gap-2 px-7 py-3 rounded-xl text-sm font-medium bg-red-500 hover:bg-red-600 text-white shadow-sm transition-all duration-200"
+          className="inline-flex items-center gap-2 px-7 py-3 rounded-xl text-sm font-medium bg-black hover:bg-slate-800 text-white shadow-sm transition-all duration-200"
         >
           Try Again
         </button>
@@ -1212,7 +1311,6 @@ export default function AIClipper({ onClose }: AIClipperProps) {
       {/* Header bar */}
       <header className="flex items-center justify-between px-6 py-4 border-b border-slate-200 shrink-0 bg-white">
         <div className="flex items-center gap-3">
-          {/* Back button - show for steps 0, 1, 2 */}
           {(step === 0 || step === 1 || step === 2) && (
             <button
               onClick={
@@ -1228,16 +1326,15 @@ export default function AIClipper({ onClose }: AIClipperProps) {
             </button>
           )}
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center">
-              <Video className="w-4 h-4 text-indigo-600" />
+            <div className="w-7 h-7 rounded-lg bg-slate-100 border border-slate-200 flex items-center justify-center">
+              <Scissors className="w-4 h-4 text-slate-700" />
             </div>
-            <span className="text-sm font-semibold text-slate-900 tracking-tight">
+            <span className="text-sm font-semibold text-black tracking-tight">
               AI Clipper
             </span>
           </div>
         </div>
 
-        {/* Step indicator (hide on result or error) */}
         {step !== 4 && error === null && (
           <div className="hidden sm:block">{renderStepIndicator()}</div>
         )}
