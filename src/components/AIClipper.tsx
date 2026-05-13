@@ -44,6 +44,7 @@ interface PipelineStep {
   label: string;
   activeLabel: string;
   doneLabel: string;
+  description?: string;
   detail?: string;
   status: "idle" | "active" | "done";
 }
@@ -157,56 +158,65 @@ const PIPELINE_STEPS: Omit<PipelineStep, "status" | "detail">[] = [
   {
     id: 1,
     label: "Getting video info",
-    activeLabel: "Fetching video metadata...",
+    activeLabel: "Fetching video metadata",
     doneLabel: "Video info retrieved",
+    description: "Reading video title, duration, and thumbnail",
   },
   {
     id: 2,
     label: "Downloading audio",
-    activeLabel: "Downloading audio stream...",
+    activeLabel: "Downloading audio stream",
     doneLabel: "Audio downloaded",
+    description: "Fetching audio-only track for transcription",
   },
   {
     id: 3,
     label: "Transcribing",
-    activeLabel: "Transcribing with Whisper...",
+    activeLabel: "Transcribing with captions",
     doneLabel: "Transcription complete",
+    description: "Extracting transcript from YouTube captions for AI analysis",
   },
   {
     id: 4,
     label: "Capturing keyframes",
-    activeLabel: "Extracting keyframes...",
+    activeLabel: "Extracting keyframes",
     doneLabel: "Keyframes captured",
+    description: "Sampling frames across the video for visual context",
   },
   {
     id: 5,
     label: "AI analyzing",
-    activeLabel: "AI finding the best moment...",
+    activeLabel: "AI finding the best moment",
     doneLabel: "Best moment found",
+    description: "Analyzing transcript and visuals to locate the perfect clip",
   },
   {
     id: 6,
     label: "Downloading clip",
-    activeLabel: "Downloading video segment...",
+    activeLabel: "Downloading video segment",
     doneLabel: "Clip downloaded",
+    description: "Fetching only the selected 30–60s portion from the stream",
   },
   {
     id: 7,
     label: "Adding subtitles",
-    activeLabel: "Generating word-accurate subtitles...",
+    activeLabel: "Transcribing for subtitles",
     doneLabel: "Subtitles ready",
+    description: "Generating word-accurate subtitles from clip audio",
   },
   {
     id: 8,
     label: "Finalizing",
-    activeLabel: "Burning subtitles into video...",
+    activeLabel: "Burning subtitles into video",
     doneLabel: "Final clip ready",
+    description: "Rendering subtitles directly into the video",
   },
   {
     id: 9,
     label: "Generating caption",
-    activeLabel: "Generating caption...",
+    activeLabel: "Generating caption",
     doneLabel: "Caption ready",
+    description: "Creating a social-media-ready caption and virality score",
   },
 ];
 
@@ -473,6 +483,9 @@ export default function AIClipper({ onClose }: AIClipperProps) {
                 setVideoTitle((event as any).title);
               }
               if (event.step === "transcribe" && (event as any).word_count) {
+                setWordCount((event as any).word_count);
+              }
+              if (event.step === "subtitles" && (event as any).word_count) {
                 setWordCount((event as any).word_count);
               }
               if (event.step === "clip" && (event as any).clip_duration) {
@@ -1100,12 +1113,7 @@ export default function AIClipper({ onClose }: AIClipperProps) {
   const renderProcessing = () => {
     const activeIdx = pipelineSteps.findIndex((s) => s.status === "active");
     const activeStep = activeIdx >= 0 ? pipelineSteps[activeIdx] : null;
-    const lastDoneIdx = (() => {
-      for (let i = pipelineSteps.length - 1; i >= 0; i--) {
-        if (pipelineSteps[i].status === "done") return i;
-      }
-      return -1;
-    })();
+    const doneSteps = pipelineSteps.filter((s) => s.status === "done");
 
     return (
       <motion.div
@@ -1119,124 +1127,179 @@ export default function AIClipper({ onClose }: AIClipperProps) {
         {/* Gradient Progress Bar — edge-to-edge at very top */}
         <GradientProgressBar progress={progress} />
 
-        <div className="flex flex-col flex-1 px-6 py-6">
+        <div className="flex flex-col flex-1 px-6 py-5">
           {/* Elapsed time + percentage */}
-          <motion.div
-            className="flex items-center justify-center gap-3 mb-5"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-          >
-            <span className="inline-flex items-center gap-1.5 text-sm text-slate-500">
+          <div className="flex items-center justify-between mb-8">
+            <span className="inline-flex items-center gap-1.5 text-sm text-slate-400">
               <Clock className="w-3.5 h-3.5" />
               {formatElapsed(elapsedSeconds)}
             </span>
-            <span className="text-slate-300">·</span>
-            <span className="text-sm text-slate-500">{progress}% complete</span>
-          </motion.div>
+            <span className="text-sm text-slate-400">{progress}%</span>
+          </div>
 
-          {/* Small horizontal dots timeline */}
-          <div className="flex items-center justify-center gap-1.5 mb-8">
-            {pipelineSteps.map((ps, idx) => {
+          {/* Current step card — crossfade between steps */}
+          <div className="flex-1 flex flex-col items-center justify-center">
+            <AnimatePresence mode="wait">
+              {activeStep ? (
+                <motion.div
+                  key={activeStep.id}
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -12 }}
+                  transition={{ duration: 0.25, ease: "easeOut" }}
+                  className="flex flex-col items-center text-center"
+                >
+                  {/* Large step number */}
+                  <motion.span
+                    className="text-7xl font-light text-slate-200 mb-4 select-none"
+                    initial={{ opacity: 0, x: -8 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    transition={{ duration: 0.25, delay: 0.05 }}
+                  >
+                    {String(activeIdx + 1).padStart(2, "0")}
+                  </motion.span>
+
+                  {/* Pulsing dot */}
+                  <div className="mb-4">
+                    <motion.div
+                      className="w-2.5 h-2.5 rounded-full bg-slate-900"
+                      animate={{ scale: [1, 1.4, 1], opacity: [0.5, 1, 0.5] }}
+                      transition={{ repeat: Infinity, duration: 1.5 }}
+                    />
+                  </div>
+
+                  {/* Title */}
+                  <h3 className="text-xl font-semibold text-slate-900 mb-2">
+                    {activeStep.activeLabel}
+                  </h3>
+
+                  {/* Description */}
+                  <p className="text-sm text-slate-500 max-w-xs leading-relaxed">
+                    {activeStep.description || activeStep.label}
+                  </p>
+
+                  {/* Real data */}
+                  {activeStep.id === 1 && videoTitle && (
+                    <motion.p
+                      className="text-xs text-slate-400 mt-3 max-w-[260px] truncate"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: 0.3 }}
+                    >
+                      {videoTitle}
+                    </motion.p>
+                  )}
+                  {activeStep.id === 3 && wordCount != null && (
+                    <motion.p
+                      className="text-xs text-slate-400 mt-3"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: 0.3 }}
+                    >
+                      {wordCount.toLocaleString()} words detected
+                    </motion.p>
+                  )}
+                  {(activeStep.id === 5 || activeStep.id === 6) &&
+                    clipDuration && (
+                      <motion.p
+                        className="text-xs text-slate-400 mt-3"
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: 0.3 }}
+                      >
+                        Clip duration: {clipDuration}
+                      </motion.p>
+                    )}
+                  {activeStep.id === 7 && wordCount != null && (
+                    <motion.p
+                      className="text-xs text-slate-400 mt-3"
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: 0.3 }}
+                    >
+                      {wordCount.toLocaleString()} words with accurate timing
+                    </motion.p>
+                  )}
+                </motion.div>
+              ) : doneSteps.length > 0 ? (
+                /* All steps done — show completion */
+                <motion.div
+                  key="all-done"
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -12 }}
+                  transition={{ duration: 0.25, ease: "easeOut" }}
+                  className="flex flex-col items-center text-center"
+                >
+                  <div className="w-12 h-12 rounded-full bg-emerald-50 flex items-center justify-center mb-4">
+                    <Check className="w-6 h-6 text-emerald-500" />
+                  </div>
+                  <h3 className="text-xl font-semibold text-slate-900 mb-2">
+                    Almost there
+                  </h3>
+                  <p className="text-sm text-slate-500">Finalizing your clip</p>
+                </motion.div>
+              ) : (
+                /* Starting */
+                <motion.div
+                  key="starting"
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -12 }}
+                  transition={{ duration: 0.25, ease: "easeOut" }}
+                  className="flex flex-col items-center text-center"
+                >
+                  <div className="mb-4">
+                    <Loader2 className="w-5 h-5 text-slate-900 animate-spin" />
+                  </div>
+                  <h3 className="text-xl font-semibold text-slate-900 mb-2">
+                    Starting pipeline
+                  </h3>
+                  <p className="text-sm text-slate-500">Connecting to server</p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+
+          {/* Step list — all steps with status indicators */}
+          <div className="mt-6 space-y-0">
+            {pipelineSteps.map((ps) => {
               const isDone = ps.status === "done";
               const isActive = ps.status === "active";
               return (
-                <div key={ps.id} className="flex items-center gap-1.5">
-                  <motion.div
-                    className={`rounded-full transition-all duration-500 ${
+                <div key={ps.id} className="flex items-center gap-3 py-1.5">
+                  {/* Status icon */}
+                  <span className="w-5 text-center shrink-0">
+                    {isDone ? (
+                      <Check className="w-3.5 h-3.5 text-emerald-500" />
+                    ) : (
+                      <span
+                        className={`text-xs transition-colors duration-300 ${
+                          isActive
+                            ? "text-slate-900 font-medium"
+                            : "text-slate-300"
+                        }`}
+                      >
+                        ○
+                      </span>
+                    )}
+                  </span>
+                  {/* Label */}
+                  <span
+                    className={`text-sm transition-colors duration-300 ${
                       isDone
-                        ? "w-2 h-2 bg-emerald-400"
+                        ? "text-slate-400"
                         : isActive
-                          ? "w-2.5 h-2.5 bg-black ring-2 ring-black/20"
-                          : "w-2 h-2 bg-slate-200"
+                          ? "text-slate-900 font-medium"
+                          : "text-slate-400"
                     }`}
-                    initial={false}
-                    animate={isActive ? { scale: [1, 1.25, 1] } : {}}
-                    transition={{
-                      repeat: isActive ? Infinity : 0,
-                      duration: 1.5,
-                    }}
-                  />
-                  {idx < pipelineSteps.length - 1 && (
-                    <div
-                      className={`w-3 h-px transition-colors duration-500 ${
-                        isDone ? "bg-emerald-300" : "bg-slate-200"
-                      }`}
-                    />
-                  )}
+                  >
+                    {isDone ? ps.doneLabel : ps.label}
+                  </span>
                 </div>
               );
             })}
           </div>
-
-          {/* Large centered current step card */}
-          {activeStep ? (
-            <motion.div
-              className="flex-1 flex flex-col items-center justify-center"
-              key={activeStep.id}
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.35, ease: "easeOut" }}
-            >
-              <div className="w-full max-w-sm bg-white border border-slate-200 rounded-2xl p-8 shadow-sm text-center">
-                {/* Big animated icon */}
-                <div className="mb-5 flex justify-center">
-                  <div className="w-14 h-14 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-center">
-                    <Loader2 className="w-8 h-8 text-black animate-spin" />
-                  </div>
-                </div>
-
-                {/* Step title */}
-                <h3 className="text-xl font-bold text-black mb-2">
-                  {activeStep.activeLabel}
-                </h3>
-
-                {/* Step detail */}
-                <p className="text-sm text-slate-500 leading-relaxed">
-                  {activeStep.label}
-                </p>
-
-                {/* Step number of total */}
-                <p className="text-xs text-slate-400 mt-4">
-                  Step {activeIdx + 1} of {pipelineSteps.length}
-                </p>
-              </div>
-            </motion.div>
-          ) : (
-            /* If no active step (all done or none started), show last completed */
-            <div className="flex-1 flex flex-col items-center justify-center">
-              {lastDoneIdx >= 0 ? (
-                <motion.div
-                  className="w-full max-w-sm bg-white border border-emerald-200 rounded-2xl p-8 shadow-sm text-center"
-                  initial={{ opacity: 0, scale: 0.95 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                >
-                  <div className="mb-5 flex justify-center">
-                    <div className="w-14 h-14 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center">
-                      <CheckCircle2 className="w-8 h-8 text-emerald-500" />
-                    </div>
-                  </div>
-                  <h3 className="text-xl font-bold text-black mb-2">
-                    {pipelineSteps[lastDoneIdx].doneLabel}
-                  </h3>
-                  <p className="text-sm text-slate-500">
-                    Almost there — finalizing your clip
-                  </p>
-                </motion.div>
-              ) : (
-                <div className="w-full max-w-sm bg-white border border-slate-200 rounded-2xl p-8 shadow-sm text-center">
-                  <div className="mb-5 flex justify-center">
-                    <div className="w-14 h-14 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-center">
-                      <Loader2 className="w-8 h-8 text-black animate-spin" />
-                    </div>
-                  </div>
-                  <h3 className="text-xl font-bold text-black mb-2">
-                    Starting pipeline...
-                  </h3>
-                  <p className="text-sm text-slate-500">Connecting to server</p>
-                </div>
-              )}
-            </div>
-          )}
         </div>
       </motion.div>
     );

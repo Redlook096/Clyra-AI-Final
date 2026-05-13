@@ -596,7 +596,36 @@ def step_download_clip(stream_url, audio_url, clip_start, clip_duration, tmp_dir
     return clip_path
 
 
-def step_subtitles(all_words, clip_start, clip_end, cfg, tmp_dir):
+def step_transcribe_clip(clip_path, clip_start, clip_end):
+    """Transcribe only the clip portion with Whisper for word-accurate timing."""
+    log("subtitles", "running", message="Transcribing clip for accurate subtitles...")
+
+    import whisper
+
+    model = whisper.load_model("tiny")
+    result = model.transcribe(clip_path, word_timestamps=True)
+
+    all_words = []
+    for seg in result.get("segments", []):
+        if "words" in seg:
+            for w in seg["words"]:
+                word_text = re.sub(r"[^\w\s]", "", w["word"].strip()).upper()
+                if word_text and len(word_text) >= 1:
+                    all_words.append(
+                        {"word": word_text, "start": w["start"], "end": w["end"]}
+                    )
+
+    log(
+        "subtitles",
+        "progress",
+        message=f"{len(all_words)} words with accurate timing",
+        word_count=len(all_words),
+    )
+
+    return all_words
+
+
+def step_subtitles(clip_words, cfg, tmp_dir):
     """Step 7 — build word-accurate ASS subtitle file with proper sizing."""
     log("subtitles", "running", message="Generating word-accurate subtitles...")
 
@@ -619,28 +648,6 @@ def step_subtitles(all_words, clip_start, clip_end, cfg, tmp_dir):
 
     # Scale margin proportionally (60px at 1080p as baseline)
     margin_v = int(60 * video_h / 1080) if align == 2 else 0
-
-    # Filter words within clip range; shift times to be relative to clip start
-    clip_words = []
-    for w in all_words:
-        ws = float(w["start"])
-        we = float(w["end"])
-        if ws >= clip_start and we <= clip_end:
-            clip_words.append(
-                {
-                    "word": w["word"],
-                    "start": ws - clip_start,
-                    "end": we - clip_start,
-                }
-            )
-
-    # Filter out words that are just punctuation or too short
-    filtered_words = []
-    for w in clip_words:
-        text = re.sub(r"[^\w\s]", "", w["word"].strip()).upper()
-        if text and len(text) >= 1 and not text.isspace():
-            filtered_words.append({"word": text, "start": w["start"], "end": w["end"]})
-    clip_words = filtered_words
 
     if not clip_words:
         log(
@@ -928,8 +935,9 @@ def main():
             stream_url, audio_url, clip_start, clip_duration, tmp_dir
         )
 
-        # --- Step 7: Subtitles ---
-        ass_path = step_subtitles(all_words, clip_start, clip_end, cfg, tmp_dir)
+        # --- Step 7: Accurate subtitles via Whisper on clip only ---
+        clip_words = step_transcribe_clip(clip_path, clip_start, clip_end)
+        ass_path = step_subtitles(clip_words, cfg, tmp_dir)
 
         # --- Step 8: Burn ---
         clip_name = cfg.get("clip_name", "final_clip")
