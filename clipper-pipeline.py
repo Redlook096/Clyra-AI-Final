@@ -240,6 +240,12 @@ def step_keyframes(yt, duration, tmp_dir):
 
     stream_url = video_stream.url
 
+    # Also get audio stream URL for clip download
+    audio_stream = yt.streams.filter(adaptive=True).filter(only_audio=True).first()
+    if not audio_stream:
+        audio_stream = yt.streams.filter(only_audio=True).first()
+    audio_url = audio_stream.url if audio_stream else stream_url
+
     num_frames = 4
     frame_paths = []
     frame_data = []
@@ -289,7 +295,7 @@ def step_keyframes(yt, duration, tmp_dir):
         message=f"{len(frame_paths)}/{num_frames} keyframes captured",
         frames_captured=len(frame_paths),
     )
-    return frame_paths, stream_url, frame_data
+    return frame_paths, stream_url, audio_url, frame_data
 
 
 def step_analyze(title, duration, segments, moment_type, frame_data=None):
@@ -426,8 +432,8 @@ def step_analyze(title, duration, segments, moment_type, frame_data=None):
     return clip_start, clip_end, reason
 
 
-def step_download_clip(stream_url, clip_start, clip_duration, tmp_dir):
-    """Step 6 — download only the clip portion directly from the stream."""
+def step_download_clip(stream_url, audio_url, clip_start, clip_duration, tmp_dir):
+    """Step 6 — download only the clip portion from both video and audio streams."""
     log(
         "clip",
         "running",
@@ -442,6 +448,10 @@ def step_download_clip(stream_url, clip_start, clip_duration, tmp_dir):
             str(clip_start),
             "-i",
             stream_url,
+            "-ss",
+            str(clip_start),
+            "-i",
+            audio_url,
             "-t",
             str(clip_duration),
             "-c:v",
@@ -456,6 +466,11 @@ def step_download_clip(stream_url, clip_start, clip_duration, tmp_dir):
             "192k",
             "-movflags",
             "+faststart",
+            "-map",
+            "0:v:0",
+            "-map",
+            "1:a:0",
+            "-shortest",
             clip_path,
         ],
         timeout=180,
@@ -479,6 +494,7 @@ def step_subtitles(all_words, clip_start, clip_end, cfg, tmp_dir):
     text_colour = cfg.get("text_colour", "#FFFFFF")
     stroke_colour = cfg.get("stroke_colour", "#000000")
     position = cfg.get("position", "bottom-centre")
+    user_font_size = cfg.get("font_size", 52)
 
     align = ASS_ALIGN_MAP.get(position, 2)
 
@@ -487,8 +503,9 @@ def step_subtitles(all_words, clip_start, clip_end, cfg, tmp_dir):
     video_w, video_h = get_video_resolution(clip_path)
     log("subtitles", "progress", message=f"Video resolution: {video_w}x{video_h}")
 
-    # Scale font size relative to video height (~5% for readability)
-    font_size = max(24, int(video_h * 0.05))
+    # Use user's font size, but scale proportionally to video height
+    # Baseline: 52px at 1080p. Scale: font_size = user_size * (video_h / 1080)
+    font_size = max(24, int(user_font_size * video_h / 1080))
 
     # Scale margin proportionally (60px at 1080p as baseline)
     margin_v = int(60 * video_h / 1080) if align == 2 else 0
@@ -543,7 +560,7 @@ def step_subtitles(all_words, clip_start, clip_end, cfg, tmp_dir):
                 next_start = float(clip_words[i + 1]["start"])
                 if e > next_start:
                     e = max(s + 0.05, next_start - 0.02)
-            text = w["word"].strip().upper()
+            text = re.sub(r"[^\w\s]", "", w["word"].strip()).upper()
             if text:
                 f.write(f"Dialogue: 0,{ts_ass(s)},{ts_ass(e)},Word,,{text}\n")
 
@@ -663,7 +680,7 @@ def main():
         segments, all_words = step_transcribe(audio_path)
 
         # --- Step 4: Keyframes ---
-        _, stream_url, frame_data = step_keyframes(yt, duration, tmp_dir)
+        _, stream_url, audio_url, frame_data = step_keyframes(yt, duration, tmp_dir)
 
         # --- Step 5: AI Analysis ---
         clip_start, clip_end, reason = step_analyze(
@@ -676,7 +693,9 @@ def main():
 
         # --- Step 6: Download clip from stream ---
         clip_duration = clip_end - clip_start
-        clip_path = step_download_clip(stream_url, clip_start, clip_duration, tmp_dir)
+        clip_path = step_download_clip(
+            stream_url, audio_url, clip_start, clip_duration, tmp_dir
+        )
 
         # --- Step 7: Subtitles ---
         ass_path = step_subtitles(all_words, clip_start, clip_end, cfg, tmp_dir)
