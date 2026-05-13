@@ -587,11 +587,17 @@ export default function App() {
     messages.some((message) => message.assistantKind === "vibe") ||
     selectedCommand?.id === "vibe";
 
+  // Only auto-close sidebar once when preview first appears, not on every render
+  const previewJustAppearedRef = useRef(false);
   useEffect(() => {
-    if (showVibeLivePreview && isSidebarOpen) {
+    if (showVibeLivePreview && !previewJustAppearedRef.current) {
+      previewJustAppearedRef.current = true;
       setIsSidebarOpen(false);
     }
-  }, [showVibeLivePreview, isSidebarOpen]);
+    if (!showVibeLivePreview) {
+      previewJustAppearedRef.current = false;
+    }
+  }, [showVibeLivePreview]);
 
   useEffect(() => {
     if (!vibePreviewMessageId) return;
@@ -5167,7 +5173,7 @@ Please analyze the code you just wrote and fix this error.`;
                       setIsVibePreviewVisible((visible) => !visible)
                     }
                     className={cn(
-                      "absolute left-4 top-4 z-[145] inline-flex h-10 min-w-[132px] items-center justify-center gap-2 overflow-hidden rounded-full border px-3 text-xs font-semibold shadow-[0_18px_48px_rgba(15,23,42,0.16)] backdrop-blur-xl transition-all duration-300",
+                      "fixed top-4 left-20 z-[145] inline-flex h-10 min-w-[132px] items-center justify-center gap-2 overflow-hidden rounded-full border px-3 text-xs font-semibold shadow-[0_18px_48px_rgba(15,23,42,0.16)] backdrop-blur-xl transition-all duration-300 sm:top-6 sm:left-20",
                       showVibeLivePreview
                         ? "border-slate-200/90 bg-white/90 text-slate-700 hover:bg-white hover:text-slate-950"
                         : "border-blue-200/90 bg-blue-50/95 text-blue-700 ring-4 ring-blue-500/10 hover:bg-blue-50 hover:text-blue-900",
