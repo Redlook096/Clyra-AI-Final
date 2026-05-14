@@ -155,12 +155,48 @@ const MOMENT_OPTIONS: MomentOption[] = [
 ];
 
 const PIPELINE_STEPS: Omit<PipelineStep, "status" | "detail">[] = [
-  { id: 1, label: "Downloading", activeLabel: "Downloading video and audio", doneLabel: "Downloaded", description: "Fetching the video and audio streams" },
-  { id: 2, label: "Transcribing", activeLabel: "Transcribing with Whisper", doneLabel: "Transcribed", description: "Converting speech to word-accurate text" },
-  { id: 3, label: "Analyzing", activeLabel: "AI finding best moment", doneLabel: "Moment found", description: "Scanning transcript for the most engaging clip" },
-  { id: 4, label: "Clipping", activeLabel: "Cutting the clip", doneLabel: "Clipped", description: "Extracting the best segment with zero quality loss" },
-  { id: 5, label: "Subtitles", activeLabel: "Building word subtitles", doneLabel: "Subtitles ready", description: "Creating frame-accurate word-by-word captions" },
-  { id: 6, label: "Finalizing", activeLabel: "Burning subtitles", doneLabel: "Ready!", description: "Encoding the final video with embedded captions" },
+  {
+    id: 1,
+    label: "Downloading video",
+    activeLabel: "Downloading the video stream",
+    doneLabel: "Video downloaded",
+    description: "Fetching the best available quality from YouTube",
+  },
+  {
+    id: 2,
+    label: "Extracting transcript",
+    activeLabel: "Reading the transcript",
+    doneLabel: "Transcript ready",
+    description: "Pulling the full spoken content from captions",
+  },
+  {
+    id: 3,
+    label: "Finding the moment",
+    activeLabel: "AI analyzing the content",
+    doneLabel: "Perfect moment found",
+    description: "Scanning for the most engaging and viral-worthy segment",
+  },
+  {
+    id: 4,
+    label: "Cutting the clip",
+    activeLabel: "Extracting the segment",
+    doneLabel: "Clip extracted",
+    description: "Cutting with zero quality loss using stream copy",
+  },
+  {
+    id: 5,
+    label: "Generating subtitles",
+    activeLabel: "Creating word subtitles",
+    doneLabel: "Subtitles generated",
+    description: "Building frame-accurate word-by-word captions",
+  },
+  {
+    id: 6,
+    label: "Finalizing video",
+    activeLabel: "Encoding final video",
+    doneLabel: "Complete!",
+    description: "Burning subtitles into the video with optimized encoding",
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -294,6 +330,7 @@ export default function AIClipper({ onClose }: AIClipperProps) {
   const [youtubeUrl, setYoutubeUrl] = useState("");
   const [momentType, setMomentType] = useState<MomentType | null>(null);
   const [customMoment, setCustomMoment] = useState("");
+  const [quality, setQuality] = useState<"low" | "high">("low");
   const [config, setConfig] = useState<SubtitleConfig>(DEFAULT_CONFIG);
   const [pipelineSteps, setPipelineSteps] = useState<PipelineStep[]>(
     PIPELINE_STEPS.map((s) => ({ ...s, status: "idle" as const })),
@@ -366,6 +403,7 @@ export default function AIClipper({ onClose }: AIClipperProps) {
               ? ("centre" as const)
               : ("top-centre" as const),
         moment_type: effectiveMomentType,
+        quality: quality, // "low" or "high"
         clip_name: clipName.trim() || undefined,
       };
 
@@ -410,7 +448,6 @@ export default function AIClipper({ onClose }: AIClipperProps) {
             if (event.type === "progress") {
               const stepMap: Record<string, number> = {
                 download: 0,
-                video: 0,
                 transcribe: 1,
                 analyze: 2,
                 clip: 3,
@@ -743,23 +780,73 @@ export default function AIClipper({ onClose }: AIClipperProps) {
         })}
       </motion.div>
 
-      {/* Custom text input */}
+      {/* Custom text area */}
       <motion.div
         className="w-full max-w-lg mt-4"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.45 }}
       >
-        <input
-          type="text"
+        <textarea
           value={customMoment}
           onChange={(e) => {
             setCustomMoment(e.target.value);
             if (e.target.value.trim()) setMomentType(null);
           }}
-          placeholder="Or describe what you're looking for..."
-          className="w-full px-4 py-3 rounded-xl bg-white border border-slate-200 text-slate-900 text-sm placeholder-slate-400 focus:outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 transition-all duration-200"
+          placeholder="Or describe exactly what you want — e.g. 'the part where they fall' or 'the opening scene'..."
+          rows={2}
+          className="w-full px-4 py-3 rounded-xl bg-white border border-slate-200 text-slate-900 text-sm placeholder-slate-400 focus:outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 transition-all duration-200 resize-none"
         />
+      </motion.div>
+
+      {/* Quality selector */}
+      <motion.div
+        className="w-full max-w-lg mt-4"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.5 }}
+      >
+        <p className="text-xs font-medium text-slate-500 mb-2">Video quality</p>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setQuality("low")}
+            className={
+              "flex-1 px-3 py-2.5 rounded-xl border text-sm font-medium transition-all duration-200 " +
+              (quality === "low"
+                ? "bg-black text-white border-black"
+                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50")
+            }
+          >
+            <div>Fast (360p)</div>
+            <div
+              className={
+                "text-[10px] " +
+                (quality === "low" ? "text-slate-300" : "text-slate-400")
+              }
+            >
+              ~25s, smaller file
+            </div>
+          </button>
+          <button
+            onClick={() => setQuality("high")}
+            className={
+              "flex-1 px-3 py-2.5 rounded-xl border text-sm font-medium transition-all duration-200 " +
+              (quality === "high"
+                ? "bg-black text-white border-black"
+                : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50")
+            }
+          >
+            <div>HD (720p)</div>
+            <div
+              className={
+                "text-[10px] " +
+                (quality === "high" ? "text-slate-300" : "text-slate-400")
+              }
+            >
+              ~40s, larger file
+            </div>
+          </button>
+        </div>
       </motion.div>
 
       {/* Action buttons */}
@@ -1005,13 +1092,18 @@ export default function AIClipper({ onClose }: AIClipperProps) {
           <label className="block text-xs font-medium text-slate-500 uppercase tracking-wider mb-2">
             Clip Name (optional)
           </label>
-          <input
-            type="text"
-            value={clipName}
-            onChange={(e) => setClipName(e.target.value)}
-            placeholder="Name your clip"
-            className="w-full py-2.5 px-4 rounded-xl text-sm border border-slate-200 bg-white text-slate-700 placeholder:text-slate-400 focus:outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 transition-all duration-200"
-          />
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-slate-500">
+              Clip name
+            </label>
+            <input
+              type="text"
+              value={clipName}
+              onChange={(e) => setClipName(e.target.value)}
+              placeholder="My awesome clip"
+              className="w-full py-3 px-4 rounded-xl text-sm border border-slate-200 bg-white text-slate-700 placeholder:text-slate-400 focus:outline-none focus:border-slate-400 focus:ring-2 focus:ring-slate-100 transition-all duration-200"
+            />
+          </div>
         </motion.div>
 
         {/* Action buttons */}
