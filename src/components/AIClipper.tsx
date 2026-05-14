@@ -504,7 +504,7 @@ export default function AIClipper({ onClose }: AIClipperProps) {
                 aiReasoning: (event as any).reason || "AI-selected moment",
                 thumbnailUrl: "",
                 subtitleStyle: `${config.font} ${config.fontSize}px — ${config.position}`,
-                outputPath: (event as any).output || "./output/final_clip.mp4",
+                outputPath: (event as any).output || "./output/clip_final.mp4",
                 caption: (event as any).caption || "",
                 hashtags: (event as any).hashtags || "",
                 viralityScore: (event as any).virality_score || 5,
@@ -1346,7 +1346,7 @@ export default function AIClipper({ onClose }: AIClipperProps) {
 
     const videoUrl = result.outputPath
       ? result.outputPath.replace("./output/", "/output/")
-      : `/output/${result.clipName || "final_clip"}.mp4`;
+      : `/output/${result.clipName || "clip_final"}.mp4`;
 
     return (
       <motion.div

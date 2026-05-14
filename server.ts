@@ -210,6 +210,15 @@ async function startServer() {
 
 
 
+  // Serve output files BEFORE Vite (so they are not caught by SPA fallback)
+  app.use("/output", express.static(path.join(process.cwd(), "output"), {
+    setHeaders: (res) => {
+      res.setHeader("Content-Type", "video/mp4");
+      res.setHeader("Accept-Ranges", "bytes");
+    },
+    fallthrough: false
+  }));
+
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");
     const hmrPort = Number(process.env.HMR_PORT) || 24678;
@@ -226,13 +235,7 @@ async function startServer() {
     });
     app.use(vite.middlewares);
     
-    // Serve output files after Vite
-    app.use("/output", express.static(path.join(process.cwd(), "output"), {
-      setHeaders: (res) => {
-        res.setHeader("Content-Type", "video/mp4");
-        res.setHeader("Accept-Ranges", "bytes");
-      }
-    }));
+
   } else {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
