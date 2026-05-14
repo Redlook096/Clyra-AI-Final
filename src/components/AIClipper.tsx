@@ -155,69 +155,12 @@ const MOMENT_OPTIONS: MomentOption[] = [
 ];
 
 const PIPELINE_STEPS: Omit<PipelineStep, "status" | "detail">[] = [
-  {
-    id: 1,
-    label: "Getting video info",
-    activeLabel: "Fetching video metadata",
-    doneLabel: "Video info retrieved",
-    description: "Reading video title, duration, and thumbnail",
-  },
-  {
-    id: 2,
-    label: "Downloading audio",
-    activeLabel: "Downloading audio stream",
-    doneLabel: "Audio downloaded",
-    description: "Fetching audio-only track for transcription",
-  },
-  {
-    id: 3,
-    label: "Transcribing",
-    activeLabel: "Transcribing with captions",
-    doneLabel: "Transcription complete",
-    description: "Extracting transcript from YouTube captions for AI analysis",
-  },
-  {
-    id: 4,
-    label: "Capturing keyframes",
-    activeLabel: "Extracting keyframes",
-    doneLabel: "Keyframes captured",
-    description: "Sampling frames across the video for visual context",
-  },
-  {
-    id: 5,
-    label: "AI analyzing",
-    activeLabel: "AI finding the best moment",
-    doneLabel: "Best moment found",
-    description: "Analyzing transcript and visuals to locate the perfect clip",
-  },
-  {
-    id: 6,
-    label: "Downloading clip",
-    activeLabel: "Downloading video segment",
-    doneLabel: "Clip downloaded",
-    description: "Fetching only the selected 30–60s portion from the stream",
-  },
-  {
-    id: 7,
-    label: "Adding subtitles",
-    activeLabel: "Transcribing for subtitles",
-    doneLabel: "Subtitles ready",
-    description: "Generating word-accurate subtitles from clip audio",
-  },
-  {
-    id: 8,
-    label: "Finalizing",
-    activeLabel: "Burning subtitles into video",
-    doneLabel: "Final clip ready",
-    description: "Rendering subtitles directly into the video",
-  },
-  {
-    id: 9,
-    label: "Generating caption",
-    activeLabel: "Generating caption",
-    doneLabel: "Caption ready",
-    description: "Creating a social-media-ready caption and virality score",
-  },
+  { id: 1, label: "Downloading", activeLabel: "Downloading video and audio", doneLabel: "Downloaded", description: "Fetching the video and audio streams" },
+  { id: 2, label: "Transcribing", activeLabel: "Transcribing with Whisper", doneLabel: "Transcribed", description: "Converting speech to word-accurate text" },
+  { id: 3, label: "Analyzing", activeLabel: "AI finding best moment", doneLabel: "Moment found", description: "Scanning transcript for the most engaging clip" },
+  { id: 4, label: "Clipping", activeLabel: "Cutting the clip", doneLabel: "Clipped", description: "Extracting the best segment with zero quality loss" },
+  { id: 5, label: "Subtitles", activeLabel: "Building word subtitles", doneLabel: "Subtitles ready", description: "Creating frame-accurate word-by-word captions" },
+  { id: 6, label: "Finalizing", activeLabel: "Burning subtitles", doneLabel: "Ready!", description: "Encoding the final video with embedded captions" },
 ];
 
 // ---------------------------------------------------------------------------
@@ -466,15 +409,13 @@ export default function AIClipper({ onClose }: AIClipperProps) {
 
             if (event.type === "progress") {
               const stepMap: Record<string, number> = {
-                info: 0,
-                audio: 1,
-                transcribe: 2,
-                keyframes: 3,
-                analyze: 4,
-                clip: 5,
-                subtitles: 6,
-                burn: 7,
-                caption: 8,
+                download: 0,
+                video: 0,
+                transcribe: 1,
+                analyze: 2,
+                clip: 3,
+                subtitles: 4,
+                burn: 5,
               };
               const stepIdx = stepMap[event.step] ?? -1;
 
