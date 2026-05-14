@@ -404,7 +404,7 @@ export default function AIClipper({ onClose }: AIClipperProps) {
               : ("top-centre" as const),
         moment_type: effectiveMomentType,
         quality: quality, // "low" or "high"
-        clip_name: clipName.trim() || undefined,
+        clip_name: clipName.trim() || "clip_final",
       };
 
       const response = await fetch("/api/clipper/start", {
