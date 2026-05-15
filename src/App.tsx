@@ -15,6 +15,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { GoogleGenAI } from "@google/genai";
 import {
   AppWindow,
+    Scissors,
   ArrowUpIcon,
   Check,
   ChevronRight,
@@ -305,6 +306,7 @@ export default function App() {
 
   const [selectedCommand, setSelectedCommand] =
     useState<CommandSuggestion | null>(null);
+  const [clipInitialUrl, setClipInitialUrl] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [chats, setChats] = useState<ChatSession[]>(() => {
     try {
@@ -1309,6 +1311,23 @@ Please analyze the code you just wrote and fix this error.`;
       const userCommandLabel = selectedCommand?.label;
       const userCommandId = selectedCommand?.id;
       const rawUserText = value.trim();
+      const clipCommand = rawUserText.match(/^\/clip(?:\s+(.+))?$/i);
+      if (userCommandId === "clip" || clipCommand) {
+        const clipCommandSource = clipCommand?.[1]?.trim() ?? rawUserText;
+        setClipInitialUrl(
+          clipCommandSource && !clipCommandSource.startsWith("/clip")
+            ? clipCommandSource
+            : "",
+        );
+        setSelectedCommand(
+          commandSuggestions.find((command) => command.id === "clip") ?? null,
+        );
+        setValue("");
+        adjustHeight(true);
+        setRecentCommand(null);
+        setShowCommandPalette(false);
+        return;
+      }
       const userText =
         rawUserText || (userCommandLabel ? `Execute ${userCommandLabel}` : "");
       setValue("");
@@ -1510,6 +1529,7 @@ Please analyze the code you just wrote and fix this error.`;
   const selectCommandSuggestion = (index: number) => {
     const selectedCmd = commandSuggestions[index];
     setSelectedCommand(selectedCmd);
+    setClipInitialUrl("");
     setValue("");
     setShowCommandPalette(false);
     setTimeout(() => {
@@ -1582,6 +1602,15 @@ Please analyze the code you just wrote and fix this error.`;
                     >
                       <SquarePen className="w-4 h-4 stroke-[2]" />
                       New chat
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setSelectedCommand({ id: 'clip', icon: () => null, label: 'AI Clip', description: '', prefix: '/clip' }); }}
+                      className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-slate-100 text-slate-700 transition-colors font-medium text-[13.5px]"
+                    >
+                      <Scissors className="w-4 h-4 stroke-[2]" />
+                      <span className="flex-1 text-left">Clips</span>
+                      <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
                     </button>
                     <button
                       type="button"
@@ -2052,7 +2081,9 @@ Please analyze the code you just wrote and fix this error.`;
                   showVibeLivePreview
                     ? "min-w-0 flex-1 px-3 sm:px-4"
                     : "max-w-3xl mx-auto",
-                  messages.length === 0
+                  selectedCommand?.id === "clip"
+                    ? "px-0 sm:px-0"
+                    : messages.length === 0
                     ? "justify-center px-4 sm:px-6"
                     : cn(
                         "pt-12 sm:pt-14",
@@ -2061,7 +2092,13 @@ Please analyze the code you just wrote and fix this error.`;
                 )}
               >
                 {selectedCommand?.id === "clip" ? (
-                  <AIClipper onClose={() => setSelectedCommand(null)} />
+                  <AIClipper
+                    initialUrl={clipInitialUrl}
+                    onClose={() => {
+                      setSelectedCommand(null);
+                      setClipInitialUrl("");
+                    }}
+                  />
                 ) : messages.length === 0 ? (
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}

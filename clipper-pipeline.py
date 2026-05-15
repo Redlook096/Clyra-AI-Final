@@ -1,138 +1,533 @@
 #!/usr/bin/env python3
-"""Premium clipper — captions instant, Whisper on clip, strict one-word subs. ~30-90s."""
-import sys, json, os, subprocess, shutil, re, time, xml.etree.ElementTree as ET
-from threading import Thread
+"""AI clipper pipeline with word-accurate subtitles.
 
-FF = os.path.join(os.path.expanduser("~"), "bin", "ffmpeg")
-FFMPEG = FF if os.path.exists(FF) else "ffmpeg"
+Captions are used for fast moment selection only. Subtitle timing comes from
+Whisper word timestamps generated from the exact clipped audio/video file, then
+burned onto that same file so words line up with the final MP4.
+"""
 
-def log(step, status, **kw):
-    print(json.dumps({"type":"progress","step":step,"status":status,**kw}), flush=True)
-def error(msg):
-    print(json.dumps({"type":"error","message":msg}), flush=True); sys.exit(1)
+import hashlib
+import html
+import json
+import os
+import re
+import shutil
+import subprocess
+import sys
+import time
+import xml.etree.ElementTree as ET
+
+
+TMP_ROOT = "./tmp"
+OUTPUT_DIR = "./output"
+
+
+def emit(step, status, **data):
+    print(json.dumps({"type": "progress", "step": step, "status": status, **data}), flush=True)
+
+
+def fail(message):
+    print(json.dumps({"type": "error", "message": message}), flush=True)
+    sys.exit(1)
+
+
+def resolve_ffmpeg():
+    candidates = [
+        os.environ.get("FFMPEG_BINARY"),
+        os.path.join(os.path.expanduser("~"), "bin", "ffmpeg"),
+        shutil.which("ffmpeg"),
+    ]
+    for candidate in candidates:
+        if candidate and os.path.exists(candidate):
+            return candidate
+    try:
+        import imageio_ffmpeg
+
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return "ffmpeg"
+
+
+FFMPEG = resolve_ffmpeg()
+
+
+def clean_name(value):
+    name = re.sub(r"[^\w\s-]", "", value or "clip").strip()
+    name = re.sub(r"\s+", "-", name).lower()[:50]
+    return name or "clip"
+
+
+def fmt_time(seconds):
+    minutes = int(seconds // 60)
+    return f"{minutes}:{int(seconds % 60):02d}"
+
+
+def parse_duration(value, default=40.0):
+    try:
+        duration = float(value)
+    except (TypeError, ValueError):
+        duration = default
+    return max(12.0, min(60.0, duration))
+
+
+def parse_captions(caption_track):
+    words = []
+    root = ET.fromstring(caption_track.xml_captions)
+    for element in root.iter():
+        if element.tag != "text":
+            continue
+        raw_text = html.unescape(element.text or "")
+        text = re.sub(r"\s+", " ", raw_text).strip()
+        if not text:
+            continue
+        try:
+            start = float(element.get("start", "0"))
+            duration = max(0.2, float(element.get("dur", "1")))
+        except ValueError:
+            continue
+        tokens = [token for token in re.findall(r"[A-Za-z0-9']+", text.upper()) if token]
+        if not tokens:
+            continue
+        word_duration = duration / len(tokens)
+        for index, token in enumerate(tokens):
+            word_start = start + index * word_duration
+            words.append(
+                {
+                    "word": token[:28],
+                    "start": word_start,
+                    "end": min(start + duration, word_start + word_duration),
+                }
+            )
+    return words
+
+
+def load_caption_words(yt):
+    captions = yt.captions
+    if not captions:
+        return []
+
+    preferred_keys = ("a.en", "en", "en-US", "a.en-US")
+    tracks = []
+    for key in preferred_keys:
+        try:
+            track = captions.get(key)
+        except Exception:
+            track = None
+        if track:
+            tracks.append(track)
+
+    try:
+        tracks.extend(list(captions.values()))
+    except Exception:
+        pass
+
+    seen = set()
+    for track in tracks:
+        track_id = id(track)
+        if track_id in seen:
+            continue
+        seen.add(track_id)
+        try:
+            words = parse_captions(track)
+        except Exception:
+            words = []
+        if len(words) >= 20:
+            return words
+    return []
+
+
+def keyword_set(moment_type):
+    base = {
+        "viral": "wow reveal shocked insane best secret never crazy huge amazing",
+        "funny": "laugh funny hilarious joke awkward silly ridiculous",
+        "dramatic": "problem danger mistake wrong serious impossible finally",
+        "inspiring": "dream build believe learn changed future possible",
+        "surprising": "suddenly surprise unexpected reveal secret actually",
+        "action": "go move run hit jump fight fast start now",
+    }
+    custom = re.findall(r"[a-z0-9']+", (moment_type or "").lower())
+    if custom and moment_type not in base:
+        return set(custom)
+    return set(base.get(moment_type, base["viral"]).split())
+
+
+def choose_moment(words, video_duration, moment_type, target_duration, clip_name, url):
+    if video_duration <= 0:
+        return 0.0, target_duration, "Selected the strongest available transcript window"
+
+    target = min(target_duration, max(8.0, video_duration - 1.0))
+    max_start = max(0.0, video_duration - target)
+    keywords = keyword_set(moment_type)
+    seed_hex = hashlib.sha1(f"{url}|{clip_name}|{moment_type}|{time.time_ns()}".encode()).hexdigest()
+    seed = int(seed_hex[:8], 16)
+
+    if not words:
+        start = min(max_start, video_duration * (0.18 + (seed % 22) / 100))
+        return round(start, 1), round(min(video_duration, start + target), 1), "Selected a stable middle section"
+
+    candidates = [0.0]
+    candidates.extend(word["start"] for index, word in enumerate(words) if index % 18 == 0)
+    candidates.extend([video_duration * 0.18, video_duration * 0.34, video_duration * 0.52, video_duration * 0.68])
+
+    best = (float("-inf"), 0.0, "Selected the densest transcript section")
+    for raw_start in candidates:
+        start = min(max(0.0, raw_start), max_start)
+        end = min(video_duration, start + target)
+        window = [word for word in words if start <= word["start"] <= end]
+        if not window:
+            continue
+        density = len(window) / max(target, 1.0)
+        matches = sum(1 for word in window if word["word"].lower() in keywords)
+        unique_ratio = len({word["word"] for word in window}) / max(len(window), 1)
+        punctuation_energy = sum(1 for word in window if len(word["word"]) >= 8)
+        position_bonus = 0.25 if video_duration * 0.08 <= start <= video_duration * 0.82 else 0
+        jitter = ((seed + int(start * 10)) % 17) / 100
+        score = density * 3.2 + matches * 0.9 + unique_ratio * 1.4 + punctuation_energy * 0.025 + position_bonus + jitter
+        if score > best[0]:
+            reason = "Matched the prompt with a dense, high-energy caption window"
+            best = (score, start, reason)
+
+    start = best[1]
+    return round(start, 1), round(min(video_duration, start + target), 1), best[2]
+
+
+def select_progressive_stream(yt):
+    streams = list(yt.streams.filter(progressive=True, file_extension="mp4"))
+    if not streams:
+        fail("No browser-friendly MP4 stream is available for this video")
+
+    def height(stream):
+        match = re.search(r"(\d+)", stream.resolution or "")
+        return int(match.group(1)) if match else 9999
+
+    sorted_streams = sorted(streams, key=height)
+    under_360 = [stream for stream in sorted_streams if height(stream) <= 360]
+    return under_360[-1] if under_360 else sorted_streams[0]
+
+
+def ass_color(hex_color):
+    value = (hex_color or "#FFFFFF").lstrip("#")
+    if not re.fullmatch(r"[0-9a-fA-F]{6}", value):
+        value = "FFFFFF"
+    return f"&H00{value[4:6]}{value[2:4]}{value[0:2]}"
+
+
+def ass_time_cs(total_cs):
+    total_cs = max(0, int(total_cs))
+    minutes = total_cs // 6000
+    seconds = (total_cs // 100) % 60
+    centiseconds = total_cs % 100
+    return f"0:{minutes:02d}:{seconds:02d}.{centiseconds:02d}"
+
+
+def ass_text(value):
+    return re.sub(r"[{}\\]", "", value)
+
+
+def subtitle_override(position):
+    anchors = {
+        "top": (8, 64),
+        "top-centre": (8, 64),
+        "center": (5, 180),
+        "centre": (5, 180),
+        "bottom": (2, 248),
+        "bottom-centre": (2, 248),
+    }
+    alignment, y = anchors.get(position, anchors["bottom"])
+    return alignment, f"{{\\an{alignment}\\pos(320,{y})\\q2\\bord4\\shad0}}"
+
+
+def subtitle_beats(words, clip_start, clip_end):
+    clip_length = max(0.1, clip_end - clip_start)
+    clip_length_cs = int(clip_length * 100)
+    clip_words = sorted(
+        [word for word in words if clip_start <= word["start"] <= clip_end],
+        key=lambda word: (word["start"], word["end"], word["word"]),
+    )
+    if not clip_words:
+        clip_words = [{"word": "CLIP", "start": clip_start, "end": clip_start + 0.8}]
+
+    beats = []
+    gap_cs = 2
+    min_duration_cs = 5
+    max_duration_cs = 72
+
+    for index, word in enumerate(clip_words):
+        start_cs = max(0, min(clip_length_cs - 1, int(round((word["start"] - clip_start) * 100))))
+        if start_cs >= clip_length_cs - 1:
+            break
+
+        natural_end_cs = max(start_cs + min_duration_cs, int(round((word["end"] - clip_start) * 100)))
+        next_start_cs = clip_length_cs + 1
+        if index + 1 < len(clip_words):
+            next_start_cs = max(start_cs + 1, int(round((clip_words[index + 1]["start"] - clip_start) * 100)))
+
+        hard_end_cs = min(clip_length_cs, start_cs + max_duration_cs, next_start_cs - gap_cs)
+        if hard_end_cs <= start_cs:
+            continue
+
+        end_cs = min(max(natural_end_cs, start_cs + min_duration_cs), hard_end_cs)
+        if end_cs <= start_cs:
+            continue
+
+        beats.append((start_cs, end_cs, ass_text(word["word"])))
+
+    return beats
+
+
+def write_subtitles(path, words, clip_start, clip_end, font, font_size, color, position):
+    alignment, override = subtitle_override(position)
+    beats = subtitle_beats(words, clip_start, clip_end)
+
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write("[Script Info]\n")
+        handle.write("ScriptType: v4.00+\nPlayResX: 640\nPlayResY: 360\nWrapStyle: 2\nScaledBorderAndShadow: yes\n")
+        handle.write("\n[V4+ Styles]\n")
+        handle.write(
+            "Format: Name,Fontname,Fontsize,PrimaryColour,OutlineColour,BackColour,Bold,Alignment,MarginL,MarginR,MarginV,Outline,Shadow,Encoding\n"
+        )
+        handle.write(
+            f"Style: Word,{font},{font_size},{ass_color(color)},&H00000000,&H80000000,1,{alignment},20,20,20,4,0,1\n"
+        )
+        handle.write("\n[Events]\n")
+        handle.write("Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text\n")
+        for start_cs, end_cs, word in beats:
+            handle.write(f"Dialogue: 0,{ass_time_cs(start_cs)},{ass_time_cs(end_cs)},Word,,0,0,0,,{override}{word}\n")
+    return len(beats)
+
+
+def run_ffmpeg(args, timeout=90):
+    subprocess.run([FFMPEG, "-hide_banner", "-loglevel", "error", "-y", *args], check=True, capture_output=True, timeout=timeout)
+
+
+def extract_clean_clip(input_url, local_fallback_path, clip_path, clip_start, clip_duration):
+    base = [
+        "-ss",
+        str(clip_start),
+        "-i",
+        input_url,
+        "-t",
+        str(clip_duration),
+        "-vf",
+        "scale=640:-2:flags=bicubic",
+        "-c:v",
+        "libx264",
+        "-preset",
+        "veryfast",
+        "-crf",
+        "28",
+        "-pix_fmt",
+        "yuv420p",
+        "-c:a",
+        "aac",
+        "-b:a",
+        "128k",
+        "-ar",
+        "16000",
+        "-ac",
+        "1",
+        "-movflags",
+        "+faststart",
+        clip_path,
+    ]
+    try:
+        run_ffmpeg(base, timeout=90)
+        return
+    except subprocess.CalledProcessError:
+        if not local_fallback_path:
+            raise
+
+    fallback = base.copy()
+    input_index = fallback.index(input_url)
+    fallback[input_index] = local_fallback_path
+    run_ffmpeg(fallback, timeout=90)
+
+
+def transcribe_clip_words(clip_path):
+    import whisper
+
+    model_name = os.environ.get("CLIPPER_WHISPER_MODEL", "base.en")
+    model = whisper.load_model(model_name)
+    result = model.transcribe(
+        clip_path,
+        word_timestamps=True,
+        language="en",
+        fp16=False,
+        temperature=0,
+        condition_on_previous_text=False,
+        verbose=False,
+    )
+
+    words = []
+    for segment in result.get("segments", []):
+        for item in segment.get("words", []) or []:
+            token = re.sub(r"[^A-Za-z0-9']+", "", str(item.get("word", "")).strip()).upper()
+            if not token:
+                continue
+            try:
+                start = max(0.0, float(item.get("start", 0.0)))
+                end = max(start + 0.05, float(item.get("end", start + 0.2)))
+            except (TypeError, ValueError):
+                continue
+            words.append({"word": token[:28], "start": start, "end": end})
+    return words
+
+
+def caption_words_relative(words, clip_start, clip_end):
+    return [
+        {"word": word["word"], "start": max(0.0, word["start"] - clip_start), "end": max(0.05, word["end"] - clip_start)}
+        for word in words
+        if clip_start <= word["start"] <= clip_end
+    ]
+
+
+def burn_subtitles(source_clip_path, output_path, subtitle_path):
+    subtitle_filter = f"drawbox=x=0:y=292:w=iw:h=68:color=black@1.0:t=fill,ass={subtitle_path}"
+    run_ffmpeg(
+        [
+            "-i",
+            source_clip_path,
+            "-vf",
+            subtitle_filter,
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "24",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "copy",
+            "-movflags",
+            "+faststart",
+            output_path,
+        ],
+        timeout=90,
+    )
+
 
 def main():
-    if len(sys.argv) < 2: error("Usage: clipper-pipeline.py <url> [config]")
+    if len(sys.argv) < 2:
+        fail("Usage: clipper-pipeline.py <url> [config]")
+
     url = sys.argv[1].strip()
     cfg = json.loads(sys.argv[2]) if len(sys.argv) > 2 else {}
-    font = cfg.get("font","Impact"); fs = int(cfg.get("font_size",52))
-    tc = cfg.get("text_colour","#FFFFFF"); pos = cfg.get("position","bottom")
-    mt = cfg.get("moment_type","viral"); cl = int(cfg.get("clip_duration",40))
-    cn = re.sub(r'[^\w\s-]','',cfg.get("clip_name","clip_final")).strip()[:50] or "clip_final"
-    td, od = "./tmp", "./output"
-    os.makedirs(td,exist_ok=True); os.makedirs(od,exist_ok=True)
-    t0 = time.time()
-    log("start","running",message="Analyzing video...",url=url)
-    try:
-        from pytubefix import YouTube; import whisper
-        yt = YouTube(url); title, dur = yt.title, yt.length
-        words = []
-        
-        # STEP 1: Download + captions
-        log("download","running",message=f"Downloading \"{title[:60]}...\"")
-        def dv():
-            s = (yt.streams.get_by_resolution("1080p") or yt.streams.get_by_resolution("720p")
-                 or yt.streams.filter(progressive=True).order_by("resolution").desc().first())
-            s.download(td, filename="video.mp4")
-        def gc():
-            try:
-                caps = yt.captions
-                track = caps.get('a.en') or caps.get('en') or (list(caps.values())[0] if caps else None)
-                if track:
-                    root = ET.fromstring(track.xml_captions)
-                    for el in root:
-                        if el.tag == 'text':
-                            s = float(el.get('start','0')); d = float(el.get('dur','1'))
-                            txt = re.sub(r'[^\w\s]','',(el.text or '')).strip().upper()
-                            wds = txt.split(); wd = d/max(len(wds),1)
-                            for i,w in enumerate(wds):
-                                if w: words.append({"word":w,"start":s+i*wd,"end":s+(i+1)*wd})
-            except: pass
-        t1,t2 = Thread(target=dv), Thread(target=gc)
-        t1.start(); t2.start(); t1.join(); t2.join()
-        vp = os.path.join(td,"video.mp4")
-        if not os.path.exists(vp): error("Download failed")
-        if not words: error("No captions available")
-        log("download","complete",message=f"\"{title}\" · {len(words)} words · {int(dur//60)}:{int(dur%60):02d}",title=title,duration=dur,word_count=len(words))
-        
-        # STEP 2: AI find moment
-        log("analyze","running",message=f"Scanning {len(words)} words for best {mt} moment...")
-        cs,ce = dur*.15, min(dur*.15+cl,dur); reason="Auto"
-        try:
-            import urllib.request
-            tx = " ".join(f"[{w['start']:.0f}]{w['word']}" for w in words[:2500])
-            prompt = f"Find best {cl}s {mt} clip. Reply ONLY JSON: {{\"start\":0,\"end\":{cl},\"reason\":\"why\"}}\n\n{tx}"
-            req = urllib.request.Request("http://localhost:3000/api/deepseek/chat",
-                data=json.dumps({"model":"deepseek-chat","messages":[{"role":"user","content":prompt}],"temperature":0.7,"max_tokens":120,"stream":False}).encode(),
-                headers={"Content-Type":"application/json"})
-            resp = urllib.request.urlopen(req,timeout=25)
-            ai = json.loads(resp.read()).get("choices",[{}])[0].get("message",{}).get("content","")
-            m2 = re.search(r'\{.*\}',ai,re.DOTALL)
-            if m2:
-                c = json.loads(m2.group()); cs=float(c.get("start",dur*.15)); ce=float(c.get("end",min(cs+cl,dur)))
-                reason=c.get("reason",reason)
-        except:
-            seed=int(time.time()*1000)%100
-            secs=[(.05,.15),(.15,.25),(.25,.35),(.35,.50),(.50,.65),(.60,.75),(.70,.85),(.10,.20),(.30,.45),(.55,.70)]
-            s=secs[seed%len(secs)]; cs=max(0,dur*s[0]); ce=min(dur,max(cs+cl*.75,dur*s[1]))
-            reason=f"Auto seed {seed}"
-        cd=ce-cs
-        if cd<cl*.6: ce=min(dur,cs+cl)
-        if cd>cl: ce=cs+cl
-        cd=ce-cs; cs,ce=round(cs,1),round(ce,1)
-        log("analyze","complete",message=f"Best moment: {reason}",reason=reason,clip_start=cs,clip_end=ce,clip_duration=round(cd,1))
-        
-        # STEP 3: -c copy cut
-        log("cut","running",message=f"Extracting {round(cd)}s clip...")
-        cp=os.path.join(td,"clip.mp4")
-        subprocess.run([FFMPEG,"-y","-ss",str(cs),"-i",vp,"-t",str(cd),"-c","copy",cp],check=True,capture_output=True,timeout=30)
-        log("cut","complete",message=f"Clip extracted ({round(cd)}s)")
-        
-        # STEP 4: Whisper on clip
-        log("subtitles","running",message="Generating word-accurate subtitles...")
-        m3=whisper.load_model("tiny")
-        r3=m3.transcribe(cp,word_timestamps=True,language="en",fp16=False)
-        cw=[]
-        for seg in r3.get("segments",[]):
-            for w in seg.get("words",[]):
-                wt=re.sub(r'[^\w\s]','',w["word"].strip()).upper()
-                if wt: cw.append({"word":wt,"start":float(w["start"]),"end":float(w["end"])})
-        # Caption fallback
-        if len(cw)<20 and len(words)>20:
-            cw2=[{"word":w["word"],"start":w["start"]-cs,"end":w["end"]-cs} for w in words if cs<=w["start"]<=ce]
-            if len(cw2)>len(cw): cw=cw2
-        
-        # STEP 5: Strict one-word-at-a-time ASS (NO gaps, NO overlaps)
-        def hb(h): h=h.lstrip("#"); return f"&H00{h[4:6]}{h[2:4]}{h[0:2]}"
-        am={"bottom":2,"bottom-centre":2,"centre":5,"center":5,"top":8,"top-centre":8}
-        al=am.get(pos,5); mv=80 if al==2 else 0
-        def t_ass(s): return f"0:{int(s//60):02d}:{s%60:05.2f}"
-        ap=os.path.join(td,"subs.ass")
-        with open(ap,"w") as f:
-            f.write(f"[Script Info]\nPlayResX:1280\nPlayResY:720\n[V4+ Styles]\nFormat: Name,Fontname,Fontsize,PrimaryColour,OutlineColour,Bold,Alignment,MarginV,Outline,Shadow\nStyle: W,{font},{fs},{hb(tc)},{hb('#000000')},1,{al},{mv},4,0\n[Events]\nFormat: Layer,Start,End,Style,Text\n")
-            for i,w in enumerate(cw):
-                ws = max(0, w["start"])
-                we = cw[i+1]["start"] if i+1 < len(cw) else w["end"] + 0.4
-                if we - ws < 0.1: we = ws + 0.1
-                f.write(f"Dialogue: 0,{t_ass(ws)},{t_ass(we)},W,,{w['word']}\n")
-        log("subtitles","complete",message=f"{len(cw)} word subtitles · no gaps · {font} {fs}px",word_count=len(cw))
-        
-        # STEP 6: Burn
-        log("burn","running",message="Encoding final video...")
-        op=os.path.join(od,f"{cn}.mp4")
-        subprocess.run([FFMPEG,"-y","-i",cp,"-vf",f"ass={ap}","-c:v","libx264","-preset","medium","-crf","20","-c:a","copy",op],check=True,capture_output=True,timeout=90)
-        log("burn","complete",message=f"Complete! {cn}.mp4")
-        shutil.rmtree(td,ignore_errors=True)
-        elapsed=time.time()-t0
-        ct=[w["word"] for w in cw if len(w["word"])>2]
-        cap=" ".join(ct[:15])[:150] if ct else title[:120]
-        ht={"viral":"#mustwatch #viral","funny":"#funny","dramatic":"#drama","inspiring":"#inspiration","surprising":"#wow","action":"#action"}.get(mt,"#mustwatch")
-        wps=len(cw)/max(cd,1); uniq=len(set(w["word"] for w in cw))
-        scv=round(min(10,max(1,5+wps*.5+(uniq/max(len(cw),1))*2)),1)
-        log("complete","complete",message=f"Done in {round(elapsed)}s",output=f"./output/{cn}.mp4",title=title,original_duration=f"{int(dur//60)}:{int(dur%60):02d}",clip_duration=f"{round(cd)}s",font=font,font_size=fs,position=pos,reason=reason,moment_type=mt,caption=cap,hashtags=ht,virality_score=scv,total_seconds=round(elapsed))
-    except Exception as exc:
-        shutil.rmtree(td,ignore_errors=True)
-        error(f"{type(exc).__name__}: {exc}")
+    font = str(cfg.get("font", "Impact"))
+    font_size = int(cfg.get("font_size", 52))
+    text_color = str(cfg.get("text_colour", "#FFFFFF"))
+    position = str(cfg.get("position", "bottom"))
+    moment_type = str(cfg.get("moment_type", "viral"))
+    requested_duration = parse_duration(cfg.get("clip_duration", 40))
+    base_name = clean_name(str(cfg.get("clip_name", "clip")))
+    job_id = f"{base_name}-{int(time.time() * 1000) % 1000000}"
+    output_name = f"{job_id}.mp4"
 
-if __name__=="__main__":
+    os.makedirs(TMP_ROOT, exist_ok=True)
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    job_tmp = os.path.join(TMP_ROOT, job_id)
+    os.makedirs(job_tmp, exist_ok=True)
+    started = time.time()
+
+    try:
+        from pytubefix import YouTube
+
+        emit("captions", "running", message="Reading captions and video metadata...")
+        yt = YouTube(url)
+        title = yt.title or "YouTube video"
+        duration = float(yt.length or requested_duration)
+        words = load_caption_words(yt)
+        emit(
+            "captions",
+            "complete",
+            message=f"{len(words)} caption words loaded from \"{title[:56]}\"" if words else f"No captions found for \"{title[:56]}\"; using a stable window",
+            title=title,
+            duration=duration,
+            word_count=len(words),
+        )
+
+        emit("analyze", "running", message=f"Finding the best {int(requested_duration)}s moment...")
+        clip_start, clip_end, reason = choose_moment(words, duration, moment_type, requested_duration, base_name, url)
+        clip_duration = max(6.0, clip_end - clip_start)
+        emit(
+            "analyze",
+            "complete",
+            message=reason,
+            reason=reason,
+            clip_start=clip_start,
+            clip_end=clip_end,
+            clip_duration=round(clip_duration, 1),
+        )
+
+        emit("clip", "running", message="Cutting the exact clip for transcription...")
+        stream = select_progressive_stream(yt)
+        fallback_path = ""
+        clean_clip_path = os.path.join(job_tmp, f"{base_name}-clean.mp4")
+        output_path = os.path.join(OUTPUT_DIR, output_name)
+        try:
+            extract_clean_clip(stream.url, fallback_path, clean_clip_path, clip_start, clip_duration)
+        except Exception:
+            fallback_path = os.path.join(job_tmp, "source.mp4")
+            stream.download(job_tmp, filename="source.mp4")
+            extract_clean_clip(fallback_path, fallback_path, clean_clip_path, clip_start, clip_duration)
+
+        if not os.path.exists(clean_clip_path) or os.path.getsize(clean_clip_path) <= 1024:
+            fail("Clip extraction did not produce a playable source MP4")
+        emit("clip", "complete", message=f"Exact {round(clip_duration)}s clip extracted")
+
+        emit("transcribe", "running", message="Transcribing exact clip audio for word timing...")
+        transcribed_words = transcribe_clip_words(clean_clip_path)
+        if len(transcribed_words) < 5:
+            fallback_words = caption_words_relative(words, clip_start, clip_end)
+            if len(fallback_words) < 5:
+                fail("Could not produce enough word timestamps for accurate subtitles")
+            transcribed_words = fallback_words
+            timing_source = "caption fallback"
+        else:
+            timing_source = os.environ.get("CLIPPER_WHISPER_MODEL", "base.en")
+        emit("transcribe", "complete", message=f"{len(transcribed_words)} word timestamps from {timing_source}", word_count=len(transcribed_words), timing_source=timing_source)
+
+        emit("subtitles", "running", message="Building fixed-position one-word subtitle track...")
+        subtitle_path = os.path.join(job_tmp, f"{base_name}.ass")
+        subtitle_count = write_subtitles(subtitle_path, transcribed_words, 0.0, clip_duration, font, font_size, text_color, position)
+        emit("subtitles", "complete", message=f"{subtitle_count} frame-safe subtitle beats prepared", word_count=subtitle_count)
+
+        emit("render", "running", message="Burning accurate subtitles into final MP4...")
+        burn_subtitles(clean_clip_path, output_path, subtitle_path)
+
+        if not os.path.exists(output_path) or os.path.getsize(output_path) <= 1024:
+            fail("Encoder did not produce a playable MP4")
+
+        emit("render", "complete", message=f"MP4 ready at 640px wide ({os.path.getsize(output_path) // 1024} KB)")
+        elapsed = time.time() - started
+        caption_words = [word["word"] for word in transcribed_words if len(word["word"]) > 2]
+        emit(
+            "complete",
+            "complete",
+            message=f"Done in {round(elapsed)}s",
+            output=f"./output/{output_name}",
+            title=title,
+            original_duration=fmt_time(duration),
+            clip_duration=f"{round(clip_duration)}s",
+            font=font,
+            font_size=font_size,
+            position=position,
+            reason=reason,
+            moment_type=moment_type,
+            caption=" ".join(caption_words[:18])[:160],
+            hashtags={"viral": "#viral #shorts", "funny": "#funny #shorts", "dramatic": "#story #shorts"}.get(moment_type, "#shorts"),
+            virality_score=round(min(10, 6.5 + min(len(caption_words), 120) / 60), 1),
+            total_seconds=round(elapsed),
+            file_size=os.path.getsize(output_path),
+            timing_source=timing_source,
+        )
+    except SystemExit:
+        raise
+    except Exception as exc:
+        fail(f"{type(exc).__name__}: {exc}")
+    finally:
+        shutil.rmtree(job_tmp, ignore_errors=True)
+
+
+if __name__ == "__main__":
     main()

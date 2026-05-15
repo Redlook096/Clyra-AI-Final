@@ -9,6 +9,7 @@ dotenv.config({ path: path.join(_envRoot, ".env.local"), override: true });
 import { Readable } from "node:stream";
 import { spawn } from "node:child_process";
 import { homedir } from "node:os";
+import { existsSync } from "node:fs";
 
 async function startServer() {
   const app = express();
@@ -86,7 +87,7 @@ async function startServer() {
 `); };
     const scriptPath = path.join(process.cwd(), "clipper-pipeline.py");
     const homeBin = path.join(homedir(), "bin");
-    send("progress", { step: "download", status: "running", message: "Starting..." });
+    send("progress", { step: "captions", status: "running", message: "Starting..." });
     const proc = spawn("python3", [scriptPath, url, JSON.stringify(cfg || {})], {
       env: { ...process.env, PYTHONUNBUFFERED: "1", PATH: `${process.env.PATH || ""}:${homeBin}` },
       stdio: ["pipe", "pipe", "pipe"]
@@ -112,6 +113,25 @@ async function startServer() {
     setHeaders: (res) => { res.setHeader("Content-Type", "video/mp4"); res.setHeader("Accept-Ranges", "bytes"); },
     fallthrough: false
   }));
+
+  app.get("/api/clipper/download/:filename", (req, res) => {
+    const filename = path.basename(req.params.filename || "");
+    if (!/^[\w.-]+\.mp4$/i.test(filename)) {
+      res.status(400).json({ error: "Invalid clip filename" });
+      return;
+    }
+
+    const filePath = path.join(process.cwd(), "output", filename);
+    if (!existsSync(filePath)) {
+      res.status(404).json({ error: "Clip not found" });
+      return;
+    }
+
+    res.setHeader("Content-Type", "video/mp4");
+    res.setHeader("Accept-Ranges", "bytes");
+    res.setHeader("Content-Disposition", `inline; filename="${filename}"`);
+    res.sendFile(filePath);
+  });
 
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");
