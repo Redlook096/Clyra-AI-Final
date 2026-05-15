@@ -2092,9 +2092,7 @@ Please analyze the code you just wrote and fix this error.`;
                 )}
               >
                 {selectedCommand?.id === "clip" ? (
-                  <AIClipper
-                    initialUrl={clipInitialUrl}
-                    onClose={() => {
+                  <AIClipper onClose={() => {
                       setSelectedCommand(null);
                       setClipInitialUrl("");
                     }}
