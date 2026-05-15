@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Fast AI Auto-Clipper. Audio→Whisper tiny→AI→copy cut→subs→burn. Target <60s."""
-import sys, json, os, subprocess, shutil, re, time
+"""Fast clipper — captions for speed, Whisper on clip for accuracy. 720p, <60s."""
+import sys, json, os, subprocess, shutil, re, time, xml.etree.ElementTree as ET
+from threading import Thread
 
 FF = os.path.join(os.path.expanduser("~"), "bin", "ffmpeg")
 FFMPEG = FF if os.path.exists(FF) else "ffmpeg"
@@ -25,37 +26,43 @@ def main():
     try:
         from pytubefix import YouTube; import whisper
         yt = YouTube(url); title, dur = yt.title, yt.length
-        
-        # STEP 1: Audio only + video in background
-        log("download","running",message="Downloading audio...")
-        audio = yt.streams.filter(only_audio=True).order_by("abr").last()
-        if not audio: audio = yt.streams.filter(only_audio=True).first()
-        ap = audio.download(td, filename="audio.mp4")
-        vid = (yt.streams.get_by_resolution("720p") 
-               or yt.streams.filter(progressive=True,res="480p").first()
-               or yt.streams.filter(progressive=True).first())
-        vp = vid.download(td, filename="video.mp4")
-        log("download","complete",message="Ready",title=title,duration=dur)
-        
-        # STEP 2: Whisper tiny
-        log("transcribe","running",message="Transcribing...")
-        m = whisper.load_model("tiny")
-        r = m.transcribe(ap, word_timestamps=True, language="en", fp16=False)
         words = []
-        for seg in r.get("segments",[]):
-            for w in seg.get("words",[]):
-                wt = re.sub(r'[^\w\s]','',w["word"].strip()).upper()
-                if wt: words.append({"word":wt,"start":float(w["start"]),"end":float(w["end"])})
-        os.remove(ap)
-        ft = " ".join(f"[{x['start']:.1f}]{x['word']}" for x in words)
-        log("transcribe","complete",message=f"{len(words)} words",word_count=len(words))
         
-        # STEP 3: AI find moment
+        # STEP 1: 720p video + captions in parallel (FAST)
+        log("download","running",message="Downloading 720p + captions...")
+        def dv():
+            s = (yt.streams.get_by_resolution("720p")
+                 or yt.streams.filter(progressive=True,res="480p").first()
+                 or yt.streams.filter(progressive=True).first())
+            s.download(td, filename="video.mp4")
+        def gc():
+            try:
+                caps = yt.captions
+                track = caps.get('a.en') or caps.get('en') or (list(caps.values())[0] if caps else None)
+                if track:
+                    root = ET.fromstring(track.xml_captions)
+                    for el in root:
+                        if el.tag == 'text':
+                            s = float(el.get('start','0')); d = float(el.get('dur','1'))
+                            txt = re.sub(r'[^\w\s]','',(el.text or '')).strip().upper()
+                            wds = txt.split(); wd = d/max(len(wds),1)
+                            for i,w in enumerate(wds):
+                                if w: words.append({"word":w,"start":s+i*wd,"end":s+(i+1)*wd})
+            except: pass
+        t1,t2 = Thread(target=dv), Thread(target=gc)
+        t1.start(); t2.start(); t1.join(); t2.join()
+        vp = os.path.join(td,"video.mp4")
+        if not os.path.exists(vp): error("Video download failed")
+        if not words: error("No captions available")
+        log("download","complete",message=f"{len(words)} words",title=title,duration=dur,word_count=len(words))
+        
+        # STEP 2: AI find moment (FAST - captions only)
         log("analyze","running",message=f"Finding {mt}...")
         cs,ce = dur*.15, min(dur*.15+40,dur); reason="Auto"
         try:
             import urllib.request
-            prompt = f"Find best 30-45s {mt} clip. Reply ONLY JSON: {{\"start\":0,\"end\":45,\"reason\":\"why\"}}\n\n{ft[:3000]}"
+            tx = " ".join(f"[{w['start']:.0f}]{w['word']}" for w in words[:2000])
+            prompt = f"Find best 30-40s {mt} clip. Reply ONLY JSON: {{\"start\":0,\"end\":40,\"reason\":\"why\"}}\n\n{tx}"
             req = urllib.request.Request("http://localhost:3000/api/deepseek/chat",
                 data=json.dumps({"model":"deepseek-chat","messages":[{"role":"user","content":prompt}],"temperature":0.7,"max_tokens":100,"stream":False}).encode(),
                 headers={"Content-Type":"application/json"})
@@ -72,43 +79,54 @@ def main():
             reason=f"Auto seed {seed}"
         cd=ce-cs
         if cd<25: ce=min(dur,cs+30)
-        if cd>45: ce=cs+45
+        if cd>40: ce=cs+40
         cd=ce-cs; cs,ce=round(cs,1),round(ce,1)
         log("analyze","complete",message=reason,reason=reason,clip_start=cs,clip_end=ce,clip_duration=round(cd,1))
         
-        # STEP 4: -c copy cut
+        # STEP 3: -c copy cut (INSTANT)
         log("cut","running",message=f"Cutting...")
         cp=os.path.join(td,"clip.mp4")
         subprocess.run([FFMPEG,"-y","-ss",str(cs),"-i",vp,"-t",str(cd),"-c","copy",cp],check=True,capture_output=True,timeout=30)
         log("cut","complete",message=f"Cut ({round(cd)}s)")
         
-        # STEP 5: ASS subtitles
-        log("subtitles","running",message="Building subtitles...")
+        # STEP 4: Whisper on clip ONLY for word-accurate timing
+        log("subtitles","running",message="Word-accurate subtitles...")
+        m3=whisper.load_model("tiny")
+        r3=m3.transcribe(cp,word_timestamps=True,language="en",fp16=False)
+        cw=[]
+        for seg in r3.get("segments",[]):
+            for w in seg.get("words",[]):
+                wt=re.sub(r'[^\w\s]','',w["word"].strip()).upper()
+                if wt: cw.append({"word":wt,"start":float(w["start"]),"end":float(w["end"])})
         def hb(h): h=h.lstrip("#"); return f"&H00{h[4:6]}{h[2:4]}{h[0:2]}"
         am={"bottom":2,"bottom-centre":2,"centre":5,"center":5,"top":8,"top-centre":8}
-        al=am.get(pos,2); mv=80 if al==2 else 0
+        al=am.get(pos,5); mv=0 if al==5 else 80
         def ts(s): return f"0:{int(s//60):02d}:{s%60:05.2f}"
-        cw=[w for w in words if cs<=w["start"]<=ce]
-        ap2=os.path.join(td,"subs.ass")
-        with open(ap2,"w") as f:
-            f.write(f"[Script Info]\nPlayResX:1280\nPlayResY:720\n[V4+ Styles]\nFormat: Name,Fontname,Fontsize,PrimaryColour,OutlineColour,Bold,Alignment,MarginV,Outline,Shadow\nStyle: W,{font},{fs},{hb(tc)},{hb('#000000')},1,{al},{mv},3,0\n[Events]\nFormat: Layer,Start,End,Style,Text\n")
-            for i, w in enumerate(cw):
-                ws = max(0, w["start"] - cs)
-                we = w["end"] - cs
-                # Minimum 0.15s duration for readability
-                if we - ws < 0.15: we = ws + 0.15
-                # Cap at next word start to prevent overlap
-                if i + 1 < len(cw):
-                    nxt = cw[i+1]["start"] - cs
-                    if we > nxt - 0.02: we = max(ws + 0.1, nxt - 0.02)
-                if ws < we:
-                    f.write(f"Dialogue: 0,{ts(ws)},{ts(we)},W,,{w['word']}\n")
+        ap=os.path.join(td,"subs.ass")
+        with open(ap,"w") as f:
+            f.write(f"[Script Info]\nPlayResX:1280\nPlayResY:720\n[V4+ Styles]\nFormat: Name,Fontname,Fontsize,PrimaryColour,OutlineColour,Bold,Alignment,MarginV,Outline,Shadow\nStyle: W,{font},{fs},{hb(tc)},{hb('#000000')},1,{al},{mv},4,0\n[Events]\nFormat: Layer,Start,End,Style,Text\n")
+            for i,w in enumerate(cw):
+                ws=max(0,w["start"]); we=w["end"]
+                if we-ws<0.15: we=ws+.15
+                if i+1<len(cw):
+                    nxt=cw[i+1]["start"]
+                    if we>nxt-.02: we=max(ws+.1,nxt-.02)
+                if ws<we: f.write(f"Dialogue: 0,{ts(ws)},{ts(we)},W,,{w['word']}\n")
+        # Fallback: if Whisper on clip returned too few words, use captions
+        if len(cw) < 20 and len(words) > 20:
+            cw2 = []
+            for w in words:
+                if cs <= w["start"] <= ce:
+                    cw2.append({"word": w["word"], "start": w["start"] - cs, "end": w["end"] - cs})
+            if len(cw2) > len(cw):
+                log("subtitles","progress",message=f"Using captions ({len(cw2)} words, Whisper had {len(cw)})")
+                cw = cw2
         log("subtitles","complete",message=f"{len(cw)} words",word_count=len(cw))
         
-        # STEP 6: Burn
+        # STEP 5: Burn
         log("burn","running",message="Burning...")
         op=os.path.join(od,f"{cn}.mp4")
-        subprocess.run([FFMPEG,"-y","-i",cp,"-vf",f"ass={ap2}","-c:v","libx264","-preset","ultrafast","-crf","23","-c:a","copy",op],check=True,capture_output=True,timeout=60)
+        subprocess.run([FFMPEG,"-y","-i",cp,"-vf",f"ass={ap}","-c:v","libx264","-preset","ultrafast","-crf","23","-c:a","copy",op],check=True,capture_output=True,timeout=60)
         log("burn","complete",message="Ready!")
         shutil.rmtree(td,ignore_errors=True)
         elapsed=time.time()-t0
@@ -117,8 +135,7 @@ def main():
         ht={"viral":"#mustwatch #viral","funny":"#funny","dramatic":"#drama","inspiring":"#inspiration","surprising":"#wow","action":"#action"}.get(mt,"#mustwatch")
         wps=len(cw)/max(cd,1); uniq=len(set(w["word"] for w in cw))
         scv=round(min(10,max(1,5+wps*.5+(uniq/max(len(cw),1))*2)),1)
-        lb="Very High" if scv>=8 else "High" if scv>=6 else "Moderate"
-        log("complete","complete",message=f"Done in {round(elapsed)}s",output=f"./output/{cn}.mp4",title=title,original_duration=f"{int(dur//60)}:{int(dur%60):02d}",clip_duration=f"{round(cd)}s",font=font,font_size=fs,position=pos,reason=reason,moment_type=mt,caption=cap,hashtags=ht,virality_score=scv,virality_label=lb,total_seconds=round(elapsed))
+        log("complete","complete",message=f"Done in {round(elapsed)}s",output=f"./output/{cn}.mp4",title=title,original_duration=f"{int(dur//60)}:{int(dur%60):02d}",clip_duration=f"{round(cd)}s",font=font,font_size=fs,position=pos,reason=reason,moment_type=mt,caption=cap,hashtags=ht,virality_score=scv,total_seconds=round(elapsed))
     except Exception as exc:
         shutil.rmtree(td,ignore_errors=True)
         error(f"{type(exc).__name__}: {exc}")
