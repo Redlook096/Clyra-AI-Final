@@ -7,6 +7,8 @@ const _envRoot = process.cwd();
 dotenv.config({ path: path.join(_envRoot, ".env") });
 dotenv.config({ path: path.join(_envRoot, ".env.local"), override: true });
 import { Readable } from "node:stream";
+import { spawn } from "node:child_process";
+import { homedir } from "node:os";
 
 async function startServer() {
   const app = express();
@@ -74,7 +76,42 @@ async function startServer() {
   app.post("/api/clyra/chat", handleClyraChat);
   app.post("/api/deepseek/chat", handleClyraChat);
 
+  // AI Clipper
+  app.post("/api/clipper/start", async (req, res) => {
+    const { url, config: cfg } = req.body || {};
+    if (!url) { res.status(400).json({ error: "YouTube URL required" }); return; }
+    res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" });
+    const send = (type, data) => { res.write(`data: ${JSON.stringify({ type, ...data })}
 
+`); };
+    const scriptPath = path.join(process.cwd(), "clipper-pipeline.py");
+    const homeBin = path.join(homedir(), "bin");
+    send("progress", { step: "download", status: "running", message: "Starting..." });
+    const proc = spawn("python3", [scriptPath, url, JSON.stringify(cfg || {})], {
+      env: { ...process.env, PYTHONUNBUFFERED: "1", PATH: `${process.env.PATH || ""}:${homeBin}` },
+      stdio: ["pipe", "pipe", "pipe"]
+    });
+    let buf = "";
+    proc.stdout.on("data", (chunk) => {
+      buf += chunk.toString();
+      const lines = buf.split("\n"); buf = lines.pop() || "";
+      for (const line of lines) {
+        const t = line.trim(); if (!t) continue;
+        try { const d = JSON.parse(t); send(d.type || "progress", d); }
+        catch { send("log", { message: t }); }
+      }
+    });
+    proc.stderr.on("data", (chunk) => { send("log", { message: chunk.toString().trim() }); });
+    proc.on("close", (code) => {
+      if (code !== 0) send("error", { message: `Pipeline failed code ${code}` });
+      res.end();
+    });
+    proc.on("error", (err) => { send("error", { message: err.message }); res.end(); });
+  });
+  app.use("/output", express.static(path.join(process.cwd(), "output"), {
+    setHeaders: (res) => { res.setHeader("Content-Type", "video/mp4"); res.setHeader("Accept-Ranges", "bytes"); },
+    fallthrough: false
+  }));
 
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");
@@ -91,8 +128,6 @@ async function startServer() {
       appType: "spa",
     });
     app.use(vite.middlewares);
-    
-
   } else {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
