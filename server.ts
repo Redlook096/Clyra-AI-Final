@@ -185,12 +185,7 @@ async function startServer() {
       });
 
       proc.on("close", (code: number | null) => {
-        if (code === 0) {
-          send("complete", {
-            message: "Clip ready!",
-            output: "./output/final_clip.mp4",
-          });
-        } else {
+        if (code !== 0) {
           send("error", { message: `Pipeline failed with code ${code}` });
         }
         res.end();
@@ -208,16 +203,17 @@ async function startServer() {
     }
   });
 
-
-
   // Serve output files BEFORE Vite (so they are not caught by SPA fallback)
-  app.use("/output", express.static(path.join(process.cwd(), "output"), {
-    setHeaders: (res) => {
-      res.setHeader("Content-Type", "video/mp4");
-      res.setHeader("Accept-Ranges", "bytes");
-    },
-    fallthrough: false
-  }));
+  app.use(
+    "/output",
+    express.static(path.join(process.cwd(), "output"), {
+      setHeaders: (res) => {
+        res.setHeader("Content-Type", "video/mp4");
+        res.setHeader("Accept-Ranges", "bytes");
+      },
+      fallthrough: false,
+    }),
+  );
 
   if (process.env.NODE_ENV !== "production") {
     const { createServer: createViteServer } = await import("vite");
@@ -234,8 +230,6 @@ async function startServer() {
       appType: "spa",
     });
     app.use(vite.middlewares);
-    
-
   } else {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));

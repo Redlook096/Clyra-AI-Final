@@ -47,7 +47,6 @@ import {
   extractVibeFilesFromContent,
   sanitizeVibeAgentContent,
 } from "./lib/parseVibeAgentContent";
-import AIClipper from "@/components/AIClipper";
 
 let geminiSingleton: GoogleGenAI | null = null;
 function getGeminiClient(): GoogleGenAI | null {
@@ -5310,9 +5309,7 @@ Please analyze the code you just wrote and fix this error.`;
                       ),
                 )}
               >
-                {selectedCommand?.id === "clip" ? (
-                  <AIClipper onClose={() => setSelectedCommand(null)} />
-                ) : messages.length === 0 ? (
+                {messages.length === 0 ? (
                   <motion.div
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -5461,7 +5458,7 @@ Please analyze the code you just wrote and fix this error.`;
                 )}
 
                 <AnimatePresence>
-                  {!isFullscreen && selectedCommand?.id !== "clip" && (
+                  {!isFullscreen && (
                     <motion.div
                       layout
                       ref={inputContainerRef}
