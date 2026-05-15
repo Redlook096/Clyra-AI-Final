@@ -27,6 +27,46 @@ export function MarkdownMessageContent({
   const soft = codePresentation === "soft";
 
   const components: Partial<Components> = {
+    a({ href, children, ...props }) {
+      const isClipperVideo =
+        typeof href === "string" &&
+        false &&
+        href.endsWith(".mp4");
+      if (isClipperVideo) {
+        return (
+          <span className="my-3 block overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
+            <video
+              src={href}
+              controls
+              preload="metadata"
+              className="block aspect-video w-full bg-slate-950"
+            />
+            <span className="flex items-center justify-between gap-3 px-3 py-2 text-[12px] font-semibold text-slate-600">
+              <span>Generated MP4</span>
+              <a
+                {...props}
+                href={href}
+                download
+                className="rounded-full bg-slate-950 px-3 py-1.5 text-white transition-colors hover:bg-slate-800"
+              >
+                {children}
+              </a>
+            </span>
+          </span>
+        );
+      }
+      return (
+        <a
+          {...props}
+          href={href}
+          target={href?.startsWith("http") ? "_blank" : undefined}
+          rel={href?.startsWith("http") ? "noopener noreferrer" : undefined}
+          className="font-semibold text-slate-900 underline decoration-slate-300 underline-offset-4 transition-colors hover:text-slate-600"
+        >
+          {children}
+        </a>
+      );
+    },
     code({ inline, className, children, ...props }: CodeProps) {
           const match = /language-(\w+)/.exec(className || "");
           const text = String(children).replace(/\n$/, "");
