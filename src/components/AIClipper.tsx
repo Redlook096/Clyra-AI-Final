@@ -10,13 +10,13 @@ interface Props {
 type Step = 0 | 1 | 2 | 3 | 4;
 type MomentType = 'viral' | 'funny' | 'dramatic' | 'inspiring' | 'surprising' | 'action' | '';
 
-const MOMENTS: { id: MomentType; icon: typeof Flame; label: string }[] = [
-  { id: 'viral', icon: Flame, label: 'Viral' },
-  { id: 'funny', icon: Laugh, label: 'Funny' },
-  { id: 'dramatic', icon: Star, label: 'Dramatic' },
-  { id: 'inspiring', icon: Sparkles, label: 'Inspiring' },
-  { id: 'surprising', icon: Zap, label: 'Surprising' },
-  { id: 'action', icon: Target, label: 'Action' },
+const MOMENTS: { id: MomentType; icon: typeof Flame; label: string; desc: string }[] = [
+  { id: 'viral', icon: Flame, label: 'Viral Moment', desc: 'Most engaging, shareable segment' },
+  { id: 'funny', icon: Laugh, label: 'Funny Moment', desc: 'Humorous or comedic highlight' },
+  { id: 'dramatic', icon: Star, label: 'Dramatic Moment', desc: 'Emotional peak or turning point' },
+  { id: 'inspiring', icon: Sparkles, label: 'Inspirational', desc: 'Motivational or uplifting segment' },
+  { id: 'surprising', icon: Zap, label: 'Surprising Twist', desc: 'Unexpected reveal or shock' },
+  { id: 'action', icon: Target, label: 'Action Packed', desc: 'High intensity, fast-paced moment' },
 ];
 
 const DEFAULTS = { font: 'Impact', fontSize: '52', colour: '#FFFFFF', position: 'bottom' as 'bottom' | 'centre' | 'top' };
@@ -134,19 +134,23 @@ export default function AIClipper({ onClose, initialUrl = '', onClipReady }: Pro
                 <p className="text-sm text-slate-500">Choose a vibe or describe exactly what you want</p>
               </div>
               
-              <div className="grid grid-cols-3 gap-3 mb-6">
+              <div className="flex flex-col gap-2 mb-6">
                 {MOMENTS.map((m, i) => { const Icon = m.icon; const sel = moment === m.id && !custom.trim();
                   return (
-                    <motion.button key={m.id} whileTap={{ scale: 0.97 }} onClick={() => { setMoment(m.id); setCustom(''); }}
-                      initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04, duration: 0.3 }}
-                      className={`flex flex-col items-center gap-2 py-4 rounded-2xl border-2 transition-all duration-200 ${
-                        sel ? 'bg-slate-900 text-white border-slate-900 shadow-lg shadow-slate-900/10 scale-[1.02]' 
-                            : 'bg-white text-slate-600 border-slate-100 hover:border-slate-200 hover:bg-slate-50/50'
+                    <motion.button key={m.id} whileTap={{ scale: 0.99 }} onClick={() => { setMoment(m.id); setCustom(''); }}
+                      initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05, duration: 0.3 }}
+                      className={`flex items-center gap-3 w-full px-4 py-3.5 rounded-2xl border transition-all duration-200 ${
+                        sel ? 'bg-slate-900 text-white border-slate-900 shadow-lg shadow-slate-900/10' 
+                            : 'bg-white text-slate-600 border-slate-100 hover:border-slate-200 hover:bg-slate-50'
                       }`}>
-                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center transition-colors ${sel ? 'bg-white/15' : 'bg-slate-50'}`}>
-                        <Icon className={`w-4.5 h-4.5 ${sel ? 'text-white' : 'text-slate-500'}`} />
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 transition-colors ${sel ? 'bg-white/15' : 'bg-slate-50'}`}>
+                        <Icon className={`w-4 h-4 ${sel ? 'text-white' : 'text-slate-500'}`} />
                       </div>
-                      <span className={`text-xs font-semibold tracking-wide uppercase ${sel ? 'text-white/90' : 'text-slate-500'}`}>{m.label}</span>
+                      <div className="text-left">
+                        <div className={`text-sm font-semibold ${sel ? 'text-white' : 'text-slate-700'}`}>{m.label}</div>
+                        <div className={`text-xs mt-0.5 ${sel ? 'text-white/60' : 'text-slate-400'}`}>{m.desc || ''}</div>
+                      </div>
+                      {sel && <Check className="w-4 h-4 text-white ml-auto" />}
                     </motion.button>
                   );
                 })}

@@ -1606,11 +1606,10 @@ Please analyze the code you just wrote and fix this error.`;
                     <button
                       type="button"
                       onClick={() => { setSelectedCommand({ id: 'clip', icon: () => null, label: 'AI Clip', description: '', prefix: '/clip' }); }}
-                      className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-slate-100 text-slate-700 transition-colors font-medium text-[13.5px]"
+                      className="w-full flex items-center gap-3 px-2 py-2 mb-0.5 rounded-lg hover:bg-slate-100 text-slate-700 transition-colors font-medium text-[13.5px]"
                     >
                       <Scissors className="w-4 h-4 stroke-[2]" />
                       <span className="flex-1 text-left">Clips</span>
-                      <ChevronRight className="h-3.5 w-3.5 text-slate-400" />
                     </button>
                     <button
                       type="button"
