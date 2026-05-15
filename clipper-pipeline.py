@@ -92,9 +92,17 @@ def main():
         ap2=os.path.join(td,"subs.ass")
         with open(ap2,"w") as f:
             f.write(f"[Script Info]\nPlayResX:1280\nPlayResY:720\n[V4+ Styles]\nFormat: Name,Fontname,Fontsize,PrimaryColour,OutlineColour,Bold,Alignment,MarginV,Outline,Shadow\nStyle: W,{font},{fs},{hb(tc)},{hb('#000000')},1,{al},{mv},3,0\n[Events]\nFormat: Layer,Start,End,Style,Text\n")
-            for w in cw:
-                ws=max(0,w["start"]-cs); we=min(w["end"]-cs,ws+.4)
-                if ws<we: f.write(f"Dialogue: 0,{ts(ws)},{ts(we)},W,,{w['word']}\n")
+            for i, w in enumerate(cw):
+                ws = max(0, w["start"] - cs)
+                we = w["end"] - cs
+                # Minimum 0.15s duration for readability
+                if we - ws < 0.15: we = ws + 0.15
+                # Cap at next word start to prevent overlap
+                if i + 1 < len(cw):
+                    nxt = cw[i+1]["start"] - cs
+                    if we > nxt - 0.02: we = max(ws + 0.1, nxt - 0.02)
+                if ws < we:
+                    f.write(f"Dialogue: 0,{ts(ws)},{ts(we)},W,,{w['word']}\n")
         log("subtitles","complete",message=f"{len(cw)} words",word_count=len(cw))
         
         # STEP 6: Burn
