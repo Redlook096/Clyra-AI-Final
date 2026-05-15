@@ -114,10 +114,10 @@ export default function AIClipper({ onClose, initialUrl = '', onClipReady }: Pro
         <div className="flex items-center gap-2"><Scissors className="w-4 h-4 text-slate-700" /><span className="text-sm font-semibold text-slate-800">AI Clip</span></div>
         <div className="w-9" />
       </header>
-      <div className="flex-1 flex items-center justify-center p-6 overflow-y-auto">
+      <div className="flex-1 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
         <AnimatePresence mode="wait">
           {step === 0 && (
-            <motion.div key="url" {...FADE} className="w-full max-w-md text-center">
+            <motion.div key="url" {...FADE} className="w-full max-w-xl text-center">
               <div className="w-14 h-14 rounded-2xl bg-slate-50 flex items-center justify-center mx-auto mb-5 ring-1 ring-slate-100"><Youtube className="w-7 h-7 text-slate-600" /></div>
               <h2 className="text-2xl font-semibold tracking-tight text-slate-900 mb-1">Create a clip</h2>
               <p className="text-sm text-slate-500 mb-8">Paste a YouTube link. I'll find the best moment and add subtitles.</p>
@@ -128,18 +128,18 @@ export default function AIClipper({ onClose, initialUrl = '', onClipReady }: Pro
             </motion.div>
           )}
           {step === 1 && (
-            <motion.div key="moment" {...FADE} className="w-full max-w-lg">
-              <div className="text-center mb-8">
+            <motion.div key="moment" {...FADE} className="w-full max-w-2xl">
+              <div className="text-center mb-5">
                 <h2 className="text-2xl font-semibold tracking-tight text-slate-900 mb-2">Find the perfect moment</h2>
                 <p className="text-sm text-slate-500">Choose a vibe or describe exactly what you want</p>
               </div>
               
-              <div className="flex flex-col gap-2 mb-6">
+              <div className="flex flex-col gap-1.5 mb-4">
                 {MOMENTS.map((m, i) => { const Icon = m.icon; const sel = moment === m.id && !custom.trim();
                   return (
                     <motion.button key={m.id} whileTap={{ scale: 0.99 }} onClick={() => { setMoment(m.id); setCustom(''); }}
                       initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.05, duration: 0.3 }}
-                      className={`flex items-center gap-3 w-full px-4 py-3.5 rounded-2xl border transition-all duration-200 ${
+                      className={`flex items-center gap-3 w-full px-4 py-3 rounded-2xl border transition-all duration-200 ${
                         sel ? 'bg-slate-900 text-white border-slate-900 shadow-lg shadow-slate-900/10' 
                             : 'bg-white text-slate-600 border-slate-100 hover:border-slate-200 hover:bg-slate-50'
                       }`}>
@@ -163,7 +163,7 @@ export default function AIClipper({ onClose, initialUrl = '', onClipReady }: Pro
               
               <textarea value={custom} onChange={e => { setCustom(e.target.value); if (e.target.value.trim()) setMoment(''); }}
                 placeholder='e.g. "the part where they jump out" or "the emotional reveal at the end"...'
-                rows={2} className="w-full px-4 py-3.5 rounded-2xl border border-slate-200 text-sm placeholder-slate-400 focus:outline-none focus:border-slate-300 focus:ring-4 focus:ring-slate-50 transition-all resize-none bg-slate-50/50 focus:bg-white" />
+                rows={2} className="w-full px-4 py-3 rounded-2xl border border-slate-200 text-sm placeholder-slate-400 focus:outline-none focus:border-slate-300 focus:ring-4 focus:ring-slate-50 transition-all resize-none bg-slate-50/50 focus:bg-white" />
               
               <div className="flex gap-3 mt-8">
                 <button onClick={() => setStep(0)} className="px-6 py-3.5 rounded-2xl border border-slate-200 text-sm font-medium text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-all">Back</button>
@@ -172,7 +172,7 @@ export default function AIClipper({ onClose, initialUrl = '', onClipReady }: Pro
             </motion.div>
           )}
           {step === 2 && (
-            <motion.div key="config" {...FADE} className="w-full max-w-lg">
+            <motion.div key="config" {...FADE} className="w-full max-w-2xl">
               <div className="flex items-center gap-3 mb-5"><Type className="w-5 h-5 text-slate-700" /><h2 className="text-lg font-semibold text-slate-900">Subtitle style</h2></div>
               <div className="relative aspect-video bg-slate-900 rounded-2xl mb-6 overflow-hidden ring-1 ring-slate-200">
                 <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
@@ -196,7 +196,7 @@ export default function AIClipper({ onClose, initialUrl = '', onClipReady }: Pro
             </motion.div>
           )}
           {step === 3 && (
-            <motion.div key="proc" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full max-w-md">
+            <motion.div key="proc" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full max-w-xl">
               <div className="flex flex-col items-center mb-8">
                 <motion.div 
                   animate={{ rotate: 360 }} 
@@ -241,7 +241,7 @@ export default function AIClipper({ onClose, initialUrl = '', onClipReady }: Pro
             </motion.div>
           )}
           {step === 4 && result && (
-            <motion.div key="done" {...FADE} className="w-full max-w-lg text-center">
+            <motion.div key="done" {...FADE} className="w-full max-w-2xl text-center">
               <div className="w-14 h-14 rounded-2xl bg-emerald-50 ring-1 ring-emerald-100 flex items-center justify-center mx-auto mb-5"><Check className="w-7 h-7 text-emerald-600" /></div>
               <h2 className="text-2xl font-semibold text-slate-900 mb-1">Clip ready</h2>
               <p className="text-sm text-slate-500 mb-1">{result.title}</p>
@@ -254,7 +254,7 @@ export default function AIClipper({ onClose, initialUrl = '', onClipReady }: Pro
             </motion.div>
           )}
           {error && (
-            <motion.div key="err" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full max-w-sm text-center">
+            <motion.div key="err" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full max-w-lg text-center">
               <div className="w-14 h-14 rounded-2xl bg-red-50 ring-1 ring-red-100 flex items-center justify-center mx-auto mb-5"><AlertCircle className="w-7 h-7 text-red-600" /></div>
               <h2 className="text-lg font-semibold text-slate-900 mb-2">Something went wrong</h2>
               <p className="text-sm text-slate-500 mb-6">{error}</p>

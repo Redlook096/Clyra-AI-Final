@@ -352,6 +352,7 @@ export default function App() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [showClipsLibrary, setShowClipsLibrary] = useState(false);
   const [theme, setTheme] = useState("Light");
   const [sendOnEnter, setSendOnEnter] = useState(true);
   const [fontSize, setFontSize] = useState("Medium");
@@ -1605,7 +1606,7 @@ Please analyze the code you just wrote and fix this error.`;
                     </button>
                     <button
                       type="button"
-                      onClick={() => { setSelectedCommand({ id: 'clip', icon: () => null, label: 'AI Clip', description: '', prefix: '/clip' }); }}
+                      onClick={() => { setShowClipsLibrary(true); }}
                       className="w-full flex items-center gap-3 px-2 py-2 mb-0.5 rounded-lg hover:bg-slate-100 text-slate-700 transition-colors font-medium text-[13.5px]"
                     >
                       <Scissors className="w-4 h-4 stroke-[2]" />
