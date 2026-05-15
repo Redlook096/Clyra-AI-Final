@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fast clipper — captions for speed, Whisper on clip for accuracy. 720p, <60s."""
+"""Premium clipper — 1080p, captions+Whisper, no subtitle gaps. ~60-90s."""
 import sys, json, os, subprocess, shutil, re, time, xml.etree.ElementTree as ET
 from threading import Thread
 
@@ -28,12 +28,12 @@ def main():
         yt = YouTube(url); title, dur = yt.title, yt.length
         words = []
         
-        # STEP 1: 720p video + captions in parallel (FAST)
-        log("download","running",message="Downloading 720p + captions...")
+        # STEP 1: Download 1080p + captions in parallel
+        log("download","running",message="Downloading 1080p + captions...")
         def dv():
-            s = (yt.streams.get_by_resolution("720p")
-                 or yt.streams.filter(progressive=True,res="480p").first()
-                 or yt.streams.filter(progressive=True).first())
+            s = (yt.streams.get_by_resolution("1080p")
+                 or yt.streams.get_by_resolution("720p")
+                 or yt.streams.filter(progressive=True).order_by("resolution").desc().first())
             s.download(td, filename="video.mp4")
         def gc():
             try:
@@ -56,40 +56,40 @@ def main():
         if not words: error("No captions available")
         log("download","complete",message=f"{len(words)} words",title=title,duration=dur,word_count=len(words))
         
-        # STEP 2: AI find moment (FAST - captions only)
+        # STEP 2: AI find moment
         log("analyze","running",message=f"Finding {mt}...")
-        cs,ce = dur*.15, min(dur*.15+40,dur); reason="Auto"
+        cs,ce = dur*.15, min(dur*.15+45,dur); reason="Auto"
         try:
             import urllib.request
-            tx = " ".join(f"[{w['start']:.0f}]{w['word']}" for w in words[:2000])
-            prompt = f"Find best 30-40s {mt} clip. Reply ONLY JSON: {{\"start\":0,\"end\":40,\"reason\":\"why\"}}\n\n{tx}"
+            tx = " ".join(f"[{w['start']:.0f}]{w['word']}" for w in words[:2500])
+            prompt = f"Find best 30-50s {mt} clip. Reply ONLY JSON: {{\"start\":0,\"end\":50,\"reason\":\"why\"}}\n\n{tx}"
             req = urllib.request.Request("http://localhost:3000/api/deepseek/chat",
-                data=json.dumps({"model":"deepseek-chat","messages":[{"role":"user","content":prompt}],"temperature":0.7,"max_tokens":100,"stream":False}).encode(),
+                data=json.dumps({"model":"deepseek-chat","messages":[{"role":"user","content":prompt}],"temperature":0.7,"max_tokens":120,"stream":False}).encode(),
                 headers={"Content-Type":"application/json"})
-            resp = urllib.request.urlopen(req,timeout=20)
+            resp = urllib.request.urlopen(req,timeout=25)
             ai = json.loads(resp.read()).get("choices",[{}])[0].get("message",{}).get("content","")
             m2 = re.search(r'\{.*\}',ai,re.DOTALL)
             if m2:
-                c = json.loads(m2.group()); cs=float(c.get("start",dur*.15)); ce=float(c.get("end",min(cs+40,dur)))
+                c = json.loads(m2.group()); cs=float(c.get("start",dur*.15)); ce=float(c.get("end",min(cs+50,dur)))
                 reason=c.get("reason",reason)
         except:
             seed=int(time.time()*1000)%100
             secs=[(.05,.15),(.15,.25),(.25,.35),(.35,.50),(.50,.65),(.60,.75),(.70,.85),(.10,.20),(.30,.45),(.55,.70)]
-            s=secs[seed%len(secs)]; cs=max(0,dur*s[0]); ce=min(dur,max(cs+35,dur*s[1]))
+            s=secs[seed%len(secs)]; cs=max(0,dur*s[0]); ce=min(dur,max(cs+40,dur*s[1]))
             reason=f"Auto seed {seed}"
         cd=ce-cs
         if cd<25: ce=min(dur,cs+30)
-        if cd>40: ce=cs+40
+        if cd>50: ce=cs+50
         cd=ce-cs; cs,ce=round(cs,1),round(ce,1)
         log("analyze","complete",message=reason,reason=reason,clip_start=cs,clip_end=ce,clip_duration=round(cd,1))
         
-        # STEP 3: -c copy cut (INSTANT)
+        # STEP 3: -c copy cut
         log("cut","running",message=f"Cutting...")
         cp=os.path.join(td,"clip.mp4")
         subprocess.run([FFMPEG,"-y","-ss",str(cs),"-i",vp,"-t",str(cd),"-c","copy",cp],check=True,capture_output=True,timeout=30)
         log("cut","complete",message=f"Cut ({round(cd)}s)")
         
-        # STEP 4: Whisper on clip ONLY for word-accurate timing
+        # STEP 4: Whisper on clip for accurate timing
         log("subtitles","running",message="Word-accurate subtitles...")
         m3=whisper.load_model("tiny")
         r3=m3.transcribe(cp,word_timestamps=True,language="en",fp16=False)
@@ -98,35 +98,40 @@ def main():
             for w in seg.get("words",[]):
                 wt=re.sub(r'[^\w\s]','',w["word"].strip()).upper()
                 if wt: cw.append({"word":wt,"start":float(w["start"]),"end":float(w["end"])})
-        def hb(h): h=h.lstrip("#"); return f"&H00{h[4:6]}{h[2:4]}{h[0:2]}"
-        am={"bottom":2,"bottom-centre":2,"centre":5,"center":5,"top":8,"top-centre":8}
-        al=am.get(pos,5); mv=0 if al==5 else 80
-        def ts(s): return f"0:{int(s//60):02d}:{s%60:05.2f}"
-        ap=os.path.join(td,"subs.ass")
-        with open(ap,"w") as f:
-            f.write(f"[Script Info]\nPlayResX:1280\nPlayResY:720\n[V4+ Styles]\nFormat: Name,Fontname,Fontsize,PrimaryColour,OutlineColour,Bold,Alignment,MarginV,Outline,Shadow\nStyle: W,{font},{fs},{hb(tc)},{hb('#000000')},1,{al},{mv},4,0\n[Events]\nFormat: Layer,Start,End,Style,Text\n")
-            for i,w in enumerate(cw):
-                ws=max(0,w["start"]); we=w["end"]
-                if we-ws<0.15: we=ws+.15
-                if i+1<len(cw):
-                    nxt=cw[i+1]["start"]
-                    if we>nxt-.02: we=max(ws+.1,nxt-.02)
-                if ws<we: f.write(f"Dialogue: 0,{ts(ws)},{ts(we)},W,,{w['word']}\n")
-        # Fallback: if Whisper on clip returned too few words, use captions
+        
+        # Fallback to captions if Whisper got too few words
         if len(cw) < 20 and len(words) > 20:
             cw2 = []
             for w in words:
                 if cs <= w["start"] <= ce:
                     cw2.append({"word": w["word"], "start": w["start"] - cs, "end": w["end"] - cs})
             if len(cw2) > len(cw):
-                log("subtitles","progress",message=f"Using captions ({len(cw2)} words, Whisper had {len(cw)})")
                 cw = cw2
-        log("subtitles","complete",message=f"{len(cw)} words",word_count=len(cw))
         
-        # STEP 5: Burn
+        # STEP 5: Build ASS with NO GAPS (extend end time to next word's start)
+        def hb(h): h=h.lstrip("#"); return f"&H00{h[4:6]}{h[2:4]}{h[0:2]}"
+        am={"bottom":2,"bottom-centre":2,"centre":5,"center":5,"top":8,"top-centre":8}
+        al=am.get(pos,2); mv=80 if al==2 else 0
+        def ts(s): return f"0:{int(s//60):02d}:{s%60:05.2f}"
+        ap=os.path.join(td,"subs.ass")
+        with open(ap,"w") as f:
+            f.write(f"[Script Info]\nPlayResX:1280\nPlayResY:720\n[V4+ Styles]\nFormat: Name,Fontname,Fontsize,PrimaryColour,OutlineColour,Bold,Alignment,MarginV,Outline,Shadow\nStyle: W,{font},{fs},{hb(tc)},{hb('#000000')},1,{al},{mv},4,0\n[Events]\nFormat: Layer,Start,End,Style,Text\n")
+            for i,w in enumerate(cw):
+                ws = max(0, w["start"])
+                # Extend end time to NEXT word's start = no gaps
+                if i + 1 < len(cw):
+                    we = cw[i+1]["start"]
+                else:
+                    we = w["end"] + 0.5  # last word: hold for 0.5s
+                if we - ws < 0.15: we = ws + 0.15
+                if ws < we:
+                    f.write(f"Dialogue: 0,{ts(ws)},{ts(we)},W,,{w['word']}\n")
+        log("subtitles","complete",message=f"{len(cw)} words, no gaps",word_count=len(cw))
+        
+        # STEP 6: High quality burn
         log("burn","running",message="Burning...")
         op=os.path.join(od,f"{cn}.mp4")
-        subprocess.run([FFMPEG,"-y","-i",cp,"-vf",f"ass={ap}","-c:v","libx264","-preset","ultrafast","-crf","23","-c:a","copy",op],check=True,capture_output=True,timeout=60)
+        subprocess.run([FFMPEG,"-y","-i",cp,"-vf",f"ass={ap}","-c:v","libx264","-preset","medium","-crf","20","-c:a","copy",op],check=True,capture_output=True,timeout=90)
         log("burn","complete",message="Ready!")
         shutil.rmtree(td,ignore_errors=True)
         elapsed=time.time()-t0
