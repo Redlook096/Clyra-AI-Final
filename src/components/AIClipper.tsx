@@ -136,11 +136,48 @@ export default function AIClipper({ onClose }: Props) {
             </motion.div>
           )}
           {step === 3 && (
-            <motion.div key="proc" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full max-w-sm text-center">
-              <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 2.5, ease: 'linear' }} className="w-14 h-14 mx-auto mb-6"><Loader2 className="w-14 h-14 text-slate-300" /></motion.div>
-              <h2 className="text-xl font-semibold text-slate-900 mb-2">{status || 'Creating your clip...'}</h2>
-              <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden mb-4"><motion.div className="h-full bg-slate-900 rounded-full" animate={{ width: `${progress}%` }} transition={{ duration: 0.5, ease: 'easeOut' }} /></div>
-              <p className="text-xs text-slate-400">{elapsed}s · {progress}%</p>
+            <motion.div key="proc" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="w-full max-w-md">
+              <div className="flex flex-col items-center mb-8">
+                <motion.div 
+                  animate={{ rotate: 360 }} 
+                  transition={{ repeat: Infinity, duration: 3, ease: 'linear' }}
+                  className="relative w-16 h-16 mb-6"
+                >
+                  <div className="absolute inset-0 rounded-full border-2 border-slate-100" />
+                  <motion.div 
+                    className="absolute inset-0 rounded-full border-2 border-transparent border-t-slate-900"
+                    animate={{ rotate: 360 }}
+                    transition={{ repeat: Infinity, duration: 1.2, ease: 'linear' }}
+                  />
+                </motion.div>
+                <h2 className="text-lg font-semibold text-slate-900 mb-1">Creating your clip</h2>
+                <p className="text-sm text-slate-500">{status || 'Analyzing video...'}</p>
+              </div>
+              
+              <div className="space-y-3 mb-6">
+                {['download','analyze','cut','subtitles','burn'].map((s, i) => {
+                  const stepLabels: Record<string,string> = {download:'Downloading video',analyze:'Finding best moment',cut:'Extracting clip',subtitles:'Generating subtitles',burn:'Encoding final video'};
+                  const stepIdx = ['download','analyze','cut','subtitles','burn'].indexOf(s);
+                  const isDone = progress >= ((stepIdx+1)/5)*100;
+                  const isActive = !isDone && progress >= (stepIdx/5)*100;
+                  return (
+                    <div key={s} className="flex items-center gap-3">
+                      <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-all duration-300 ${
+                        isDone ? 'bg-emerald-50 text-emerald-600' : isActive ? 'bg-slate-100 text-slate-700' : 'bg-transparent text-slate-300'
+                      }`}>
+                        {isDone ? <Check className="w-3 h-3" /> : isActive ? <Loader2 className="w-3 h-3 animate-spin" /> : <div className="w-1.5 h-1.5 rounded-full bg-slate-300" />}
+                      </div>
+                      <span className={`text-sm transition-colors duration-300 ${isDone ? 'text-slate-500' : isActive ? 'text-slate-900 font-medium' : 'text-slate-400'}`}>{stepLabels[s]}</span>
+                      {isDone && <span className="text-xs text-slate-300 ml-auto">Done</span>}
+                    </div>
+                  );
+                })}
+              </div>
+              
+              <div className="h-1 bg-slate-100 rounded-full overflow-hidden">
+                <motion.div className="h-full bg-slate-900 rounded-full" animate={{ width: `${progress}%` }} transition={{ duration: 0.6, ease: 'easeOut' }} />
+              </div>
+              <p className="text-xs text-slate-400 mt-2 text-right">{elapsed}s elapsed</p>
             </motion.div>
           )}
           {step === 4 && result && (
