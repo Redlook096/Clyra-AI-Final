@@ -26,6 +26,7 @@ export default function AIClipper({ onClose }: Props) {
   const [custom, setCustom] = useState('');
   const [cfg, setCfg] = useState(DEFAULTS);
   const [cname, setCname] = useState('');
+  const [clipLen, setClipLen] = useState<string>('40');
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState('');
   const [status, setStatus] = useState('');
@@ -39,7 +40,8 @@ export default function AIClipper({ onClose }: Props) {
     const m = custom.trim() || moment || 'viral';
     try {
       const res = await fetch('/api/clipper/start', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: url.trim(), config: { font: cfg.font, font_size: parseInt(cfg.fontSize), text_colour: cfg.colour, position: cfg.position, moment_type: m, clip_name: cname.trim() || `clip-${Date.now()}` } }) });
+        body: JSON.stringify({ url: url.trim(), config: { font: cfg.font, font_size: parseInt(cfg.fontSize), text_colour: cfg.colour, position: cfg.position, moment_type: m,
+            clip_duration: parseInt(clipLen), clip_name: cname.trim() || `clip-${Date.now()}` } }) });
       if (!res.ok) throw new Error(`Server ${res.status}`);
       const reader = res.body?.getReader(); if (!reader) throw new Error('No stream');
       const dec = new TextDecoder(); let buf = '';
@@ -124,6 +126,7 @@ export default function AIClipper({ onClose }: Props) {
                 <div className="flex items-center gap-3"><span className="text-xs font-medium text-slate-500 w-14 shrink-0">Font</span><select value={cfg.font} onChange={e => setCfg({...cfg, font: e.target.value})} className="flex-1 px-3 py-2.5 rounded-xl border border-slate-200 text-xs bg-white focus:outline-none focus:border-slate-400">{['Impact','Arial','Montserrat'].map(f => <option key={f}>{f}</option>)}</select></div>
                 <div className="flex items-center gap-3"><span className="text-xs font-medium text-slate-500 w-14 shrink-0">Colour</span><input type="color" value={cfg.colour} onChange={e => setCfg({...cfg, colour: e.target.value})} className="w-9 h-9 rounded-xl border border-slate-200 cursor-pointer" /><input value={cfg.colour} onChange={e => setCfg({...cfg, colour: e.target.value})} className="flex-1 px-3 py-2.5 rounded-xl border border-slate-200 text-xs font-mono focus:outline-none focus:border-slate-400" /></div>
                 <div className="flex items-center gap-3"><span className="text-xs font-medium text-slate-500 w-14 shrink-0">Position</span><div className="flex gap-1.5 flex-1">{[{l:'Bottom',v:'bottom'},{l:'Center',v:'centre'},{l:'Top',v:'top'}].map(o => (<button key={o.v} onClick={() => setCfg({...cfg, position: o.v as any})} className={`flex-1 py-2.5 rounded-xl text-xs font-medium border transition-all ${cfg.position===o.v ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:bg-slate-50'}`}>{o.l}</button>))}</div></div>
+                <div className="flex items-center gap-3"><span className="text-xs font-medium text-slate-500 w-14 shrink-0">Duration</span><div className="flex gap-1.5 flex-1">{[{l:"30s",v:"30"},{l:"40s",v:"40"},{l:"60s",v:"60"}].map(o => (<button key={o.v} onClick={() => setClipLen(o.v)} className={`flex-1 py-2.5 rounded-xl text-xs font-medium border transition-all ${clipLen===o.v ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-200 hover:bg-slate-50"}`}>{o.l}</button>))}</div></div>
                 <input value={cname} onChange={e => setCname(e.target.value)} placeholder="Clip name (optional)" className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-xs focus:outline-none focus:border-slate-400 transition-all bg-slate-50 focus:bg-white" />
               </div>
               <div className="flex gap-3 mt-6">

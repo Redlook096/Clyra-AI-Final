@@ -78,8 +78,8 @@ def main():
             s=secs[seed%len(secs)]; cs=max(0,dur*s[0]); ce=min(dur,max(cs+40,dur*s[1]))
             reason=f"Auto seed {seed}"
         cd=ce-cs
-        if cd<25: ce=min(dur,cs+30)
-        if cd>50: ce=cs+50
+        if cd < clip_len * 0.6: ce = min(dur, cs + clip_len)
+        if cd > clip_len: ce = cs + clip_len
         cd=ce-cs; cs,ce=round(cs,1),round(ce,1)
         log("analyze","complete",message=reason,reason=reason,clip_start=cs,clip_end=ce,clip_duration=round(cd,1))
         
