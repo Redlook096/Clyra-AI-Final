@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import { ShiningText } from "@/components/ShiningText";
 
-const READING_HOLD_MS = 900;
-const READ_SHINE_MS = 1500;
+const READING_HOLD_MS = 180;
+const READ_SHINE_MS = 360;
 
 type Phase = "reading" | "readShine" | "done";
 
@@ -49,7 +49,7 @@ export function VibeAnalysingBanner({
     onCompleted?.();
   }, [phase, onCompleted, archived]);
 
-  const verb = phase === "reading" ? "Reading" : "Read";
+  const verb = phase === "reading" ? "Inspecting" : "Inspected";
 
   return (
     <motion.span
@@ -57,7 +57,7 @@ export function VibeAnalysingBanner({
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-      className="block max-w-[640px] text-[12.5px] leading-6 text-slate-600"
+      className="clyra-vibe-agent-pill block max-w-[640px] px-3 py-2 text-[12.5px] leading-6 text-slate-600 backdrop-blur-md backdrop-saturate-125"
     >
       {phase === "readShine" ? (
         <ShiningText

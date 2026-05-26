@@ -7,7 +7,6 @@ import { cn } from "@/lib/utils";
 import {
   TEXT_EFFECT_BLUR_CHAR_STAGGER,
   textEffectBlurCharItemVariants,
-  textEffectBlurStreamContainerVariants,
 } from "@/components/ui/text-effect";
 
 /** One-shot reveal: full string uses same blur-per-char preset as TextEffect. */
@@ -53,18 +52,9 @@ export function BlurredStagger({
   );
 }
 
-function estimateTailSolidifyMs(tailLen: number, isStreaming: boolean): number {
-  if (tailLen <= 0) return 0;
-  const staggerMs = TEXT_EFFECT_BLUR_CHAR_STAGGER * 1000;
-  const durationMs = 100;
-  const base = 120 + Math.max(0, tailLen - 1) * staggerMs + durationMs;
-  const buffer = isStreaming ? 90 : 70;
-  return Math.min(3600, base + buffer);
-}
-
 /**
- * Append-only streaming: prefix stays solid; new suffix uses TextEffect-style
- * blur-per-char (tween, light) so tokens appear smoothly as the model streams.
+ * Smooth streaming reveal: keeps one stable text layer, types toward the latest
+ * target text, and lets CSS run a single premium wave across the revealed copy.
  */
 export function BlurredStaggerStream({
   text,
@@ -75,56 +65,41 @@ export function BlurredStaggerStream({
   isStreaming?: boolean;
   className?: string;
 }) {
-  const [solidThrough, setSolidThrough] = useState(0);
+  const [displayedText, setDisplayedText] = useState("");
 
   useEffect(() => {
-    if (text.length < solidThrough) {
-      setSolidThrough(0);
+    if (!text) {
+      setDisplayedText("");
+      return;
     }
-  }, [text, solidThrough]);
 
-  const tail = text.slice(solidThrough);
+    if (!text.startsWith(displayedText)) {
+      setDisplayedText(text);
+      return;
+    }
 
-  useEffect(() => {
-    if (text.length < solidThrough) return;
-    const tailLen = text.length - solidThrough;
-    if (tailLen === 0) return;
-    const est = estimateTailSolidifyMs(tailLen, !!isStreaming);
-    const id = window.setTimeout(() => setSolidThrough(text.length), est);
+    if (displayedText.length >= text.length) return;
+
+    const remaining = text.length - displayedText.length;
+    const charsPerTick = isStreaming ? Math.min(5, Math.max(1, Math.ceil(remaining / 34))) : 8;
+    const id = window.setTimeout(() => {
+      setDisplayedText(text.slice(0, displayedText.length + charsPerTick));
+    }, isStreaming ? 18 : 12);
+
     return () => window.clearTimeout(id);
-  }, [text, solidThrough, isStreaming]);
+  }, [displayedText, isStreaming, text]);
 
   if (!text) return null;
-
-  const prefix = text.slice(0, solidThrough);
 
   return (
     <div
       className={cn(
-        "whitespace-pre-wrap font-medium leading-relaxed text-inherit",
+        "clyra-assistant-stream-line whitespace-pre-wrap font-medium leading-relaxed",
         className,
       )}
+      data-streaming={isStreaming ? "true" : "false"}
     >
-      <span className="text-inherit">{prefix}</span>
-      {tail.length > 0 ? (
-        <motion.span
-          key={solidThrough}
-          variants={textEffectBlurStreamContainerVariants}
-          initial="hidden"
-          animate="show"
-          className="inline"
-        >
-          {tail.split("").map((char, i) => (
-            <motion.span
-              key={`${solidThrough + i}-${char}`}
-              variants={textEffectBlurCharItemVariants}
-              className="inline"
-            >
-              {char === " " ? "\u00A0" : char === "\n" ? "\n" : char}
-            </motion.span>
-          ))}
-        </motion.span>
-      ) : null}
+      {displayedText}
     </div>
   );
 }

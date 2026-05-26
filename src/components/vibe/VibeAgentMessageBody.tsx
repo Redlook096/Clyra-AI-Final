@@ -289,13 +289,13 @@ export function VibeAgentMessageBody({
             advanceTimeoutRef.current = window.setTimeout(() => {
               advanceTimeoutRef.current = null;
               go();
-            }, 800);
+            }, 120);
           } else if (codeJustFinished) {
             // Code block collapsed — dwell before next step
             advanceTimeoutRef.current = window.setTimeout(() => {
               advanceTimeoutRef.current = null;
               go();
-            }, 800);
+            }, 140);
           } else {
             go();
           }

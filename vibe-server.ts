@@ -15,7 +15,18 @@ const SESSION_ROOT = path.join(VIBE_SANDBOX_DIR, "sessions");
 const MAX_FILES = 80;
 const MAX_FILE_BYTES = 512 * 1024;
 const SESSION_TTL_MS = 1000 * 60 * 60 * 3;
-const ALLOWED_ORIGINS = new Set(["http://localhost:3000", "http://localhost:5173", "http://localhost:5174", "null"]);
+const isAllowedOrigin = (origin: string) => {
+  if (origin === "null") return true;
+  try {
+    const url = new URL(origin);
+    return (
+      (url.hostname === "localhost" || url.hostname === "127.0.0.1") &&
+      (url.protocol === "http:" || url.protocol === "https:")
+    );
+  } catch {
+    return false;
+  }
+};
 const SESSION_CACHE = new Map<string, { sessionId: string; url: string; files: VibeFiles }>();
 const FOCUS_MODE_SCRIPT = String.raw`<script>
 (() => {
@@ -239,7 +250,7 @@ export async function startVibeServer(port = Number(process.env.VIBE_PORT) || 51
   app.use(express.json({ limit: "2mb" }));
   app.use((req, res, next) => {
     const origin = req.headers.origin;
-    if (origin && !ALLOWED_ORIGINS.has(origin)) {
+    if (origin && !isAllowedOrigin(origin)) {
       res.status(403).json({ error: "Origin not allowed" });
       return;
     }

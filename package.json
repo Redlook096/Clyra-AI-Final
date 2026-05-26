@@ -15,7 +15,6 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
-    "@google/genai": "^1.29.0",
     "@monaco-editor/react": "^4.7.0",
     "@playwright/test": "^1.59.1",
     "@radix-ui/react-progress": "^1.1.8",

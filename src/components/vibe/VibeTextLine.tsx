@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 
-const DWELL_MS = 650;
-const MS_PER_CHARACTER = 7;
+const DWELL_MS = 160;
+const MS_PER_CHARACTER = 2;
 
 /**
  * Tiny one- or two-sentence narration line that the agent emits between blocks
@@ -44,15 +44,9 @@ export function VibeTextLine({
     let cancelled = false;
     let last = performance.now();
     let carry = 0;
-    let frameSkip = 0;
 
     const tick = (now: number) => {
       if (cancelled) return;
-      frameSkip++;
-      if (frameSkip % 2 !== 0) {
-        rafRef.current = window.requestAnimationFrame(tick);
-        return;
-      }
       carry += now - last;
       last = now;
       let keepGoing = true;
@@ -63,7 +57,7 @@ export function VibeTextLine({
             keepGoing = false;
             return r;
           }
-          const next = Math.min(r + 1, body.length);
+          const next = Math.min(r + 8, body.length);
           keepGoing = next < body.length;
           return next;
         });
@@ -104,7 +98,7 @@ export function VibeTextLine({
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-      className="max-w-[640px] whitespace-pre-wrap text-[14px] leading-[1.55] text-slate-600"
+      className="clyra-vibe-agent-line max-w-[640px] whitespace-pre-wrap text-[14px] leading-[1.55] text-slate-600"
     >
       {body.slice(0, revealed)}
     </motion.p>

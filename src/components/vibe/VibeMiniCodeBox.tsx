@@ -17,7 +17,7 @@ const VISIBLE_LINES_TYPING = 4;
 const VISIBLE_LINES_REOPENED = 4;
 const MAX_CODE_H_TYPING = LINE_PX * VISIBLE_LINES_TYPING;
 const MAX_CODE_H_REOPENED = LINE_PX * VISIBLE_LINES_REOPENED;
-const COLLAPSE_HOLD_MS = 2400;
+const COLLAPSE_HOLD_MS = 520;
 const COUNTER_FONT_SIZE = 12;
 const COUNTER_HEIGHT = COUNTER_FONT_SIZE + 3;
 
@@ -171,7 +171,7 @@ export function VibeMiniCodeBox({
     if (revealed < code.length) {
       const left = code.length - revealed;
       const step =
-        left > 8000 ? 4800 : left > 3500 ? 2800 : left > 1500 ? 1440 : 360;
+        left > 8000 ? 9000 : left > 3500 ? 5200 : left > 1500 ? 2600 : 920;
       rafRef.current = window.requestAnimationFrame(() => {
         setRevealed((r) => Math.min(r + step, code.length));
       });
@@ -281,7 +281,7 @@ export function VibeMiniCodeBox({
       <motion.div
         transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
         className={cn(
-          "overflow-hidden rounded-lg border border-slate-200/80 bg-white/[0.97] shadow-[0_1px_0_rgba(15,23,42,0.035),0_14px_34px_rgba(15,23,42,0.055)]",
+          "clyra-vibe-agent-card overflow-hidden rounded-xl backdrop-blur-md backdrop-saturate-125",
           active && !collapsed && "ring-1 ring-blue-500/10",
         )}
         style={{ contain: "layout paint" }}
@@ -304,7 +304,7 @@ export function VibeMiniCodeBox({
               : undefined
           }
           className={
-            "flex items-center justify-between gap-2 bg-white/[0.96] px-3.5 py-2 text-left text-[13px] transition-colors select-none " +
+            "flex items-center justify-between gap-2 bg-white/35 px-3.5 py-2 text-left text-[13px] transition-colors select-none " +
             (headerInteractive
               ? "cursor-pointer hover:bg-slate-50/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-200"
               : "")
@@ -362,7 +362,7 @@ export function VibeMiniCodeBox({
                 height: { duration: 0.42, ease: [0.22, 1, 0.36, 1] },
                 opacity: { duration: 0.24 },
               }}
-              className="overflow-hidden border-t border-slate-100/90 bg-slate-50/[0.45]"
+              className="overflow-hidden border-t border-slate-100/70 bg-white/35"
             >
               <div
                 ref={scrollRef}

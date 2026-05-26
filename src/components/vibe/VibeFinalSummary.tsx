@@ -108,7 +108,7 @@ function buildTypingBuffer(files: SummaryFile[]): string {
   return `Summary\n\n${prose}`;
 }
 
-const CHARS_PER_FRAME = 6;
+const CHARS_PER_FRAME = 28;
 
 /**
  * Text-first session wrap-up. Title is "Summary". Top section types out; file outline appears
@@ -154,7 +154,7 @@ export function VibeFinalSummary({
     let id = 0;
     const tick = () => {
       frame++;
-      if (frame % 3 !== 0) {
+      if (frame % 2 !== 0) {
         id = requestAnimationFrame(tick);
         return;
       }
@@ -168,7 +168,7 @@ export function VibeFinalSummary({
   useEffect(() => {
     if (phase !== "body" || !onFullyPrinted || notified.current) return;
     notified.current = true;
-    const t = window.setTimeout(() => onFullyPrinted(), skipTyping ? 0 : 120);
+    const t = window.setTimeout(() => onFullyPrinted(), skipTyping ? 0 : 40);
     return () => window.clearTimeout(t);
   }, [phase, onFullyPrinted, skipTyping]);
 

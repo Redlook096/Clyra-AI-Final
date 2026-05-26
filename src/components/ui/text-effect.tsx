@@ -27,24 +27,25 @@ export type TextEffectProps = {
   segmentWrapperClassName?: string;
 };
 
-/** Per-char blur stagger (seconds). Slightly snappier than 0.03, smoother than 0.006. */
-export const TEXT_EFFECT_BLUR_CHAR_STAGGER = 0.013;
+/** Per-char blur stagger (seconds). Tuned for a quick but polished assistant print. */
+export const TEXT_EFFECT_BLUR_CHAR_STAGGER = 0.01;
 
-const blurCharRevealEase = [0.22, 0.08, 0.2, 1] as const;
+const blurCharRevealEase = [0.16, 1, 0.3, 1] as const;
 
 const blurCharShown: TargetAndTransition = {
   opacity: 1,
   filter: "blur(0px)",
   y: 0,
-  transition: { duration: 0.1, ease: blurCharRevealEase },
+  scale: 1,
+  transition: { duration: 0.2, ease: blurCharRevealEase },
 };
 
 /** Blur preset item: tween-based (lighter than springs) for char/word streaming. */
 export const textEffectBlurCharItemVariants: Variants = {
-  hidden: { opacity: 0, filter: "blur(4px)", y: 0.35 },
+  hidden: { opacity: 0, filter: "blur(7px)", y: 5, scale: 0.992 },
   visible: blurCharShown,
   show: blurCharShown,
-  exit: { opacity: 0, filter: "blur(3px)", transition: { duration: 0.06 } },
+  exit: { opacity: 0, filter: "blur(4px)", y: 2, transition: { duration: 0.08 } },
 };
 
 /** Streaming tail container: opacity stays 1; only children stagger. */

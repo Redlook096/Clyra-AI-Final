@@ -6,14 +6,14 @@ import { ChevronRight } from "lucide-react";
 import { ShiningText } from "@/components/ShiningText";
 import { cn } from "@/lib/utils";
 
-const HOLD_MS = 1000;
+const HOLD_MS = 320;
 const MAX_BODY_PX = 168;
 
 /**
  * Type quickly enough to feel live, while still pacing the text through rAF so it
  * does not jump straight to a completed paragraph.
  */
-const MS_PER_CHARACTER = 7;
+const MS_PER_CHARACTER = 2;
 
 type Phase = "shining" | "typing" | "dwell" | "folded";
 
@@ -47,7 +47,7 @@ export function VibeThoughtPanel({
   const notifiedRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const rafRef = useRef<number | null>(null);
-  const shiningDelayRef = useRef(1200 + Math.random() * 1500);
+  const shiningDelayRef = useRef(180 + Math.random() * 220);
 
   useEffect(() => {
     if (archived) {
@@ -75,22 +75,16 @@ export function VibeThoughtPanel({
     let cancelled = false;
     let last = performance.now();
     let carry = 0;
-    let frameCount = 0;
 
     const tick = (now: number) => {
       if (cancelled) return;
-      frameCount++;
-      if (frameCount % 2 !== 0) {
-        rafRef.current = window.requestAnimationFrame(tick);
-        return;
-      }
       carry += now - last;
       last = now;
       if (carry >= MS_PER_CHARACTER) {
         carry = carry % MS_PER_CHARACTER;
         setRevealed((r) => {
           if (r >= body.length) return r;
-          return Math.min(r + 1, body.length);
+          return Math.min(r + 6, body.length);
         });
       }
       rafRef.current = window.requestAnimationFrame(tick);
@@ -179,7 +173,7 @@ export function VibeThoughtPanel({
             >
               <ChevronRight className="h-4 w-4" aria-hidden />
             </motion.span>
-            <ShiningText text="Reasoning" preset="thinkingChat" />
+            <ShiningText text="Mapping approach" preset="thinkingChat" />
           </>
         ) : (
           <button
@@ -195,7 +189,7 @@ export function VibeThoughtPanel({
               <ChevronRight className="h-4 w-4" />
             </motion.span>
             <span className="text-[13px] font-medium text-slate-500">
-              Reasoning
+              Agent note
             </span>
           </button>
         )}

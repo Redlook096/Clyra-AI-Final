@@ -6,7 +6,7 @@ import { ChevronDown, Terminal } from "lucide-react";
 import { ShiningText } from "@/components/ShiningText";
 import { cn } from "@/lib/utils";
 
-const HOLD_MS = 2400;
+const HOLD_MS = 520;
 
 /**
  * Single-row "Run Command" card. Same shape/look as a collapsed VibeMiniCodeBox so the
@@ -67,7 +67,7 @@ export function VibeRunBlock({
       animate={{ opacity: active || archived ? 1 : 0.76, y: 0 }}
       transition={{ duration: 0.36, ease: [0.22, 1, 0.36, 1] }}
       className={cn(
-	        "w-full max-w-[640px] overflow-hidden rounded-lg border border-slate-200/80 bg-white/[0.97] shadow-[0_1px_0_rgba(15,23,42,0.035),0_14px_34px_rgba(15,23,42,0.055)]",
+        "clyra-vibe-agent-card w-full max-w-[640px] overflow-hidden rounded-xl backdrop-blur-md backdrop-saturate-125",
         active && !done && "ring-1 ring-blue-500/10",
       )}
       data-invert-ignore
@@ -76,11 +76,11 @@ export function VibeRunBlock({
       <button
         type="button"
         onClick={() => done && setExpanded((value) => !value)}
-	        className="flex w-full items-center gap-2 px-3.5 py-2 text-left text-[13px] transition-colors hover:bg-slate-50/90"
+        className="flex w-full items-center gap-2 px-3.5 py-2 text-left text-[13px] transition-colors hover:bg-slate-50/90"
         aria-expanded={open}
       >
         <Terminal className="h-3.5 w-3.5 shrink-0 text-slate-400" aria-hidden />
-        <span className="shrink-0 text-slate-500 font-medium">Run Command</span>
+        <span className="shrink-0 text-slate-500 font-medium">Executing</span>
         {active && !done ? (
           <ShiningText
             text={command}
@@ -108,7 +108,7 @@ export function VibeRunBlock({
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
-	            className="overflow-hidden border-t border-slate-100 bg-slate-50/[0.45]"
+            className="overflow-hidden border-t border-slate-100/70 bg-white/35"
           >
             <pre className="max-h-44 overflow-auto whitespace-pre-wrap px-4 py-3 font-mono text-[11.5px] leading-relaxed text-slate-600 scrollbar-none">
               {body.trim()}

@@ -12,10 +12,9 @@ import React, {
   useState,
 } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { GoogleGenAI } from "@google/genai";
 import {
   AppWindow,
-    Scissors,
+  Scissors,
   ArrowUpIcon,
   Check,
   ChevronRight,
@@ -38,19 +37,17 @@ import { SettingsModal } from "./components/SettingsModal";
 import { ShiningText } from "./components/ShiningText";
 import { BlurredStaggerStream } from "@/components/ui/blurred-stagger-text";
 import { MarkdownMessageContent } from "./components/MarkdownMessageContent";
+import { GradientWaveText } from "./components/GradientWaveText";
 import AIClipper from "./components/AIClipper";
+import AgenticBrowser from "./components/AgenticBrowser";
+import { AiOrb } from "./components/AiOrb";
 import { VibeAgentMessageBody } from "./components/vibe/VibeAgentMessageBody";
 import { VibeLivePreviewPanel } from "./components/vibe/VibeLivePreviewPanel";
 import { VIBE_CURSOR_AGENT_SYSTEM_PROMPT } from "./lib/vibeAgentConstants";
 import { extractVibeFilesFromContent } from "./lib/parseVibeAgentContent";
 
-let geminiSingleton: GoogleGenAI | null = null;
-function getGeminiClient(): GoogleGenAI | null {
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) return null;
-  geminiSingleton ??= new GoogleGenAI({ apiKey: key });
-  return geminiSingleton;
-}
+type WorkspaceTabId = "chat" | "vibe" | "browser";
+const WORKSPACE_TAB_ORDER: WorkspaceTabId[] = ["chat", "vibe", "browser"];
 
 /** Standard chat: shimmer until the model emits answer text (`content`), then hide so stagger can print it. */
 function ChatThinkingLabel({
@@ -70,6 +67,24 @@ function ChatThinkingLabel({
     <div className="flex items-center gap-1" aria-live="polite">
       <ShiningText text="Thinking" preset="thinkingChat" />
     </div>
+  );
+}
+
+function UserMessageText({ text }: { text: string }) {
+  return (
+    <p className="clyra-chat-user-text">
+      <GradientWaveText
+        align="left"
+        speed={1.55}
+        bottomOffset={8}
+        bandGap={4}
+        bandCount={8}
+        className="clyra-chat-user-gradient"
+        ariaLabel={text}
+      >
+        {text}
+      </GradientWaveText>
+    </p>
   );
 }
 
@@ -105,6 +120,10 @@ const AnimatedMessage = ({
   /** Vibe agent now drives its own thought UI from the model's <<<VIBE_THINKING>>> blocks. While we have no
    *  content yet, show the unified "Thinking" shimmer so the seam into the inline VibeThoughtPanel is clean. */
   const suppressVibeAnswerBody = isVibe && !!isThinking && content.length === 0;
+  const hasMarkdownStructure =
+    /```|^\s{0,3}#{1,6}\s|^\s*[-*]\s|\n\s*\d+\.\s|\|.+\|/m.test(content);
+  const shouldRenderMarkdown =
+    markdownSupport && !isStreaming && hasMarkdownStructure;
   return (
     <div
       className={cn(
@@ -132,20 +151,12 @@ const AnimatedMessage = ({
               isLastAssistant={!!isLastAssistant}
               onVibePreviewReady={onVibePreviewReady}
             />
-          ) : markdownSupport ? (
-            isStreaming ? (
-              <BlurredStaggerStream
-                text={content}
-                isStreaming
-                className={cn("text-inherit", fontSizeClass)}
-              />
-            ) : (
-              <MarkdownMessageContent
-                content={content}
-                codeHighlighting={!!codeHighlighting}
-                codePresentation="default"
-              />
-            )
+          ) : shouldRenderMarkdown ? (
+            <MarkdownMessageContent
+              content={content}
+              codeHighlighting={!!codeHighlighting}
+              codePresentation="default"
+            />
           ) : (
             <BlurredStaggerStream
               text={content}
@@ -306,7 +317,14 @@ export default function App() {
 
   const [selectedCommand, setSelectedCommand] =
     useState<CommandSuggestion | null>(null);
+  const [activeWorkspaceTab, setActiveWorkspaceTab] =
+    useState<WorkspaceTabId>("chat");
+  const [workspaceTransitionDirection, setWorkspaceTransitionDirection] =
+    useState(1);
+  const [hoveredWorkspaceTab, setHoveredWorkspaceTab] =
+    useState<WorkspaceTabId | null>(null);
   const [clipInitialUrl, setClipInitialUrl] = useState("");
+  const [browserInitialQuery, setBrowserInitialQuery] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [chats, setChats] = useState<ChatSession[]>(() => {
     try {
@@ -336,6 +354,7 @@ export default function App() {
   const [editingTitle, setEditingTitle] = useState("");
   const [value, setValue] = useState("");
   const [attachments, setAttachments] = useState<string[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeSuggestion, setActiveSuggestion] = useState<number>(-1);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [recentCommand, setRecentCommand] = useState<string | null>(null);
@@ -421,39 +440,46 @@ export default function App() {
     );
   }, []);
 
-  const openChatSession = useCallback((chat: ChatSession) => {
-    setCurrentChatId(chat.id);
-    setMessages(chat.messages);
-    setChats((prev) =>
-      prev.map((item) =>
-        item.id === chat.id ? { ...item, vibeUnread: false } : item,
-      ),
-    );
-    let restoredPreview = false;
-    const lastDoneVibe = [...chat.messages]
-      .reverse()
-      .find(
-        (m) =>
-          m.role === "assistant" &&
-          m.assistantKind === "vibe" &&
-          !m.isStreaming &&
-          typeof m.content === "string" &&
-          m.content.includes("<<<VIBE_"),
+  const openChatSession = useCallback(
+    (chat: ChatSession) => {
+      setCurrentChatId(chat.id);
+      setMessages(chat.messages);
+      setSelectedCommand(null);
+      setClipInitialUrl("");
+      setBrowserInitialQuery("");
+      setActiveWorkspaceTab(isVibeChat(chat) ? "vibe" : "chat");
+      setChats((prev) =>
+        prev.map((item) =>
+          item.id === chat.id ? { ...item, vibeUnread: false } : item,
+        ),
       );
-    if (lastDoneVibe) {
-      const files = extractVibeFilesFromContent(lastDoneVibe.content);
-      if (Object.keys(files).length > 0) {
-        setVibePreviewMessageId(lastDoneVibe.id);
-        setVibePreviewFiles(files);
-        restoredPreview = true;
+      let restoredPreview = false;
+      const lastDoneVibe = [...chat.messages]
+        .reverse()
+        .find(
+          (m) =>
+            m.role === "assistant" &&
+            m.assistantKind === "vibe" &&
+            !m.isStreaming &&
+            typeof m.content === "string" &&
+            m.content.includes("<<<VIBE_"),
+        );
+      if (lastDoneVibe) {
+        const files = extractVibeFilesFromContent(lastDoneVibe.content);
+        if (Object.keys(files).length > 0) {
+          setVibePreviewMessageId(lastDoneVibe.id);
+          setVibePreviewFiles(files);
+          restoredPreview = true;
+        }
       }
-    }
-    if (!restoredPreview) {
-      setVibePreviewMessageId(null);
-      setVibePreviewFiles(null);
-    }
-    setIsSidebarOpen(false);
-  }, []);
+      if (!restoredPreview) {
+        setVibePreviewMessageId(null);
+        setVibePreviewFiles(null);
+      }
+      setIsSidebarOpen(false);
+    },
+    [isVibeChat],
+  );
 
   const showVibeLivePreview =
     !!vibePreviewFiles &&
@@ -514,21 +540,24 @@ export default function App() {
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "k") {
         e.preventDefault();
-        setValue("/");
-        setTimeout(() => {
-          textareaRef.current?.focus();
-        }, 10);
+        textareaRef.current?.focus();
       }
     };
     window.addEventListener("keydown", handleGlobalKeyDown);
     return () => window.removeEventListener("keydown", handleGlobalKeyDown);
   }, []);
 
+  const isVibeComposerMode =
+    activeWorkspaceTab === "vibe" &&
+    selectedCommand?.id !== "clip" &&
+    selectedCommand?.id !== "browse";
+
   const isExpanded =
-    isInputExpanded ||
+    (!isVibeComposerMode && isInputExpanded) ||
     value.trim().length > 0 ||
     attachments.length > 0 ||
     selectedCommand !== null ||
+    isVibeComposerMode ||
     messages.length > 0;
 
   useEffect(() => {
@@ -575,14 +604,15 @@ export default function App() {
         !inputContainerRef.current.contains(event.target as Node) &&
         value.trim().length === 0 &&
         attachments.length === 0 &&
-        !selectedCommand
+        !selectedCommand &&
+        activeWorkspaceTab !== "vibe"
       ) {
         setIsInputExpanded(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [value, attachments.length, selectedCommand]);
+  }, [value, attachments.length, selectedCommand, activeWorkspaceTab]);
 
   const commandSuggestions: CommandSuggestion[] = [
     {
@@ -617,7 +647,7 @@ export default function App() {
         </div>
       ),
       label: "Vibe Coder",
-      description: "Generate website and desktop apps",
+      description: "Build polished apps in a live workbench",
       prefix: "/vibe",
     },
     {
@@ -645,7 +675,7 @@ export default function App() {
         </div>
       ),
       label: "AI Clip",
-      description: "Clip most viral moments with AI generated subtitles",
+      description: "Render cinematic 720p clips with timed subtitles",
       prefix: "/clip",
     },
     {
@@ -672,12 +702,14 @@ export default function App() {
         </div>
       ),
       label: "Agentic Browser",
-      description: "Let the AI control your browser",
+      description: "Search with a visible AI cursor and task trail",
       prefix: "/browse",
     },
   ];
 
-  const isCommandMode = value.startsWith("/") && !value.includes(" ");
+  const commandPaletteEnabled = false;
+  const isCommandMode =
+    commandPaletteEnabled && value.startsWith("/") && !value.includes(" ");
   const commandQuery = isCommandMode ? value.substring(1).toLowerCase() : "";
   const memoizedChats = React.useMemo(() => chats, [chats]);
   const filteredChats = React.useMemo(() => {
@@ -703,10 +735,14 @@ export default function App() {
     ? commandSuggestions.filter((cmd) =>
         cmd.label.toLowerCase().includes(commandQuery),
       )
-    : commandSuggestions;
+    : [];
 
   useEffect(() => {
-    if (isCommandMode && filteredSuggestions.length > 0) {
+    if (
+      commandPaletteEnabled &&
+      isCommandMode &&
+      filteredSuggestions.length > 0
+    ) {
       setShowCommandPalette(true);
       if (
         activeSuggestion >= filteredSuggestions.length ||
@@ -718,7 +754,12 @@ export default function App() {
       setShowCommandPalette(false);
       setActiveSuggestion(-1);
     }
-  }, [isCommandMode, commandQuery, filteredSuggestions.length]);
+  }, [
+    commandPaletteEnabled,
+    isCommandMode,
+    commandQuery,
+    filteredSuggestions.length,
+  ]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -839,6 +880,13 @@ export default function App() {
       .trim();
     const lower = clean.toLowerCase();
     if (lower.includes("calculator")) return "Calculator App";
+    if (
+      lower.includes("task") ||
+      lower.includes("planner") ||
+      lower.includes("todo") ||
+      lower.includes("kanban")
+    )
+      return "Task Planner App";
     if (lower.includes("landing") && lower.includes("openai"))
       return "OpenAI Landing Page";
     if (lower.includes("landing")) return "Launch Landing Page";
@@ -853,206 +901,250 @@ export default function App() {
   };
 
   const buildLocalVibeFallback = (userPrompt: string) => {
-    const appCode = `import React from "react";
-import { ArrowRight, BrainCircuit, Layers3, LockKeyhole, Sparkles } from "lucide-react";
+    const lowerPrompt = userPrompt.toLowerCase();
+    const isTimerApp = /\b(timer|pomodoro|stopwatch|countdown)\b/.test(
+      lowerPrompt,
+    );
+    const projectTitle = buildVibeProjectTitle(userPrompt);
+    const projectTitleLiteral = JSON.stringify(projectTitle);
+    const projectPromptLiteral = JSON.stringify(userPrompt);
+    const appCode = isTimerApp
+      ? `import React, { useEffect, useMemo, useState } from "react";
+import { Pause, Play, RotateCcw } from "lucide-react";
 
-const capabilities = [
-  { icon: BrainCircuit, title: "Reasoning that works with you", body: "Plan complex launches, compare product bets, and turn scattered notes into crisp next actions." },
-  { icon: Layers3, title: "One workspace for every mode", body: "Move from chat to code, image, data, and docs without losing the context that matters." },
-  { icon: LockKeyhole, title: "Built for teams and trust", body: "Clean controls, transparent workflows, and enterprise-ready patterns for modern AI work." },
-] as const;
+/** A premium minimal timer app rendered inside the isolated Vibe sandbox. */
+export default function TimerApp() {
+  const [secondsLeft, setSecondsLeft] = useState(25 * 60);
+  const [isRunning, setIsRunning] = useState(false);
+  const totalSeconds = 25 * 60;
 
-/** A polished landing page rendered inside the isolated Vibe sandbox. */
-export default function LandingPage() {
+  useEffect(() => {
+    if (!isRunning) return;
+    const id = window.setInterval(() => {
+      setSecondsLeft((value) => {
+        if (value <= 1) {
+          setIsRunning(false);
+          return 0;
+        }
+        return value - 1;
+      });
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [isRunning]);
+
+  const minutes = String(Math.floor(secondsLeft / 60)).padStart(2, "0");
+  const seconds = String(secondsLeft % 60).padStart(2, "0");
+  const progress = useMemo(() => 1 - secondsLeft / totalSeconds, [secondsLeft]);
+
   return (
-    <main className="min-h-screen overflow-hidden bg-[#f7f7f2] text-[#101010]">
-      <section className="relative min-h-screen px-6 py-6 sm:px-10">
-        <div className="absolute inset-0 opacity-70" aria-hidden>
-          <div className="absolute left-1/2 top-12 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(16,185,129,0.26),transparent_62%)]" />
-          <div className="absolute bottom-0 right-0 h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle,rgba(15,23,42,0.16),transparent_64%)]" />
+    <main className="grid min-h-screen place-items-center bg-[#10100d] px-6 text-white">
+      <section className="w-full max-w-md rounded-lg border border-white/10 bg-white/[0.06] p-6 shadow-xl shadow-black/30">
+        <div className="mb-10 flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-[#d6b56d]">Focus timer</p>
+            <h1 className="mt-2 text-2xl font-semibold tracking-tight">Minimal Timer</h1>
+          </div>
+          <span className="rounded-full border border-white/10 px-3 py-1 text-xs text-white/45">25 min</span>
         </div>
 
-        <nav className="relative z-10 flex items-center justify-between border-b border-black/10 pb-5">
-          <div className="flex items-center gap-3">
-            <div className="grid h-9 w-9 place-items-center rounded-full bg-black text-white">
-              <Sparkles className="h-4 w-4" />
-            </div>
-            <span className="text-lg font-semibold tracking-tight">OpenAI</span>
+        <div className="relative mx-auto grid h-64 w-64 place-items-center rounded-full border border-white/10 bg-black/25">
+          <svg className="absolute inset-0 h-full w-full -rotate-90" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="43" fill="none" stroke="rgba(255,255,255,.08)" strokeWidth="4" />
+            <circle cx="50" cy="50" r="43" fill="none" stroke="#d6b56d" strokeLinecap="round" strokeWidth="4" strokeDasharray={270} strokeDashoffset={270 - progress * 270} />
+          </svg>
+          <div className="text-center">
+            <p className="text-6xl font-semibold tabular-nums">{minutes}:{seconds}</p>
+            <p className="mt-3 text-sm text-white/40">{isRunning ? "Session running" : secondsLeft === 0 ? "Complete" : "Ready"}</p>
           </div>
-          <div className="hidden items-center gap-7 text-sm font-medium text-black/60 md:flex">
-            <a href="#research">Research</a>
-            <a href="#products">Products</a>
-            <a href="#safety">Safety</a>
-            <a href="#enterprise">Enterprise</a>
-          </div>
-          <button className="rounded-full bg-black px-4 py-2 text-sm font-semibold text-white transition hover:bg-black/80">
-            Try ChatGPT
+        </div>
+
+        <div className="mt-10 grid grid-cols-[1fr_auto] gap-3">
+          <button onClick={() => setIsRunning((value) => !value)} className="inline-flex h-12 items-center justify-center gap-2 rounded-lg bg-[#d6b56d] px-5 text-sm font-semibold text-[#17130b] transition hover:bg-[#e7c981]">
+            {isRunning ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+            {isRunning ? "Pause" : "Start"}
           </button>
-        </nav>
-
-        <div className="relative z-10 grid min-h-[calc(100vh-96px)] items-center gap-12 py-14 lg:grid-cols-[1.02fr_0.98fr]">
-          <div className="max-w-3xl">
-            <p className="mb-5 text-sm font-semibold uppercase tracking-[0.22em] text-emerald-700">AI for everyone</p>
-            <h1 className="text-5xl font-semibold tracking-[-0.06em] text-black sm:text-7xl lg:text-8xl">
-              Intelligence for building what comes next.
-            </h1>
-            <p className="mt-7 max-w-2xl text-lg leading-8 text-black/62">
-              Explore a clean, fast landing experience for OpenAI with product signals, trust messaging, and a strong first-viewport story.
-            </p>
-            <div className="mt-9 flex flex-wrap gap-3">
-              <button className="inline-flex items-center gap-2 rounded-full bg-black px-5 py-3 text-sm font-semibold text-white transition hover:bg-black/80">
-                Start building <ArrowRight className="h-4 w-4" />
-              </button>
-              <button className="rounded-full border border-black/15 bg-white/70 px-5 py-3 text-sm font-semibold text-black backdrop-blur transition hover:bg-white">
-                View research
-              </button>
-            </div>
-          </div>
-
-          <div className="relative">
-            <div className="rounded-[2rem] border border-black/10 bg-white/75 p-3 shadow-2xl shadow-black/10 backdrop-blur">
-              <div className="rounded-[1.5rem] bg-[#101010] p-5 text-white">
-                <div className="mb-7 flex items-center justify-between text-xs text-white/50">
-                  <span>Live workspace</span>
-                  <span>GPT ready</span>
-                </div>
-                <div className="space-y-4">
-                  <div className="rounded-2xl bg-white/10 p-4">
-                    <p className="text-sm text-white/55">Prompt</p>
-                    <p className="mt-2 text-lg font-medium">Design a launch plan for a new AI product.</p>
-                  </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {["Strategy", "Prototype", "Safety", "Launch"].map((item) => (
-                      <div key={item} className="rounded-2xl border border-white/10 bg-white/[0.06] p-4">
-                        <p className="text-sm font-semibold">{item}</p>
-                        <div className="mt-4 h-2 rounded-full bg-white/10">
-                          <div className="h-full w-2/3 rounded-full bg-emerald-300" />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <button onClick={() => { setIsRunning(false); setSecondsLeft(totalSeconds); }} className="grid h-12 w-12 place-items-center rounded-lg border border-white/10 bg-white/[0.05] text-white/70 transition hover:bg-white/10 hover:text-white" aria-label="Reset timer">
+            <RotateCcw className="h-4 w-4" />
+          </button>
         </div>
       </section>
+    </main>
+  );
+}`
+      : `import React, { useMemo, useState } from "react";
+import { CheckCircle2, Circle, Plus, Sparkles, Trash2 } from "lucide-react";
 
-      <section id="products" className="grid gap-4 px-6 pb-16 sm:px-10 lg:grid-cols-3">
-        {capabilities.map(({ icon: Icon, title, body }) => (
-          <article key={title} className="rounded-3xl border border-black/10 bg-white/70 p-6 shadow-sm">
-            <div className="mb-8 grid h-11 w-11 place-items-center rounded-2xl bg-black text-white">
-              <Icon className="h-5 w-5" />
+const projectTitle = ${projectTitleLiteral};
+const projectPrompt = ${projectPromptLiteral};
+
+/** A working prompt-specific app rendered inside the isolated Vibe sandbox. */
+export default function AdaptiveWorkspaceApp() {
+  const seedTasks = useMemo(() => {
+    const words = projectPrompt
+      .split(/\\s+/)
+      .filter((word) => word.length > 3)
+      .slice(0, 5);
+    return (words.length ? words : ["design", "build", "polish"]).map((word, index) => ({
+      id: String(index),
+      label: "Ship " + word.replace(/[^a-z0-9]/gi, ""),
+      done: index === 0,
+    }));
+  }, []);
+  const [tasks, setTasks] = useState(seedTasks);
+  const [note, setNote] = useState(projectPrompt);
+  const [newTask, setNewTask] = useState("");
+  const completeCount = tasks.filter((task) => task.done).length;
+  const progress = Math.round((completeCount / Math.max(1, tasks.length)) * 100);
+  const addTask = () => {
+    const clean = newTask.trim();
+    if (!clean) return;
+    setTasks((items) => [
+      ...items,
+      { id: crypto.randomUUID(), label: clean, done: false },
+    ]);
+    setNewTask("");
+  };
+
+  return (
+    <main className="min-h-screen bg-[#f6f7f4] p-6 text-slate-950">
+      <section className="mx-auto grid min-h-[calc(100vh-3rem)] max-w-6xl gap-5 lg:grid-cols-[0.9fr_1.1fr]">
+        <aside className="rounded-xl border border-black/10 bg-white/80 p-6 shadow-xl shadow-slate-200/70">
+          <div className="grid h-12 w-12 place-items-center rounded-lg bg-black text-white">
+            <Sparkles className="h-5 w-5" />
+          </div>
+          <p className="mt-8 text-xs font-bold uppercase tracking-[0.24em] text-emerald-700">
+            Interactive app
+          </p>
+          <h1 className="mt-3 text-5xl font-semibold tracking-tight">
+            {projectTitle}
+          </h1>
+          <textarea
+            value={note}
+            onChange={(event) => setNote(event.target.value)}
+            className="mt-6 min-h-36 w-full resize-none rounded-lg border border-black/10 bg-slate-50 p-4 leading-7 outline-none transition focus:border-black/25"
+          />
+          <div className="mt-6 grid grid-cols-3 gap-3 text-center">
+            <div className="rounded-lg bg-slate-50 p-4">
+              <p className="text-2xl font-semibold">{tasks.length}</p>
+              <p className="text-xs font-semibold text-slate-500">Tasks</p>
             </div>
-            <h2 className="text-xl font-semibold tracking-tight">{title}</h2>
-            <p className="mt-3 leading-7 text-black/58">{body}</p>
-          </article>
-        ))}
+            <div className="rounded-lg bg-slate-50 p-4">
+              <p className="text-2xl font-semibold">{completeCount}</p>
+              <p className="text-xs font-semibold text-slate-500">Done</p>
+            </div>
+            <div className="rounded-lg bg-slate-50 p-4">
+              <p className="text-2xl font-semibold">{progress}%</p>
+              <p className="text-xs font-semibold text-slate-500">Progress</p>
+            </div>
+          </div>
+          <div className="mt-6 h-2 overflow-hidden rounded-full bg-slate-100">
+            <div
+              className="h-full rounded-full bg-emerald-700 transition-all"
+              style={{ width: progress + "%" }}
+            />
+          </div>
+        </aside>
+
+        <div className="rounded-xl border border-black/10 bg-white p-5 shadow-2xl shadow-slate-200">
+          <div className="flex gap-2">
+            <input
+              value={newTask}
+              onChange={(event) => setNewTask(event.target.value)}
+              onKeyDown={(event) => event.key === "Enter" && addTask()}
+              placeholder="Add an app task..."
+              className="h-12 flex-1 rounded-lg border border-black/10 px-4 outline-none transition focus:border-black/25"
+            />
+            <button
+              onClick={addTask}
+              className="inline-flex h-12 items-center gap-2 rounded-lg bg-black px-5 text-sm font-semibold text-white transition hover:bg-slate-800"
+            >
+              <Plus className="h-4 w-4" />
+              Add
+            </button>
+          </div>
+          <div className="mt-5 space-y-3">
+            {tasks.map((task) => (
+              <div
+                key={task.id}
+                className="flex items-center gap-3 rounded-lg border border-black/10 bg-slate-50 p-4"
+              >
+                <button
+                  onClick={() =>
+                    setTasks((items) =>
+                      items.map((item) =>
+                        item.id === task.id ? { ...item, done: !item.done } : item,
+                      ),
+                    )
+                  }
+                  className="text-slate-700"
+                >
+                  {task.done ? (
+                    <CheckCircle2 className="h-5 w-5" />
+                  ) : (
+                    <Circle className="h-5 w-5" />
+                  )}
+                </button>
+                <span
+                  className={
+                    task.done
+                      ? "flex-1 text-slate-400 line-through"
+                      : "flex-1 font-medium"
+                  }
+                >
+                  {task.label}
+                </span>
+                <button
+                  onClick={() =>
+                    setTasks((items) => items.filter((item) => item.id !== task.id))
+                  }
+                  className="text-slate-400 transition hover:text-red-500"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
       </section>
     </main>
   );
 }`;
-    const planMd = `# Agent Plan — Sandboxed Vibe Build
-Generated: ${new Date().toISOString()}
-Status: COMPLETE
-
----
-
-## What We Are Building
-This fallback builds a polished, sandboxed React preview for: ${userPrompt}. It preserves the Vibe workflow by creating a project plan first, delivering code in mini code boxes, and handing a complete file map to the isolated preview server.
-
-## Architecture Decisions
-- React + Tailwind in a Vibe sandbox keeps the preview fast, portable, and isolated from Clyra's real source files.
-- A single App.tsx is enough for the local fallback so it stays lightweight when the remote coding model is unavailable.
-- The preview server owns runtime validation, so generated files never need host project write access.
-
-## File Tree
-- vibe-project/plan.md
-- vibe-project/src/App.tsx
-
-## Step-by-Step Plan
-- [x] Step 1: Plan the build — keep the contract visible to the user.
-- [x] Step 2: Build the React preview — ship a finished visual surface.
-- [x] Step 3: Prepare verification — run through the isolated preview path.
-
-## Completed Steps
-- Created the plan file.
-- Created the primary React preview component.
-- Prepared a validation command card.
-
-## Discoveries & Surprises
-- Remote model output was unavailable, so the deterministic fallback kept the workflow operational.
-
-## Known Issues / Tech Debt
-- The fallback is intentionally compact; when the remote model is configured it can generate a richer multi-file project.
-
-## How to Run
-npm run dev
-Open the generated Vibe preview URL in the right panel.`;
+    const fallbackBuildLabel = isTimerApp
+      ? "a premium minimal focus timer with start, pause, reset, and progress ring"
+      : `a working interactive ${projectTitle} app with editable state, task controls, and progress tracking`;
+    const fallbackDesignDirection = isTimerApp
+      ? "Cinematic minimal utility app with a dark canvas, gold progress ring, large readable timer, and compact controls."
+      : "Light, minimal software UI with real controls, prompt-matched hierarchy, restrained contrast, responsive structure, and no landing-page filler.";
 
     return `<<<VIBE_THINKING>>>
-DEEP THINKING
-
-WHAT THE USER ASKED FOR:
-${userPrompt}
-
-WHAT I AM ACTUALLY BUILDING:
-A complete sandboxed React preview that still follows the elite-agent workflow even when the remote model is unavailable. I am creating the required plan file first, then delivering the visual app, then preparing verification.
-
-ARCHITECTURE RATIONALE:
-The fallback uses one React entry component plus a plan file because it must be fast, deterministic, and safe. The Vibe sandbox server handles isolation and preview serving, so no generated file can touch Clyra's host source.
-
-DESIGN DIRECTION:
-Soft editorial AI-product landing page with black-and-cream contrast, emerald signal color, rounded workspace panels, and clear first-viewport hierarchy.
-
-TRADEOFFS EVALUATED:
-Option A: Multi-file fallback → richer structure → rejected here to keep offline recovery light.
-Option B: Single-file preview plus plan.md → chosen because it is reliable and fast.
-
-EDGE CASES & COMPLEXITY I'M HANDLING:
-- No remote API key or temporary model failure.
-- Blank preview risk.
-- Unsafe paths outside vibe-project.
-
-RISK AREAS:
-- Runtime import mistakes, mitigated by using a small dependency set already available to the host.
-
-GRANULAR STEP PLAN:
-Step 1: Create plan.md — establish the project contract first.
-Step 2: Build App.tsx — render the requested preview.
-Step 3: Prepare verification — validate the sandbox handoff.
+Build session
+Active agent: Build
+Phase: Implement
+Intent: ${userPrompt}
+Context: Remote generation was unavailable, so I am creating a compact working sandbox preview directly.
+TodoWrite: Build the requested UI in vibe-project/src/App.tsx, then verify the preview handoff.
+Next tool: Write
+Why: A real preview file is more useful than a staged planning timeline.
+${fallbackDesignDirection}
 <<<END_VIBE_THINKING>>>
-── STEP 1 / 3 ─────────────────
-Creating the project plan first.
-<<<VIBE_CODE file="vibe-project/plan.md" added="${planMd.split("\n").length}" removed="0">>>
-${planMd}
-<<<END_VIBE_CODE>>>
-── STEP 2 / 3 ─────────────────
-Creating the sandboxed app now.
-<<<VIBE_ANALYZE path="vibe-project/src/App.tsx">>>
-<<<END_VIBE_ANALYZE>>>
-EDITING FILE
-Path: vibe-project/src/App.tsx
-Changes: Build the requested React experience entirely inside the sandbox namespace.
-Risk: Low, because the file is sandboxed and cannot overwrite Clyra source.
+Writing the sandbox preview.
 <<<VIBE_CODE file="vibe-project/src/App.tsx" added="${appCode.split("\n").length}" removed="0">>>
 ${appCode}
 <<<END_VIBE_CODE>>>
 <<<VIBE_THINKING>>>
-MID-TASK REFLECTION
-Progress: Step 2 of 3 complete
-Plan status: On track.
-Discoveries: The app can ship as a compact sandbox entry point for this fallback path.
-Quality gate: The generated page has a real hero, navigation, CTA surface, and feature section.
-Next: Prepare the verification command and let the live preview open only after the timeline finishes.
-plan.md: Already updated to COMPLETE for this deterministic fallback.
+Build session
+Active agent: Build
+Phase: Verify
+Intent: ${userPrompt}
+Context: The preview now has a real React surface with local state and visible controls.
+TodoWrite: Verify the generated App.tsx can be handed to the sandbox preview.
+Next tool: Bash
+Why: The user needs a working preview, not extra process cards.
 <<<END_VIBE_THINKING>>>
-── STEP 3 / 3 ─────────────────
-Preparing the verification command.
 <<<VIBE_RUN>>>
 RUNNING COMMAND
 $ npm run lint
-Purpose: validate the generated React file shape
+Purpose: validate the generated React preview shape
 OUTPUT
 Command prepared for the sandbox preview. The host app also runs its own TypeScript checks before shipping.
 <<<END_VIBE_RUN>>>
@@ -1060,11 +1152,10 @@ Command prepared for the sandbox preview. The host app also runs its own TypeScr
 SHIPPED
 
 WHAT WAS BUILT:
-A sandboxed Vibe preview with a living plan file, a polished React landing page, and a verification command card. The code is isolated under vibe-project and will be loaded by the preview server after the timeline completes.
+A sandboxed Vibe preview with ${fallbackBuildLabel}. The code is isolated under vibe-project and loaded by the preview server after verification.
 
 FILE MANIFEST:
 Created:
-vibe-project/plan.md — project contract and run instructions.
 vibe-project/src/App.tsx — primary preview surface.
 
 HOW TO RUN:
@@ -1073,8 +1164,6 @@ Then open the live preview URL shown in the workbench.
 
 KNOWN TRADEOFFS:
 The local fallback is intentionally compact so recovery stays fast and reliable.
-
-plan.md: COMPLETE
 <<<END_VIBE_THINKING>>>`;
   };
 
@@ -1084,7 +1173,7 @@ plan.md: COMPLETE
     fallback: string,
   ) => {
     let full = "";
-    const chunks = fallback.match(/[\s\S]{1,220}/g) ?? [fallback];
+    const chunks = fallback.match(/[\s\S]{1,2200}/g) ?? [fallback];
     for (const chunk of chunks) {
       full += chunk;
       patchMessagesForChat(streamChatId, (prev) =>
@@ -1094,7 +1183,7 @@ plan.md: COMPLETE
             : msg,
         ),
       );
-      await new Promise((resolve) => window.setTimeout(resolve, 28));
+      await new Promise((resolve) => window.setTimeout(resolve, 4));
     }
     patchMessagesForChat(streamChatId, (prev) =>
       prev.map((msg) =>
@@ -1124,6 +1213,27 @@ plan.md: COMPLETE
       ),
     );
     try {
+      const remoteVibeEnabled =
+        window.localStorage.getItem("clyra-vibe-remote") !== "false";
+      if (!remoteVibeEnabled) {
+        const fallback = buildLocalVibeFallback(userPrompt);
+        await streamLocalVibeFallback(aiMsgId, streamChatId, fallback);
+        setChats((prev) =>
+          prev.map((chat) =>
+            chat.id === streamChatId
+              ? {
+                  ...chat,
+                  kind: "vibe",
+                  vibeRunning: false,
+                  vibeUnread: currentChatIdRef.current !== streamChatId,
+                  updatedAt: Date.now(),
+                }
+              : chat,
+          ),
+        );
+        return;
+      }
+
       let full = "";
       const openAiMessages = [
         {
@@ -1154,6 +1264,10 @@ Required rhythm — a "step" can contain MULTIPLE actions:
   7) Final <<<VIBE_THINKING>>> with SHIPPED handoff and plan.md COMPLETE.
 
 Hard rules:
+  - The live preview must be the requested app/product itself. Do NOT build a landing page, marketing page, portfolio, explainer, or a page that merely describes the request unless the user explicitly asked for that.
+  - Include meaningful interactive state and controls when the requested product implies an app, tool, game, dashboard, editor, or workflow.
+  - Avoid basic repeated UI. Pick a prompt-specific design direction, custom sample data, unique layout structure, and domain-specific interactions. The result must not look like the same preset with renamed text.
+  - Animations must be purposeful and varied: use motion for state changes, feedback, transitions, or gameplay, not the same generic fade on every element.
   - NEVER use markdown triple-backtick fences. All code goes inside <<<VIBE_CODE>>> as raw source.
   - NEVER print decorative divider lines made of box-drawing characters.
   - Prose OUTSIDE delimiters must be short (≤1 sentence). Long reasoning belongs inside DEEP THINKING.
@@ -1170,30 +1284,57 @@ Request details: ${userPrompt}`,
       // Use deepseek-chat (non-reasoning) for the structured agent stream so the model spends
       // its entire output budget on the delimited timeline (thinking + analyze + code + ...)
       // instead of burning tokens on internal reasoning that we discard anyway.
-      await streamOpenAI(
-        VIBE_CURSOR_AGENT_SYSTEM_PROMPT,
-        openAiMessages,
-        (chunkText, isReasoning) => {
-          if (isReasoning) {
-            return;
-          }
-          full += chunkText;
-          patchMessagesForChat(streamChatId, (prev) =>
-            prev.map((msg) =>
-              msg.id === aiMsgId
-                ? {
-                    ...msg,
-                    content: full,
-                    isThinking: false,
-                  }
-                : msg,
-            ),
-          );
-        },
-        0.6,
-        8000,
-        "deepseek-chat",
-      );
+      const vibeAbort = new AbortController();
+      let acceptRemoteVibeChunks = true;
+      let vibeTimeout: number | undefined;
+      try {
+        await Promise.race([
+          streamOpenAI(
+            VIBE_CURSOR_AGENT_SYSTEM_PROMPT,
+            openAiMessages,
+            (chunkText, isReasoning) => {
+              if (!acceptRemoteVibeChunks || isReasoning) {
+                return;
+              }
+              full += chunkText;
+              patchMessagesForChat(streamChatId, (prev) =>
+                prev.map((msg) =>
+                  msg.id === aiMsgId
+                    ? {
+                        ...msg,
+                        content: full,
+                        isThinking: false,
+                      }
+                    : msg,
+                ),
+              );
+            },
+            0.6,
+            8000,
+            "deepseek-chat",
+            vibeAbort.signal,
+          ),
+          new Promise<never>((_, reject) => {
+            vibeTimeout = window.setTimeout(() => {
+              acceptRemoteVibeChunks = false;
+              vibeAbort.abort();
+              reject(new Error("Vibe remote stream timed out"));
+            }, 45000);
+          }),
+        ]);
+      } finally {
+        acceptRemoteVibeChunks = false;
+        if (vibeTimeout !== undefined) window.clearTimeout(vibeTimeout);
+      }
+
+      if (
+        !/<<<VIBE_CODE\s+file="vibe-project\/plan\.md"/.test(full) ||
+        !/<<<VIBE_CODE\s+file="vibe-project\/src\/App\.tsx"/.test(full)
+      ) {
+        throw new Error(
+          "Vibe remote stream returned no complete sandbox preview",
+        );
+      }
 
       // Removed fetch
 
@@ -1309,10 +1450,16 @@ Please analyze the code you just wrote and fix this error.`;
     if (value.trim() || selectedCommand) {
       setVibePreviewMessageId(null);
       setVibePreviewFiles(null);
-      const userCommandLabel = selectedCommand?.label;
-      const userCommandId = selectedCommand?.id;
+      const userCommandLabel =
+        selectedCommand?.label ??
+        (activeWorkspaceTab === "vibe" ? "Vibe Coder" : undefined);
+      const userCommandId =
+        selectedCommand?.id ??
+        (activeWorkspaceTab === "vibe" ? "vibe" : undefined);
       const rawUserText = value.trim();
+      const vibeCommand = rawUserText.match(/^\/vibe(?:\s+(.+))?$/i);
       const clipCommand = rawUserText.match(/^\/clip(?:\s+(.+))?$/i);
+      const browseCommand = rawUserText.match(/^\/browse(?:\s+(.+))?$/i);
       if (userCommandId === "clip" || clipCommand) {
         const clipCommandSource = clipCommand?.[1]?.trim() ?? rawUserText;
         setClipInitialUrl(
@@ -1329,8 +1476,27 @@ Please analyze the code you just wrote and fix this error.`;
         setShowCommandPalette(false);
         return;
       }
+      if (userCommandId === "browse" || browseCommand) {
+        const browseCommandSource = browseCommand?.[1]?.trim() ?? rawUserText;
+        setBrowserInitialQuery(
+          browseCommandSource && !browseCommandSource.startsWith("/browse")
+            ? browseCommandSource
+            : "",
+        );
+        setSelectedCommand(
+          commandSuggestions.find((command) => command.id === "browse") ?? null,
+        );
+        setActiveWorkspaceTab("browser");
+        setValue("");
+        adjustHeight(true);
+        setRecentCommand(null);
+        setShowCommandPalette(false);
+        return;
+      }
       const userText =
-        rawUserText || (userCommandLabel ? `Execute ${userCommandLabel}` : "");
+        vibeCommand?.[1]?.trim() ||
+        rawUserText ||
+        (userCommandLabel ? `Execute ${userCommandLabel}` : "");
       setValue("");
       setSelectedCommand(null);
       adjustHeight(true);
@@ -1347,7 +1513,8 @@ Please analyze the code you just wrote and fix this error.`;
       const userMsgId = Date.now().toString();
       const aiMsgId = (Date.now() + 1).toString();
 
-      const isVibeMode = userCommandId === "vibe";
+      const isVibeMode = userCommandId === "vibe" || Boolean(vibeCommand);
+      setActiveWorkspaceTab(isVibeMode ? "vibe" : "chat");
       const userMessage: Message = {
         id: userMsgId,
         role: "user",
@@ -1403,28 +1570,30 @@ Please analyze the code you just wrote and fix this error.`;
       }, 100);
 
       try {
-        if (isFirstMessage && !isTemporaryChat) {
-          const gemini = getGeminiClient();
-          if (gemini) {
-            gemini.models
-              .generateContent({
-                model: "gemini-3-flash-preview",
-                contents: `Generate a concise, up to 4 word title for a conversation that starts with the following prompt: "${userText}". Output only the title string without quotes.`,
-              })
-              .then((titleResponse) => {
-                const newTitle = titleResponse.text
-                  ?.trim()
-                  .replace(/^"|"$/g, "");
-                if (newTitle) {
-                  setChats((prev) =>
-                    prev.map((c) =>
-                      c.id === chatId ? { ...c, title: newTitle } : c,
-                    ),
-                  );
-                }
-              })
-              .catch(console.error);
-          }
+        if (isFirstMessage && !isTemporaryChat && chatId) {
+          let generatedTitle = "";
+          void streamOpenAI(
+            "Generate a concise chat title of 4 words or fewer. Return only the title text, with no quotes and no punctuation unless needed.",
+            [{ role: "user", content: userText }],
+            (chunkText, isReasoning) => {
+              if (!isReasoning) generatedTitle += chunkText;
+            },
+            0.2,
+            48,
+            "deepseek-chat",
+          )
+            .then(() => {
+              const newTitle = generatedTitle.trim().replace(/^"|"$/g, "");
+              if (!newTitle) return;
+              setChats((prev) =>
+                prev.map((c) =>
+                  c.id === chatId ? { ...c, title: newTitle } : c,
+                ),
+              );
+            })
+            .catch((error) => {
+              console.warn("DeepSeek title generation skipped:", error);
+            });
         }
 
         if (isVibeMode && chatId) {
@@ -1519,8 +1688,16 @@ Please analyze the code you just wrote and fix this error.`;
   };
 
   const handleAttachFile = () => {
-    const mockFileName = `file-${Math.floor(Math.random() * 1000)}.pdf`;
-    setAttachments((prev) => [...prev, mockFileName]);
+    fileInputRef.current?.click();
+  };
+
+  const handleFilesSelected = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files ?? []);
+    if (files.length) {
+      setAttachments((prev) => [...prev, ...files.map((file) => file.name)]);
+      setIsInputExpanded(true);
+    }
+    event.target.value = "";
   };
 
   const removeAttachment = (index: number) => {
@@ -1530,13 +1707,163 @@ Please analyze the code you just wrote and fix this error.`;
   const selectCommandSuggestion = (index: number) => {
     const selectedCmd = commandSuggestions[index];
     setSelectedCommand(selectedCmd);
+    if (selectedCmd?.id === "vibe") {
+      setActiveWorkspaceTab("vibe");
+    } else if (selectedCmd?.id === "browse") {
+      setActiveWorkspaceTab("browser");
+    } else if (selectedCmd?.id !== "clip") {
+      setActiveWorkspaceTab("chat");
+    }
     setClipInitialUrl("");
+    setBrowserInitialQuery("");
     setValue("");
     setShowCommandPalette(false);
     setTimeout(() => {
       if (textareaRef.current) {
         textareaRef.current.focus();
       }
+    }, 50);
+  };
+
+  const isClipWorkspace = selectedCommand?.id === "clip";
+  const isBrowserWorkspace =
+    activeWorkspaceTab === "browser" || selectedCommand?.id === "browse";
+  const isVibeWorkspace =
+    activeWorkspaceTab === "vibe" && !isBrowserWorkspace && !isClipWorkspace;
+  const showWorkspaceLivePreview = isVibeWorkspace && showVibeLivePreview;
+  const workspaceViewKey = isClipWorkspace
+    ? "clip"
+    : isBrowserWorkspace
+      ? "browser"
+      : isVibeWorkspace
+        ? "vibe"
+        : "chat";
+  const activeInputCommand =
+    selectedCommand && selectedCommand.id !== "vibe" ? selectedCommand : null;
+  const inputPlaceholder = isVibeWorkspace
+    ? "Tell the coding agent what to build..."
+    : "Ask Clyra anything...";
+  const firstUserMessageId = messages.find(
+    (message) => message.role === "user",
+  )?.id;
+  const emptyStateTitle = isVibeWorkspace
+    ? "Clyra Vibe is ready."
+    : "Hi there, I'm Clyra";
+  const emptyStateSubtitle = isVibeWorkspace
+    ? "Describe the product, mood, and constraints. Clyra will reason through the build and keep the preview moving."
+    : "What can I help you with today?";
+  const workflowTabs: Array<{
+    id: WorkspaceTabId;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+  }> = [
+    { id: "chat", label: "Chat", icon: MessageCircleDashed },
+    { id: "vibe", label: "Vibe Coder", icon: SquarePen },
+    { id: "browser", label: "Agentic Browser", icon: AppWindow },
+  ];
+
+  const chatQuickActions: Array<{
+    label: string;
+    prompt: string;
+    icon: React.ComponentType<{ className?: string }>;
+  }> = [
+    {
+      label: "Plan a launch",
+      prompt:
+        "Help me create a crisp launch plan with priorities, risks, and next actions.",
+      icon: Check,
+    },
+    {
+      label: "Refine an idea",
+      prompt: "Help me refine this idea into a polished product concept:",
+      icon: MessageCircleDashed,
+    },
+    {
+      label: "Draft something",
+      prompt: "Write a concise, professional draft for:",
+      icon: SquarePen,
+    },
+  ];
+
+  const vibeQuickActions: Array<{
+    label: string;
+    prompt: string;
+    icon: React.ComponentType<{ className?: string }>;
+  }> = [
+    {
+      label: "Agent dashboard",
+      prompt:
+        "Build a premium SaaS analytics dashboard with charts, filters, command actions, and a polished light theme.",
+      icon: AppWindow,
+    },
+    {
+      label: "Product launch",
+      prompt:
+        "Build a cinematic product landing page with a strong first viewport, refined sections, and responsive polish.",
+      icon: SquarePen,
+    },
+    {
+      label: "Smart tool",
+      prompt:
+        "Build a useful interactive web tool with clear controls, smooth states, and production-ready UI details.",
+      icon: MousePointer2,
+    },
+  ];
+
+  const applyQuickPrompt = (prompt: string) => {
+    setActiveWorkspaceTab("chat");
+    setSelectedCommand(null);
+    setValue(prompt);
+    setIsInputExpanded(true);
+    window.setTimeout(() => {
+      textareaRef.current?.focus();
+      adjustHeight();
+    }, 30);
+  };
+
+  const applyVibePrompt = (prompt: string) => {
+    setActiveWorkspaceTab("vibe");
+    setSelectedCommand(null);
+    setValue(prompt);
+    setIsInputExpanded(false);
+    window.setTimeout(() => {
+      textareaRef.current?.focus();
+      adjustHeight(true);
+    }, 30);
+  };
+
+  const handleWorkspaceTabChange = (tabId: WorkspaceTabId) => {
+    const currentIsVibeChat = messages.some(
+      (message) => message.assistantKind === "vibe",
+    );
+    const fromIndex = WORKSPACE_TAB_ORDER.indexOf(activeWorkspaceTab);
+    const toIndex = WORKSPACE_TAB_ORDER.indexOf(tabId);
+    setWorkspaceTransitionDirection(toIndex >= fromIndex ? 1 : -1);
+    setActiveWorkspaceTab(tabId);
+    setSelectedCommand(null);
+    setShowCommandPalette(false);
+    setClipInitialUrl("");
+    setBrowserInitialQuery("");
+
+    if (tabId === "vibe" && !currentIsVibeChat) {
+      setMessages([]);
+      setCurrentChatId(null);
+    } else if (tabId === "chat" && currentIsVibeChat) {
+      setMessages([]);
+      setCurrentChatId(null);
+      setVibePreviewMessageId(null);
+      setVibePreviewFiles(null);
+    }
+
+    if (tabId === "browser") {
+      setValue("");
+      adjustHeight(true);
+      return;
+    }
+
+    window.setTimeout(() => {
+      textareaRef.current?.focus();
+      adjustHeight();
     }, 50);
   };
 
@@ -1558,28 +1885,32 @@ Please analyze the code you just wrote and fix this error.`;
           }}
         />
       )}
-      <div className="h-dvh flex min-w-0 bg-white text-slate-900 font-sans selection:bg-slate-200 overflow-hidden scalable-container relative">
+      <div className="clyra-app-shell h-dvh flex min-w-0 bg-white text-slate-900 font-sans selection:bg-slate-200 overflow-hidden scalable-container relative">
         <AnimatePresence initial={false}>
           {isSidebarOpen && (
             <motion.aside
               key="app-sidebar"
-              initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 240, opacity: 1 }}
-              exit={{ width: 0, opacity: 0 }}
-              transition={{ duration: 0.36, ease: [0.22, 1, 0.36, 1] }}
-              className="relative z-[100] flex h-full shrink-0 flex-col overflow-hidden border-r border-slate-200/60 bg-white"
-              style={{ willChange: "width, opacity" }}
+              initial={{ width: 0, x: -24, opacity: 0, filter: "blur(8px)" }}
+              animate={{ width: 272, x: 0, opacity: 1, filter: "blur(0px)" }}
+              exit={{ width: 0, x: -24, opacity: 0, filter: "blur(8px)" }}
+              transition={{ duration: 0.48, ease: [0.16, 1, 0.3, 1] }}
+              className="clyra-sidebar-rail relative z-[120] flex shrink-0 flex-col overflow-hidden px-3 py-4 sm:px-3.5 sm:py-5"
+              style={{ willChange: "width, transform, opacity" }}
             >
-              <div className="w-[240px] h-full flex flex-col shrink-0">
-                <div className="px-3 pb-2 pt-2 flex flex-col gap-1.5 shrink-0 border-b border-black/5">
-                  <div className="flex items-center justify-end h-9 -mt-0.5 -mb-0.5 -mr-1">
+              <div className="clyra-sidebar-panel w-[244px] h-full min-h-0 flex flex-col shrink-0">
+                <div className="clyra-sidebar-section px-3 pb-2 pt-3 flex flex-col gap-1.5 shrink-0">
+                  <div className="flex items-center justify-between h-9 -mt-0.5 -mb-0.5 pl-1 -mr-1">
+                    <div className="flex items-center gap-2 text-[13px] font-semibold tracking-tight text-slate-700">
+                      <span className="h-2 w-2 rounded-full bg-slate-900 shadow-[0_0_14px_rgba(15,23,42,0.18)]" />
+                      Clyra
+                    </div>
                     {isSidebarOpen && (
                       <button
                         type="button"
                         onClick={() => setIsSidebarOpen(false)}
                         aria-label="Close sidebar"
                         title="Close sidebar"
-                        className="group relative flex h-9 w-9 items-center justify-center rounded-full text-slate-500 transition-[background-color,box-shadow,color,transform] duration-300 hover:scale-[1.05] hover:bg-slate-100 hover:text-slate-800 hover:shadow-[0_4px_14px_rgba(15,23,42,0.06)] active:scale-[0.94]"
+                        className="clyra-sidebar-close group relative flex h-9 w-9 items-center justify-center rounded-full text-slate-500 transition-[background-color,box-shadow,color,transform] duration-300 hover:scale-[1.05] active:scale-[0.94]"
                       >
                         <span
                           className="pointer-events-none absolute inset-0 rounded-full bg-gradient-to-br from-indigo-400/22 via-sky-400/10 to-transparent opacity-0 transition-opacity duration-500 group-hover:opacity-100"
@@ -1594,20 +1925,26 @@ Please analyze the code you just wrote and fix this error.`;
                       onClick={() => {
                         setMessages([]);
                         setCurrentChatId(null);
+                        setSelectedCommand(null);
+                        setActiveWorkspaceTab("chat");
+                        setClipInitialUrl("");
+                        setBrowserInitialQuery("");
                         setVibePreviewMessageId(null);
                         setVibePreviewFiles(null);
                         setIsSidebarOpen(false);
                         setSearchQuery("");
                       }}
-                      className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-slate-100 text-slate-700 transition-colors font-medium text-[13.5px]"
+                      className="clyra-sidebar-action w-full flex items-center gap-3 px-2 py-2 rounded-lg text-slate-700 transition-colors font-medium text-[13.5px]"
                     >
                       <SquarePen className="w-4 h-4 stroke-[2]" />
                       New chat
                     </button>
                     <button
                       type="button"
-                      onClick={() => { setShowClipsLibrary(true); }}
-                      className="w-full flex items-center gap-3 px-2 py-2 mb-0.5 rounded-lg hover:bg-slate-100 text-slate-700 transition-colors font-medium text-[13.5px]"
+                      onClick={() => {
+                        setShowClipsLibrary(true);
+                      }}
+                      className="clyra-sidebar-action w-full flex items-center gap-3 px-2 py-2 mb-0.5 rounded-lg text-slate-700 transition-colors font-medium text-[13.5px]"
                     >
                       <Scissors className="w-4 h-4 stroke-[2]" />
                       <span className="flex-1 text-left">Clips</span>
@@ -1615,7 +1952,7 @@ Please analyze the code you just wrote and fix this error.`;
                     <button
                       type="button"
                       onClick={() => setIsProjectsOpen((open) => !open)}
-                      className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-slate-100 text-slate-700 transition-colors font-medium text-[13.5px]"
+                      className="clyra-sidebar-action w-full flex items-center gap-3 px-2 py-2 rounded-lg text-slate-700 transition-colors font-medium text-[13.5px]"
                     >
                       <Folder className="w-4 h-4 stroke-[2]" />
                       <span className="flex-1 text-left">Projects</span>
@@ -1652,7 +1989,7 @@ Please analyze the code you just wrote and fix this error.`;
                           }}
                           className="overflow-hidden pl-3"
                         >
-                          <div className="mt-0.5 flex flex-col gap-0.5 border-l border-slate-200/70 pl-2">
+                          <div className="mt-0.5 flex flex-col gap-0.5 pl-2">
                             {filteredProjectChats.length > 0 ? (
                               filteredProjectChats.slice(0, 8).map((chat) => (
                                 <div
@@ -1660,8 +1997,8 @@ Please analyze the code you just wrote and fix this error.`;
                                   className={cn(
                                     "group relative flex w-full items-center gap-1 rounded-lg px-1.5 py-1 text-[12.5px] font-medium transition-colors",
                                     currentChatId === chat.id
-                                      ? "bg-slate-100 text-slate-900"
-                                      : "text-slate-500 hover:bg-slate-100/70 hover:text-slate-800",
+                                      ? "clyra-sidebar-action--active text-slate-900"
+                                      : "clyra-sidebar-action text-slate-500 hover:text-slate-800",
                                   )}
                                 >
                                   {editingChatId === chat.id ? (
@@ -1671,7 +2008,7 @@ Please analyze the code you just wrote and fix this error.`;
                                       onChange={(e) =>
                                         setEditingTitle(e.target.value)
                                       }
-                                      className="min-w-0 flex-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-[12.5px] font-medium text-slate-800 shadow-sm outline-none"
+                                      className="clyra-sidebar-input min-w-0 flex-1 rounded-md px-2 py-1 text-[12.5px] font-medium text-slate-800 outline-none"
                                       autoFocus
                                       onKeyDown={(e) => {
                                         if (e.key === "Enter") {
@@ -1715,7 +2052,11 @@ Please analyze the code you just wrote and fix this error.`;
                                       >
                                         <span
                                           className={cn(
-                                            "h-1.5 w-1.5 shrink-0 rounded-full",
+                                            "clyra-sidebar-project-dot h-1.5 w-1.5 shrink-0 rounded-full",
+                                            (currentChatId === chat.id ||
+                                              chat.vibeRunning ||
+                                              chat.vibeUnread) &&
+                                              "clyra-sidebar-project-dot--visible",
                                             chat.vibeRunning
                                               ? "animate-pulse bg-black"
                                               : chat.vibeUnread
@@ -1735,7 +2076,7 @@ Please analyze the code you just wrote and fix this error.`;
                                             setEditingChatId(chat.id);
                                             setEditingTitle(chat.title);
                                           }}
-                                          className="rounded-md p-1 text-slate-400 hover:bg-white hover:text-slate-800"
+                                          className="rounded-md p-1 text-slate-400 hover:bg-white/70 hover:text-slate-800"
                                           aria-label={`Rename ${chat.title}`}
                                           title="Rename project"
                                         >
@@ -1757,7 +2098,7 @@ Please analyze the code you just wrote and fix this error.`;
                                               setVibePreviewFiles(null);
                                             }
                                           }}
-                                          className="rounded-md p-1 text-slate-400 hover:bg-white hover:text-red-500"
+                                          className="rounded-md p-1 text-slate-400 hover:bg-white/70 hover:text-red-500"
                                           aria-label={`Delete ${chat.title}`}
                                           title="Delete project"
                                         >
@@ -1787,7 +2128,7 @@ Please analyze the code you just wrote and fix this error.`;
                       placeholder="Search chats"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pl-9 pr-8 py-2 bg-transparent hover:bg-slate-100/50 focus:bg-slate-100/50 rounded-[12px] text-sm placeholder:text-slate-500 text-slate-700 font-medium focus:outline-none transition-all border border-transparent focus:border-slate-200"
+                      className="clyra-sidebar-search w-full pl-9 pr-8 py-2 rounded-[12px] text-sm placeholder:text-slate-500 text-slate-700 font-medium focus:outline-none transition-all"
                     />
                     {searchQuery && (
                       <button
@@ -1800,7 +2141,7 @@ Please analyze the code you just wrote and fix this error.`;
                   </div>
                 </div>
 
-                <div className="scrollbar-none flex-1 overflow-y-auto flex flex-col p-2 space-y-4">
+                <div className="scrollbar-none min-h-0 flex-1 overflow-y-auto flex flex-col p-2 space-y-3">
                   {filteredStandardChats.length > 0 ? (
                     <div className="flex flex-col gap-0.5">
                       <AnimatePresence mode="popLayout">
@@ -1837,10 +2178,10 @@ Please analyze the code you just wrote and fix this error.`;
                               }}
                               key={chat.id}
                               className={cn(
-                                "group relative w-full px-3 py-2 rounded-[12px] transition-[background-color] cursor-pointer flex flex-col justify-center",
+                                "group relative w-full px-3 py-2 rounded-[12px] transition-[background-color,color,box-shadow] cursor-pointer flex flex-col justify-center",
                                 currentChatId === chat.id
-                                  ? "bg-slate-100/80 text-[#0f0f0f]"
-                                  : "text-slate-600 hover:bg-slate-100/50 hover:text-[#0f0f0f]",
+                                  ? "clyra-sidebar-action--active text-[#0f0f0f]"
+                                  : "clyra-sidebar-action text-slate-600 hover:text-[#0f0f0f]",
                               )}
                               onClick={() => {
                                 if (editingChatId === chat.id) return;
@@ -1855,7 +2196,7 @@ Please analyze the code you just wrote and fix this error.`;
                                     onChange={(e) =>
                                       setEditingTitle(e.target.value)
                                     }
-                                    className="flex-1 bg-white border border-slate-200 shadow-sm outline-none rounded-md px-2 py-0.5 text-[13.5px] font-medium"
+                                    className="clyra-sidebar-input flex-1 outline-none rounded-md px-2 py-0.5 text-[13.5px] font-medium"
                                     autoFocus
                                     onKeyDown={(e) => {
                                       if (e.key === "Enter") {
@@ -1900,7 +2241,7 @@ Please analyze the code you just wrote and fix this error.`;
                                       />
                                     </span>
                                     <div className="absolute right-1 opacity-0 group-hover:opacity-100 flex items-center gap-0.5 transition-opacity pl-2">
-                                      <div className="absolute inset-0 bg-gradient-to-r from-transparent to-slate-100/80 -left-6 w-6 pointer-events-none" />
+                                      <div className="absolute inset-0 bg-gradient-to-r from-transparent to-white/45 -left-6 w-6 pointer-events-none" />
                                       <button
                                         onClick={(e) => {
                                           e.stopPropagation();
@@ -1957,10 +2298,9 @@ Please analyze the code you just wrote and fix this error.`;
                   )}
                 </div>
 
-                {/* User Profile Footer */}
                 <button
                   onClick={() => setIsSettingsOpen(true)}
-                  className="p-3 border-t border-black/[0.04] flex items-center gap-2.5 shrink-0 hover:bg-slate-50 transition-all duration-300 cursor-pointer w-full text-left group"
+                  className="clyra-sidebar-footer mx-2 mb-2 flex shrink-0 cursor-pointer items-center gap-2.5 rounded-2xl px-3 py-2.5 text-left transition-all duration-300 group"
                 >
                   <div className="flex items-center justify-center p-1 rounded-full bg-transparent text-slate-400 group-hover:text-slate-600 transition-colors">
                     <Settings className="w-[18px] h-[18px] transition-transform duration-500 ease-out group-hover:rotate-90" />
@@ -1974,289 +2314,638 @@ Please analyze the code you just wrote and fix this error.`;
           )}
         </AnimatePresence>
 
-        <div className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col bg-slate-50 border-l border-slate-200/50 sm:border-transparent">
+        <div className="clyra-main-surface relative z-10 flex min-h-0 min-w-0 flex-1 flex-col bg-[linear-gradient(180deg,#f8fafc_0%,#ffffff_48%,#f8fafc_100%)] sm:border-transparent">
+          <AnimatePresence>
+            {!isSidebarOpen && (
+              <motion.button
+                type="button"
+                onClick={() => setIsSidebarOpen(true)}
+                aria-label="Open sidebar"
+                aria-expanded={false}
+                title="Open sidebar"
+                initial={{ opacity: 0, scale: 0.9, x: -8 }}
+                animate={{ opacity: 1, scale: 1, x: 0 }}
+                exit={{ opacity: 0, scale: 0.9, x: -8 }}
+                transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+                className="group fixed left-4 top-4 z-[180] flex h-11 w-11 items-center justify-center rounded-full border border-transparent bg-transparent text-slate-600 shadow-none transition-[background-color,border-color,box-shadow,transform] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.06] hover:border-slate-200/70 hover:bg-white/85 hover:shadow-[0_10px_28px_rgba(15,23,42,0.12)] active:scale-[0.94] sm:top-6 sm:left-6"
+              >
+                <span
+                  className="pointer-events-none absolute inset-0 rounded-full bg-gradient-to-br from-indigo-400/28 via-sky-400/12 to-transparent opacity-0 transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:opacity-100"
+                  aria-hidden
+                />
+                <span
+                  className="pointer-events-none absolute inset-0 rounded-full opacity-0 shadow-[inset_0_0_0_1px_rgba(99,102,241,0.24)] transition-opacity duration-500 group-hover:opacity-100"
+                  aria-hidden
+                />
+                <span className="pointer-events-none relative block h-[12px] w-[18px] opacity-95">
+                  <span className="pointer-events-none absolute left-0 top-0 h-[2px] w-full rounded-full bg-current" />
+                  <span className="pointer-events-none absolute left-0 top-[5px] h-[2px] w-full rounded-full bg-current" />
+                  <span className="pointer-events-none absolute left-0 top-[10px] h-[2px] w-full rounded-full bg-current" />
+                </span>
+              </motion.button>
+            )}
+          </AnimatePresence>
+          <div className="relative z-[90] flex shrink-0 justify-center px-3 pt-5 sm:pt-6">
+            <div
+              className="clyra-workflow-tabs"
+              role="tablist"
+              aria-label="Clyra workspace"
+              data-invert-ignore="true"
+              onMouseLeave={() => setHoveredWorkspaceTab(null)}
+              onBlur={(event) => {
+                if (
+                  !event.currentTarget.contains(
+                    event.relatedTarget as Node | null,
+                  )
+                ) {
+                  setHoveredWorkspaceTab(null);
+                }
+              }}
+            >
+              {workflowTabs.map((tabItem) => {
+                const Icon = tabItem.icon;
+                const isActive =
+                  activeWorkspaceTab === tabItem.id && !isClipWorkspace;
+                const isHovered = hoveredWorkspaceTab === tabItem.id;
+
+                return (
+                  <button
+                    key={tabItem.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={isActive}
+                    onClick={() => handleWorkspaceTabChange(tabItem.id)}
+                    onMouseEnter={() => setHoveredWorkspaceTab(tabItem.id)}
+                    onFocus={() => setHoveredWorkspaceTab(tabItem.id)}
+                    className={cn(
+                      "clyra-workflow-tab",
+                      isActive && "clyra-workflow-tab--active",
+                    )}
+                  >
+                    {isHovered && (
+                      <motion.span
+                        layoutId="hover-workflow-tab"
+                        className="clyra-workflow-tab__hover"
+                        transition={{
+                          type: "spring",
+                          stiffness: 520,
+                          damping: 38,
+                          mass: 0.72,
+                        }}
+                      />
+                    )}
+                    <Icon className="relative h-4 w-4 shrink-0" />
+                    <span className="relative truncate">{tabItem.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           <div
             className={cn(
               "grid min-h-0 w-full flex-1 overflow-hidden transition-[grid-template-columns] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
-              showVibeLivePreview
+              showWorkspaceLivePreview
                 ? "grid-cols-[minmax(260px,min(420px,34vw))_minmax(0,1fr)]"
                 : "grid-cols-[minmax(0,1fr)_0fr]",
             )}
           >
             <div
               className={cn(
-                "relative z-10 flex min-h-0 min-w-0 flex-col overflow-hidden",
-                showVibeLivePreview && "border-r border-slate-200/70",
+                "clyra-workspace-scene relative z-10 flex min-h-0 min-w-0 flex-col overflow-hidden",
+                showWorkspaceLivePreview && "border-r border-slate-200/70",
               )}
             >
-              {!isSidebarOpen && (
-                <button
-                  type="button"
-                  onClick={() => setIsSidebarOpen(true)}
-                  aria-label="Open sidebar"
-                  aria-expanded={false}
-                  title="Open sidebar"
-                  className="group fixed top-4 left-4 z-[110] flex h-11 w-11 items-center justify-center rounded-full border border-transparent bg-transparent text-slate-600 shadow-none transition-[background-color,border-color,box-shadow,transform] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.06] hover:border-slate-200/70 hover:bg-white/85 hover:shadow-[0_10px_28px_rgba(15,23,42,0.12)] active:scale-[0.94] sm:top-6 sm:left-6"
-                >
-                  <span
-                    className="pointer-events-none absolute inset-0 rounded-full bg-gradient-to-br from-indigo-400/28 via-sky-400/12 to-transparent opacity-0 transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:opacity-100"
-                    aria-hidden
-                  />
-                  <span
-                    className="pointer-events-none absolute inset-0 rounded-full opacity-0 shadow-[inset_0_0_0_1px_rgba(99,102,241,0.38)] transition-opacity duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:opacity-100"
-                    aria-hidden
-                  />
-                  <span className="pointer-events-none relative block h-[12px] w-[18px] opacity-95">
-                    <span className="pointer-events-none absolute left-0 top-0 h-[2px] w-full rounded-full bg-current" />
-                    <span className="pointer-events-none absolute left-0 top-[5px] h-[2px] w-full rounded-full bg-current" />
-                    <span className="pointer-events-none absolute left-0 top-[10px] h-[2px] w-full rounded-full bg-current" />
-                  </span>
-                </button>
-              )}
-
               <AnimatePresence>
-                {(messages.length === 0 || isTemporaryChat) && (
-                  <motion.button
-                    initial={{ opacity: 0, y: -20, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -20, scale: 0.95 }}
-                    transition={{
-                      type: "spring",
-                      stiffness: 400,
-                      damping: 25,
-                      mass: 0.8,
-                    }}
-                    onClick={() => {
-                      if (messages.length > 0 && isTemporaryChat) {
-                        setIsTemporaryChat(false);
-                        setToastMessage("Chat saved to history");
-                      } else {
-                        setIsTemporaryChat(!isTemporaryChat);
-                      }
-                    }}
-                    className={cn(
-                      "fixed top-4 right-4 z-[95] rounded-full p-2 transition-all duration-300 group sm:top-6 sm:right-6",
-                      isTemporaryChat
-                        ? "text-slate-700 bg-slate-100/50"
-                        : "text-slate-400 hover:text-slate-600 hover:bg-slate-50/50",
-                    )}
-                    title={
-                      isTemporaryChat
-                        ? "Turn off Temporary Chat"
-                        : "Temporary Chat"
-                    }
-                  >
-                    <MessageCircleDashed
+                {(messages.length === 0 || isTemporaryChat) &&
+                  !isBrowserWorkspace &&
+                  !isClipWorkspace && (
+                    <motion.button
+                      initial={{ opacity: 0, y: -20, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -20, scale: 0.95 }}
+                      transition={{
+                        type: "spring",
+                        stiffness: 400,
+                        damping: 25,
+                        mass: 0.8,
+                      }}
+                      onClick={() => {
+                        if (messages.length > 0 && isTemporaryChat) {
+                          setIsTemporaryChat(false);
+                          setToastMessage("Chat saved to history");
+                        } else {
+                          setIsTemporaryChat(!isTemporaryChat);
+                        }
+                      }}
                       className={cn(
-                        "w-6 h-6 stroke-[1.5] transition-all duration-300",
+                        "fixed z-[95] rounded-full p-2 transition-all duration-300 group top-[28px] right-4 sm:top-[32px] sm:right-6",
                         isTemporaryChat
-                          ? "opacity-100 scale-105"
-                          : "opacity-70 group-hover:opacity-100",
+                          ? "text-slate-700 bg-slate-100/50"
+                          : "text-slate-400 hover:text-slate-600 hover:bg-slate-50/50",
                       )}
-                    />
-                    <AnimatePresence>
-                      {isTemporaryChat && (
-                        <motion.div
-                          initial={{ scale: 0.5, opacity: 0, pathLength: 0 }}
-                          animate={{ scale: 1, opacity: 1, pathLength: 1 }}
-                          exit={{ scale: 0.5, opacity: 0 }}
-                          transition={{
-                            type: "spring",
-                            stiffness: 400,
-                            damping: 25,
-                            mass: 0.8,
-                          }}
-                          className="absolute inset-0 flex items-center justify-center pointer-events-none"
-                        >
-                          <Check className="w-3.5 h-3.5 stroke-[2.5] text-slate-700" />
-                        </motion.div>
-                      )}
-                    </AnimatePresence>
-                  </motion.button>
-                )}
+                      title={
+                        isTemporaryChat
+                          ? "Turn off Temporary Chat"
+                          : "Temporary Chat"
+                      }
+                    >
+                      <MessageCircleDashed
+                        className={cn(
+                          "w-6 h-6 stroke-[1.5] transition-all duration-300",
+                          isTemporaryChat
+                            ? "opacity-100 scale-105"
+                            : "opacity-70 group-hover:opacity-100",
+                        )}
+                      />
+                      <AnimatePresence>
+                        {isTemporaryChat && (
+                          <motion.div
+                            initial={{ scale: 0.5, opacity: 0, pathLength: 0 }}
+                            animate={{ scale: 1, opacity: 1, pathLength: 1 }}
+                            exit={{ scale: 0.5, opacity: 0 }}
+                            transition={{
+                              type: "spring",
+                              stiffness: 400,
+                              damping: 25,
+                              mass: 0.8,
+                            }}
+                            className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                          >
+                            <Check className="w-3.5 h-3.5 stroke-[2.5] text-slate-700" />
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </motion.button>
+                  )}
               </AnimatePresence>
               <div
                 className={cn(
                   "flex flex-col h-full min-h-0 w-full",
-                  showVibeLivePreview
+                  showWorkspaceLivePreview
                     ? "min-w-0 flex-1 px-3 sm:px-4"
-                    : "max-w-3xl mx-auto",
-                  selectedCommand?.id === "clip"
+                    : isClipWorkspace || isBrowserWorkspace
+                      ? "max-w-none mx-0"
+                      : "max-w-3xl mx-auto",
+                  isClipWorkspace || isBrowserWorkspace
                     ? "px-0 sm:px-0"
                     : messages.length === 0
-                    ? "justify-center px-4 sm:px-6"
-                    : cn(
-                        "pt-12 sm:pt-14",
-                        showVibeLivePreview ? "px-3 sm:px-4" : "px-4 sm:px-6",
-                      ),
+                      ? "justify-center px-4 sm:px-6"
+                      : cn(
+                          "pt-[72px] sm:pt-20",
+                          showWorkspaceLivePreview
+                            ? "px-3 sm:px-4"
+                            : "px-4 sm:px-6",
+                        ),
                 )}
               >
-                {selectedCommand?.id === "clip" ? (
-                  <AIClipper onClose={() => {
-                      setSelectedCommand(null);
-                      setClipInitialUrl("");
-                    }}
-                  />
-                ) : messages.length === 0 ? (
+                <AnimatePresence mode="popLayout" initial={false}>
                   <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.5, ease: "easeOut" }}
-                    className="text-center space-y-3 mb-8 flex flex-col items-center"
+                    key={workspaceViewKey}
+                    custom={workspaceTransitionDirection}
+                    layout
+                    className={cn(
+                      "clyra-workspace-card w-full transform-gpu",
+                      (isClipWorkspace ||
+                        isBrowserWorkspace ||
+                        messages.length > 0) &&
+                        "flex h-full min-h-0 flex-1 flex-col",
+                    )}
+                    initial={{
+                      opacity: 0.96,
+                      x: 720 * workspaceTransitionDirection,
+                      y: 92,
+                      z: -520,
+                      rotateX: 18,
+                      rotateY: -72 * workspaceTransitionDirection,
+                      rotateZ: 7 * workspaceTransitionDirection,
+                      scale: 0.58,
+                      borderRadius: 30,
+                      borderColor: "rgba(148, 163, 184, 0.22)",
+                      backgroundColor: "rgba(255, 255, 255, 0.78)",
+                      boxShadow:
+                        "0 34px 90px rgba(15, 23, 42, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.78)",
+                      filter: "blur(9px)",
+                    }}
+                    animate={{
+                      opacity: 1,
+                      y: 0,
+                      rotateZ: 0,
+                      scale: 1,
+                      borderRadius: 0,
+                      borderColor: "rgba(148, 163, 184, 0)",
+                      backgroundColor: "rgba(255, 255, 255, 0)",
+                      boxShadow:
+                        "0 0 0 rgba(15, 23, 42, 0), inset 0 0 0 rgba(255, 255, 255, 0)",
+                      filter: "blur(0px)",
+                    }}
+                    exit={{
+                      opacity: 0.94,
+                      x: -780 * workspaceTransitionDirection,
+                      y: 96,
+                      z: -560,
+                      rotateX: -18,
+                      rotateY: 76 * workspaceTransitionDirection,
+                      rotateZ: -8 * workspaceTransitionDirection,
+                      scale: 0.56,
+                      borderRadius: 30,
+                      borderColor: "rgba(148, 163, 184, 0.24)",
+                      backgroundColor: "rgba(255, 255, 255, 0.82)",
+                      boxShadow:
+                        "0 38px 96px rgba(15, 23, 42, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.8)",
+                      filter: "blur(10px)",
+                    }}
+                    transition={{
+                      type: "spring",
+                      stiffness: 118,
+                      damping: 23,
+                      mass: 1.02,
+                      opacity: { duration: 0.42, ease: [0.22, 1, 0.36, 1] },
+                      filter: { duration: 0.42, ease: [0.22, 1, 0.36, 1] },
+                      boxShadow: { duration: 0.46, ease: [0.22, 1, 0.36, 1] },
+                    }}
+                    style={{
+                      transformStyle: "preserve-3d",
+                      backfaceVisibility: "hidden",
+                    }}
                   >
-                    <motion.h1
-                      layout="position"
-                      className="text-3xl sm:text-4xl font-semibold tracking-tight text-slate-800"
-                      initial={{ opacity: 0, scale: 0.95 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: 0.1, duration: 0.4 }}
-                    >
-                      Hi there, I'm Clyra
-                    </motion.h1>
-                    <motion.div
-                      layout="position"
-                      className="flex flex-col items-center"
-                    >
-                      <motion.p
-                        layout="position"
-                        className="text-slate-500 text-sm sm:text-base font-medium font-sans z-10 relative bg-white"
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        transition={{ delay: 0.2 }}
+                    {isClipWorkspace ? (
+                      <AIClipper
+                        initialUrl={clipInitialUrl}
+                        onClose={() => {
+                          setSelectedCommand(null);
+                          setClipInitialUrl("");
+                          setActiveWorkspaceTab("chat");
+                        }}
+                      />
+                    ) : isBrowserWorkspace ? (
+                      <AgenticBrowser
+                        initialQuery={browserInitialQuery}
+                        onClose={() => {
+                          setSelectedCommand(null);
+                          setBrowserInitialQuery("");
+                          setActiveWorkspaceTab("chat");
+                        }}
+                      />
+                    ) : messages.length === 0 ? (
+                      <motion.div
+                        initial={{
+                          opacity: 0,
+                          y: 14,
+                          scale: 0.985,
+                          filter: "blur(8px)",
+                        }}
+                        animate={{
+                          opacity: 1,
+                          y: 0,
+                          scale: 1,
+                          filter: "blur(0px)",
+                        }}
+                        transition={{
+                          duration: 0.65,
+                          ease: [0.22, 1, 0.36, 1],
+                        }}
+                        className="text-center space-y-3 mb-8 flex flex-col items-center"
                       >
-                        What can I help you with today?
-                      </motion.p>
-                      <AnimatePresence>
-                        {isTemporaryChat && (
-                          <motion.div
-                            initial={{ opacity: 0, y: -20, height: 0 }}
-                            animate={{ opacity: 1, y: 0, height: "auto" }}
-                            exit={{ opacity: 0, y: -20, height: 0 }}
-                            transition={{ duration: 0.3, ease: "easeInOut" }}
-                            className="overflow-hidden relative z-0"
-                          >
-                            <div className="pt-3 pb-1">
-                              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-200/50 text-slate-500 font-medium text-xs">
-                                <MessageCircleDashed className="w-3.5 h-3.5" />
-                                You are in temporary chat
-                              </span>
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </motion.div>
-                  </motion.div>
-                ) : (
-                  <div
-                    className="flex flex-1 w-full flex-col space-y-6 overflow-y-auto pb-4 pt-0 scrollbar-none"
-                    id="chat-container"
-                  >
-                    {messages.map((message) => {
-                      const fontClass =
-                        fontSize === "Small"
-                          ? "text-[14px] leading-relaxed"
-                          : fontSize === "Large"
-                            ? "text-[18px] leading-loose"
-                            : "text-[15px] sm:text-[16px] leading-relaxed";
-                      const isLastAssistant =
-                        message.role === "assistant" &&
-                        lastAssistantId != null &&
-                        message.id === lastAssistantId;
-                      return (
                         <motion.div
-                          key={message.id}
-                          initial={{ opacity: 0, y: 15, scale: 0.98 }}
-                          animate={{ opacity: 1, y: 0, scale: 1 }}
-                          transition={{
-                            type: "spring",
-                            bounce: 0,
-                            duration: 0.5 * animationSpeed,
+                          layout="position"
+                          className="mb-2 flex w-full justify-center"
+                          initial={{
+                            opacity: 0,
+                            scale: 0.9,
+                            y: 12,
+                            filter: "blur(8px)",
                           }}
-                          className={cn(
-                            "flex w-full",
-                            message.role === "user"
-                              ? "justify-end"
-                              : "justify-start",
-                          )}
+                          animate={{
+                            opacity: 1,
+                            scale: 1,
+                            y: 0,
+                            filter: "blur(0px)",
+                          }}
+                          transition={{
+                            delay: 0.06,
+                            duration: 0.72,
+                            ease: [0.16, 1, 0.3, 1],
+                          }}
                         >
-                          {message.role === "user" ? (
-                            <div
-                              data-invert-ignore="true"
-                              className={cn(
-                                "px-5 py-3.5 rounded-[24px] max-w-[85%] sm:max-w-[75%] shadow-[0_2px_10px_rgb(0,0,0,0.02)] border border-slate-200/60 whitespace-pre-wrap",
-                                fontClass,
-                              )}
-                              style={{
-                                backgroundColor: userBubbleColor,
-                                color: "#1e293b",
-                              }}
-                            >
-                              {message.content}
-                            </div>
-                          ) : (
-                            <div
-                              data-invert-ignore={
-                                theme === "Dark" ? "true" : undefined
-                              }
-                              className="px-2 py-2 w-full flex items-start gap-3"
-                              style={{
-                                color: theme === "Dark" ? "#e2e8f0" : "#1e293b",
-                              }}
-                            >
-                              <AnimatedMessage
-                                messageId={message.id}
-                                content={message.content}
-                                isThinking={message.isThinking}
-                                isStreaming={message.isStreaming}
-                                reasoningContent={message.reasoningContent}
-                                vibeUserPrompt={message.vibeUserPrompt}
-                                fontSizeClass={fontClass}
-                                markdownSupport={markdownSupport}
-                                codeHighlighting={codeHighlighting}
-                                assistantKind={
-                                  message.assistantKind === "vibe"
-                                    ? "vibe"
-                                    : "chat"
-                                }
-                                isLastAssistant={isLastAssistant}
-                                onVibePreviewReady={handleVibePreviewReady}
-                              />
-                            </div>
-                          )}
+                          <AiOrb />
                         </motion.div>
-                      );
-                    })}
-                  </div>
-                )}
+                        <motion.h1
+                          layout="position"
+                          className="text-3xl sm:text-4xl font-semibold tracking-tight text-slate-800"
+                          initial={{
+                            opacity: 0,
+                            y: 10,
+                            scale: 0.96,
+                            filter: "blur(6px)",
+                          }}
+                          animate={{
+                            opacity: 1,
+                            y: 0,
+                            scale: 1,
+                            filter: "blur(0px)",
+                          }}
+                          transition={{
+                            delay: 0.18,
+                            duration: 0.58,
+                            ease: [0.22, 1, 0.36, 1],
+                          }}
+                        >
+                          {emptyStateTitle}
+                        </motion.h1>
+                        <motion.div
+                          layout="position"
+                          className="flex flex-col items-center"
+                        >
+                          <motion.p
+                            layout="position"
+                            className="text-slate-500 text-sm sm:text-base font-medium font-sans z-10 relative"
+                            initial={{ opacity: 0, y: 8, filter: "blur(5px)" }}
+                            animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                            transition={{
+                              delay: 0.28,
+                              duration: 0.52,
+                              ease: [0.22, 1, 0.36, 1],
+                            }}
+                          >
+                            {emptyStateSubtitle}
+                          </motion.p>
+                          {isVibeWorkspace && (
+                            <motion.div
+                              className="clyra-vibe-launch-panel mt-5 backdrop-blur-md backdrop-saturate-125"
+                              initial={{
+                                opacity: 0,
+                                y: 10,
+                                filter: "blur(6px)",
+                              }}
+                              animate={{
+                                opacity: 1,
+                                y: 0,
+                                filter: "blur(0px)",
+                              }}
+                              transition={{
+                                delay: 0.34,
+                                duration: 0.56,
+                                ease: [0.22, 1, 0.36, 1],
+                              }}
+                            >
+                              <div
+                                className="clyra-vibe-status-row"
+                                aria-hidden="true"
+                              >
+                                <span>Brief</span>
+                                <span>Canvas</span>
+                                <span>Checks</span>
+                              </div>
+                              <div className="clyra-vibe-chip-grid">
+                                {vibeQuickActions.map((action) => {
+                                  const VibeIcon = action.icon;
 
-                <AnimatePresence>
-                  {!isFullscreen && selectedCommand?.id !== "clip" && (
+                                  return (
+                                    <button
+                                      key={action.label}
+                                      type="button"
+                                      className="clyra-vibe-chip"
+                                      onClick={() =>
+                                        applyVibePrompt(action.prompt)
+                                      }
+                                    >
+                                      <VibeIcon className="h-3.5 w-3.5" />
+                                      <span>{action.label}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </motion.div>
+                          )}
+                          {!isVibeWorkspace && (
+                            <motion.div
+                              className="clyra-chat-quick-actions mt-4"
+                              initial={{
+                                opacity: 0,
+                                y: 8,
+                                filter: "blur(5px)",
+                              }}
+                              animate={{
+                                opacity: 1,
+                                y: 0,
+                                filter: "blur(0px)",
+                              }}
+                              transition={{
+                                delay: 0.36,
+                                duration: 0.52,
+                                ease: [0.22, 1, 0.36, 1],
+                              }}
+                            >
+                              {chatQuickActions.map((action) => {
+                                const QuickIcon = action.icon;
+
+                                return (
+                                  <button
+                                    key={action.label}
+                                    type="button"
+                                    className="clyra-chat-chip"
+                                    onClick={() =>
+                                      applyQuickPrompt(action.prompt)
+                                    }
+                                  >
+                                    <QuickIcon className="h-3.5 w-3.5" />
+                                    <span>{action.label}</span>
+                                  </button>
+                                );
+                              })}
+                            </motion.div>
+                          )}
+                          <AnimatePresence>
+                            {isTemporaryChat && (
+                              <motion.div
+                                initial={{ opacity: 0, y: -20, height: 0 }}
+                                animate={{ opacity: 1, y: 0, height: "auto" }}
+                                exit={{ opacity: 0, y: -20, height: 0 }}
+                                transition={{
+                                  duration: 0.3,
+                                  ease: "easeInOut",
+                                }}
+                                className="overflow-hidden relative z-0"
+                              >
+                                <div className="pt-3 pb-1">
+                                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-200/50 text-slate-500 font-medium text-xs">
+                                    <MessageCircleDashed className="w-3.5 h-3.5" />
+                                    You are in temporary chat
+                                  </span>
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </motion.div>
+                      </motion.div>
+                    ) : (
+                      <div
+                        className="flex flex-1 w-full flex-col space-y-6 overflow-y-auto pb-4 pt-0 scrollbar-none"
+                        id="chat-container"
+                      >
+                        {messages.map((message) => {
+                          const fontClass =
+                            fontSize === "Small"
+                              ? "text-[14px] leading-relaxed"
+                              : fontSize === "Large"
+                                ? "text-[18px] leading-loose"
+                                : "text-[15px] sm:text-[16px] leading-relaxed";
+                          const isLastAssistant =
+                            message.role === "assistant" &&
+                            lastAssistantId != null &&
+                            message.id === lastAssistantId;
+                          return (
+                            <motion.div
+                              key={message.id}
+                              initial={{ opacity: 0, y: 15, scale: 0.98 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              transition={{
+                                type: "spring",
+                                bounce: 0,
+                                duration: 0.5 * animationSpeed,
+                              }}
+                              className={cn(
+                                "flex w-full",
+                                message.role === "user"
+                                  ? "justify-end"
+                                  : "justify-start",
+                              )}
+                            >
+                              {message.role === "user" ? (
+                                <div
+                                  data-invert-ignore="true"
+                                  className={cn(
+                                    "clyra-chat-user-bubble px-5 py-3.5 rounded-[24px] max-w-[85%] sm:max-w-[75%] border border-slate-200/60 whitespace-pre-wrap",
+                                    message.id === firstUserMessageId &&
+                                      "clyra-chat-user-bubble--first",
+                                    fontClass,
+                                  )}
+                                  style={{
+                                    backgroundColor: userBubbleColor,
+                                    color: "#1e293b",
+                                  }}
+                                >
+                                  <UserMessageText text={message.content} />
+                                </div>
+                              ) : (
+                                <div
+                                  data-invert-ignore={
+                                    theme === "Dark" ? "true" : undefined
+                                  }
+                                  className="px-1 py-1 w-full flex items-start gap-3"
+                                  style={{
+                                    color:
+                                      theme === "Dark" ? "#e2e8f0" : "#1e293b",
+                                  }}
+                                >
+                                  <div
+                                    className={cn(
+                                      "clyra-assistant-message",
+                                      message.assistantKind === "vibe" &&
+                                        "clyra-assistant-message--vibe",
+                                    )}
+                                  >
+                                    <AnimatedMessage
+                                      messageId={message.id}
+                                      content={message.content}
+                                      isThinking={message.isThinking}
+                                      isStreaming={message.isStreaming}
+                                      reasoningContent={
+                                        message.reasoningContent
+                                      }
+                                      vibeUserPrompt={message.vibeUserPrompt}
+                                      fontSizeClass={fontClass}
+                                      markdownSupport={markdownSupport}
+                                      codeHighlighting={codeHighlighting}
+                                      assistantKind={
+                                        message.assistantKind === "vibe"
+                                          ? "vibe"
+                                          : "chat"
+                                      }
+                                      isLastAssistant={isLastAssistant}
+                                      onVibePreviewReady={
+                                        handleVibePreviewReady
+                                      }
+                                    />
+                                  </div>
+                                </div>
+                              )}
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </motion.div>
+                </AnimatePresence>
+
+                <AnimatePresence mode="popLayout" initial={false}>
+                  {!isFullscreen && !isClipWorkspace && !isBrowserWorkspace && (
                     <motion.div
+                      key={`composer-${workspaceViewKey}`}
                       layout
                       ref={inputContainerRef}
                       onClick={() => {
-                        if (!isInputExpanded) {
+                        if (!isInputExpanded && !isVibeWorkspace) {
                           setIsInputExpanded(true);
                         }
                       }}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: 20, pointerEvents: "none" }}
+                      initial={{
+                        opacity: 0.96,
+                        x: 420 * workspaceTransitionDirection,
+                        y: 48,
+                        z: -260,
+                        rotateX: 13,
+                        rotateY: -48 * workspaceTransitionDirection,
+                        rotateZ: 5 * workspaceTransitionDirection,
+                        scale: 0.74,
+                        filter: "blur(7px)",
+                      }}
+                      animate={{
+                        opacity: 1,
+                        x: 0,
+                        y: 0,
+                        z: 0,
+                        rotateX: 0,
+                        rotateY: 0,
+                        rotateZ: 0,
+                        scale: 1,
+                        filter: "blur(0px)",
+                      }}
+                      exit={{
+                        opacity: 0.94,
+                        x: -620 * workspaceTransitionDirection,
+                        y: 58,
+                        z: -340,
+                        rotateX: -13,
+                        rotateY: 54 * workspaceTransitionDirection,
+                        rotateZ: -6 * workspaceTransitionDirection,
+                        scale: 0.66,
+                        filter: "blur(8px)",
+                        pointerEvents: "none",
+                      }}
                       transition={{
                         type: "spring",
-                        bounce: 0,
-                        duration: 0.6 * animationSpeed,
+                        stiffness: 118,
+                        damping: 23,
+                        mass: 1.02,
+                        opacity: { duration: 0.4, ease: [0.22, 1, 0.36, 1] },
+                        filter: { duration: 0.42, ease: [0.22, 1, 0.36, 1] },
+                      }}
+                      style={{
+                        transformStyle: "preserve-3d",
+                        backfaceVisibility: "hidden",
                       }}
                       className={cn(
                         "w-full shrink-0 relative z-20 transition-all duration-300",
                         messages.length === 0
                           ? "max-w-2xl mx-auto pb-12"
-                          : "pb-1 sm:pb-2",
+                          : "pb-3 sm:pb-4",
                       )}
                     >
                       <div
                         className={cn(
                           "input-wrapper relative bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] border transition-all duration-300 cursor-text rounded-[32px] sm:rounded-[40px] z-[3]",
+                          isVibeWorkspace && "clyra-vibe-composer",
                           isExpanded ? "p-2 sm:p-3" : "p-1.5 sm:p-2",
                           "hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]",
                           "border-slate-200/60",
@@ -2264,7 +2953,7 @@ Please analyze the code you just wrote and fix this error.`;
                       >
                         <div className="relative z-10 w-full h-full">
                           <AnimatePresence>
-                            {showCommandPalette && (
+                            {commandPaletteEnabled && showCommandPalette && (
                               <motion.div
                                 ref={commandPaletteRef}
                                 className="absolute left-4 right-4 sm:left-6 sm:right-6 bottom-[calc(100%+8px)] max-h-[170px] overflow-y-auto bg-white rounded-2xl shadow-[0_4px_24px_rgba(0,0,0,0.12)] border border-slate-100 z-50 scrollbar-none transform-gpu origin-bottom pb-1"
@@ -2359,6 +3048,13 @@ Please analyze the code you just wrote and fix this error.`;
                           </AnimatePresence>
 
                           <div className="px-3 py-1">
+                            <input
+                              ref={fileInputRef}
+                              type="file"
+                              multiple
+                              className="hidden"
+                              onChange={handleFilesSelected}
+                            />
                             <Textarea
                               ref={textareaRef}
                               value={value}
@@ -2368,10 +3064,12 @@ Please analyze the code you just wrote and fix this error.`;
                               }}
                               onKeyDown={handleKeyDown}
                               onFocus={() => {
-                                setIsInputExpanded(true);
+                                if (!isVibeWorkspace) {
+                                  setIsInputExpanded(true);
+                                }
                                 adjustHeight();
                               }}
-                              placeholder="Ask Clyra anything..."
+                              placeholder={inputPlaceholder}
                               containerClassName="w-full"
                               className={cn(
                                 "resize-none overflow-y-auto overflow-x-hidden",
@@ -2388,7 +3086,7 @@ Please analyze the code you just wrote and fix this error.`;
                           <AnimatePresence>
                             {attachments.length > 0 && (
                               <motion.div
-                                className="px-4 pb-3 flex gap-2 flex-wrap"
+                                className="clyra-attachments-row px-4 pb-3 flex gap-2 flex-wrap"
                                 initial={{ opacity: 0, height: 0 }}
                                 animate={{ opacity: 1, height: "auto" }}
                                 exit={{ opacity: 0, height: 0 }}
@@ -2396,7 +3094,7 @@ Please analyze the code you just wrote and fix this error.`;
                                 {attachments.map((file, index) => (
                                   <motion.div
                                     key={index}
-                                    className="flex items-center gap-2 text-xs font-medium bg-slate-100 py-1.5 px-3 rounded-xl border border-slate-200 text-slate-600 shadow-sm"
+                                    className="clyra-file-chip flex items-center gap-2 text-xs font-medium py-1.5 px-3 rounded-xl text-slate-600"
                                     initial={{ opacity: 0, scale: 0.9 }}
                                     animate={{ opacity: 1, scale: 1 }}
                                     exit={{ opacity: 0, scale: 0.9 }}
@@ -2427,7 +3125,10 @@ Please analyze the code you just wrote and fix this error.`;
                                 }}
                                 exit={{ opacity: 0, height: 0, scale: 0.95 }}
                                 transition={{ duration: 0.2 }}
-                                className="flex items-center justify-between p-2 pt-0"
+                                className={cn(
+                                  "flex items-center justify-between p-2 pt-0",
+                                  isVibeWorkspace && "clyra-vibe-controls",
+                                )}
                               >
                                 <div className="flex items-center gap-1 sm:gap-2">
                                   <motion.button
@@ -2435,13 +3136,15 @@ Please analyze the code you just wrote and fix this error.`;
                                     onClick={handleAttachFile}
                                     whileHover={{ scale: 1.05 }}
                                     whileTap={{ scale: 0.95 }}
-                                    className="p-2 sm:p-2.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 rounded-full transition-colors flex items-center justify-center shrink-0"
+                                    className="clyra-file-trigger p-2 sm:p-2.5 text-slate-500 hover:text-slate-800 rounded-full transition-colors flex items-center justify-center shrink-0 backdrop-blur-sm backdrop-saturate-125"
+                                    aria-label="Attach files"
+                                    title="Attach files"
                                   >
                                     <Paperclip className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
                                   </motion.button>
 
                                   <AnimatePresence>
-                                    {selectedCommand && (
+                                    {activeInputCommand && (
                                       <motion.div
                                         layout
                                         initial={{
@@ -2467,15 +3170,18 @@ Please analyze the code you just wrote and fix this error.`;
                                         className="flex items-center gap-1.5 text-slate-700 px-2.5 py-1.5 rounded-full text-xs sm:text-sm font-semibold ml-1 hover:bg-slate-100/80 transition-colors cursor-default"
                                       >
                                         <span className="opacity-70">
-                                          {selectedCommand.icon(false)}
+                                          {activeInputCommand.icon(false)}
                                         </span>
                                         <span className="hidden sm:inline-block">
-                                          {selectedCommand.label}
+                                          {activeInputCommand.label}
                                         </span>
                                         <button
-                                          onClick={() =>
-                                            setSelectedCommand(null)
-                                          }
+                                          onClick={() => {
+                                            setSelectedCommand(null);
+                                            if (isVibeWorkspace) {
+                                              setActiveWorkspaceTab("chat");
+                                            }
+                                          }}
                                           className="ml-1 -mr-1 text-slate-400 hover:text-slate-600 rounded-full p-0.5 hover:bg-slate-100 transition-colors"
                                         >
                                           <XIcon className="w-3.5 h-3.5" />
@@ -2487,7 +3193,8 @@ Please analyze the code you just wrote and fix this error.`;
 
                                 <div className="flex items-center gap-2">
                                   <AnimatePresence mode="wait">
-                                    {value.trim() || selectedCommand ? (
+                                    {commandPaletteEnabled &&
+                                    (value.trim() || selectedCommand) ? (
                                       <motion.div
                                         key="send-hint"
                                         initial={{ opacity: 0, x: 5 }}
@@ -2511,7 +3218,7 @@ Please analyze the code you just wrote and fix this error.`;
                                           to send
                                         </span>
                                       </motion.div>
-                                    ) : (
+                                    ) : commandPaletteEnabled ? (
                                       <motion.div
                                         key="cmd-hint"
                                         initial={{ opacity: 0, x: 5 }}
@@ -2526,11 +3233,12 @@ Please analyze the code you just wrote and fix this error.`;
                                           for commands
                                         </span>
                                       </motion.div>
-                                    )}
+                                    ) : null}
                                   </AnimatePresence>
                                   <motion.button
                                     type="button"
                                     onClick={handleSendMessage}
+                                    aria-label="Send message"
                                     whileHover={{ scale: 1.05 }}
                                     whileTap={{ scale: 0.95 }}
                                     disabled={
@@ -2561,13 +3269,13 @@ Please analyze the code you just wrote and fix this error.`;
             <div
               className={cn(
                 "flex min-h-0 min-w-0 flex-col overflow-hidden bg-white transition-opacity duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none",
-                showVibeLivePreview
+                showWorkspaceLivePreview
                   ? "pointer-events-auto opacity-100"
                   : "pointer-events-none opacity-0",
               )}
-              aria-hidden={!showVibeLivePreview}
+              aria-hidden={!showWorkspaceLivePreview}
             >
-              {showVibeLivePreview ? (
+              {showWorkspaceLivePreview ? (
                 <VibeLivePreviewPanel
                   filesByPath={vibePreviewFiles!}
                   onAutoFix={handleAutoFix}
@@ -2660,6 +3368,7 @@ export async function streamOpenAI(
   temperature: number = 0.7,
   maxTokens: number = 8000,
   model: string = "deepseek-reasoner",
+  signal?: AbortSignal,
 ) {
   const formattedMessages = systemInstruction
     ? [{ role: "system", content: systemInstruction }, ...messages]
@@ -2667,6 +3376,7 @@ export async function streamOpenAI(
 
   const response = await fetch("/api/deepseek/chat", {
     method: "POST",
+    signal,
     headers: {
       "Content-Type": "application/json",
     },

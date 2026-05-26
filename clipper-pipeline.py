@@ -20,6 +20,9 @@ import xml.etree.ElementTree as ET
 
 TMP_ROOT = "./tmp"
 OUTPUT_DIR = "./output"
+OUTPUT_WIDTH = 1280
+OUTPUT_HEIGHT = 720
+OUTPUT_FPS = 30
 
 
 def emit(step, status, **data):
@@ -49,6 +52,15 @@ def resolve_ffmpeg():
 
 
 FFMPEG = resolve_ffmpeg()
+
+
+def expose_ffmpeg_to_subprocesses():
+    if not FFMPEG or FFMPEG == "ffmpeg":
+        return
+    ffmpeg_dir = os.path.dirname(os.path.abspath(FFMPEG))
+    path_parts = os.environ.get("PATH", "").split(os.pathsep)
+    if ffmpeg_dir not in path_parts:
+        os.environ["PATH"] = os.pathsep.join([ffmpeg_dir, *path_parts])
 
 
 def clean_name(value):
@@ -201,8 +213,8 @@ def select_progressive_stream(yt):
         return int(match.group(1)) if match else 9999
 
     sorted_streams = sorted(streams, key=height)
-    under_360 = [stream for stream in sorted_streams if height(stream) <= 360]
-    return under_360[-1] if under_360 else sorted_streams[0]
+    under_720 = [stream for stream in sorted_streams if height(stream) <= 720]
+    return under_720[-1] if under_720 else sorted_streams[0]
 
 
 def ass_color(hex_color):
@@ -226,15 +238,15 @@ def ass_text(value):
 
 def subtitle_override(position):
     anchors = {
-        "top": (8, 64),
-        "top-centre": (8, 64),
-        "center": (5, 180),
-        "centre": (5, 180),
-        "bottom": (2, 248),
-        "bottom-centre": (2, 248),
+        "top": (8, 118),
+        "top-centre": (8, 118),
+        "center": (5, 360),
+        "centre": (5, 360),
+        "bottom": (2, 596),
+        "bottom-centre": (2, 596),
     }
     alignment, y = anchors.get(position, anchors["bottom"])
-    return alignment, f"{{\\an{alignment}\\pos(320,{y})\\q2\\bord4\\shad0}}"
+    return alignment, f"{{\\an{alignment}\\pos(640,{y})\\q2\\bord7\\shad2}}"
 
 
 def subtitle_beats(words, clip_start, clip_end):
@@ -281,13 +293,13 @@ def write_subtitles(path, words, clip_start, clip_end, font, font_size, color, p
 
     with open(path, "w", encoding="utf-8") as handle:
         handle.write("[Script Info]\n")
-        handle.write("ScriptType: v4.00+\nPlayResX: 640\nPlayResY: 360\nWrapStyle: 2\nScaledBorderAndShadow: yes\n")
+        handle.write("ScriptType: v4.00+\nPlayResX: 1280\nPlayResY: 720\nWrapStyle: 2\nScaledBorderAndShadow: yes\n")
         handle.write("\n[V4+ Styles]\n")
         handle.write(
             "Format: Name,Fontname,Fontsize,PrimaryColour,OutlineColour,BackColour,Bold,Alignment,MarginL,MarginR,MarginV,Outline,Shadow,Encoding\n"
         )
         handle.write(
-            f"Style: Word,{font},{font_size},{ass_color(color)},&H00000000,&H80000000,1,{alignment},20,20,20,4,0,1\n"
+            f"Style: Word,{font},{font_size},{ass_color(color)},&H00000000,&H80000000,1,{alignment},40,40,28,7,2,1\n"
         )
         handle.write("\n[Events]\n")
         handle.write("Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text\n")
@@ -301,6 +313,11 @@ def run_ffmpeg(args, timeout=90):
 
 
 def extract_clean_clip(input_url, local_fallback_path, clip_path, clip_start, clip_duration):
+    video_filter = (
+        f"scale={OUTPUT_WIDTH}:{OUTPUT_HEIGHT}:flags=lanczos:force_original_aspect_ratio=decrease,"
+        f"pad={OUTPUT_WIDTH}:{OUTPUT_HEIGHT}:(ow-iw)/2:(oh-ih)/2:black,"
+        f"fps={OUTPUT_FPS}"
+    )
     base = [
         "-ss",
         str(clip_start),
@@ -309,23 +326,25 @@ def extract_clean_clip(input_url, local_fallback_path, clip_path, clip_start, cl
         "-t",
         str(clip_duration),
         "-vf",
-        "scale=640:-2:flags=bicubic",
+        video_filter,
+        "-r",
+        str(OUTPUT_FPS),
         "-c:v",
         "libx264",
         "-preset",
-        "veryfast",
+        "medium",
         "-crf",
-        "28",
+        "18",
         "-pix_fmt",
         "yuv420p",
         "-c:a",
         "aac",
         "-b:a",
-        "128k",
+        "256k",
         "-ar",
-        "16000",
+        "48000",
         "-ac",
-        "1",
+        "2",
         "-movflags",
         "+faststart",
         clip_path,
@@ -344,6 +363,8 @@ def extract_clean_clip(input_url, local_fallback_path, clip_path, clip_start, cl
 
 
 def transcribe_clip_words(clip_path):
+    expose_ffmpeg_to_subprocesses()
+
     import whisper
 
     model_name = os.environ.get("CLIPPER_WHISPER_MODEL", "base.en")
@@ -382,19 +403,21 @@ def caption_words_relative(words, clip_start, clip_end):
 
 
 def burn_subtitles(source_clip_path, output_path, subtitle_path):
-    subtitle_filter = f"drawbox=x=0:y=292:w=iw:h=68:color=black@1.0:t=fill,ass={subtitle_path}"
+    subtitle_filter = f"ass={subtitle_path}"
     run_ffmpeg(
         [
             "-i",
             source_clip_path,
             "-vf",
             subtitle_filter,
+            "-r",
+            str(OUTPUT_FPS),
             "-c:v",
             "libx264",
             "-preset",
-            "veryfast",
+            "medium",
             "-crf",
-            "24",
+            "16",
             "-pix_fmt",
             "yuv420p",
             "-c:a",
@@ -498,7 +521,7 @@ def main():
         if not os.path.exists(output_path) or os.path.getsize(output_path) <= 1024:
             fail("Encoder did not produce a playable MP4")
 
-        emit("render", "complete", message=f"MP4 ready at 640px wide ({os.path.getsize(output_path) // 1024} KB)")
+        emit("render", "complete", message=f"720p 30fps MP4 ready ({os.path.getsize(output_path) // 1024} KB)")
         elapsed = time.time() - started
         caption_words = [word["word"] for word in transcribed_words if len(word["word"]) > 2]
         emit(
@@ -520,6 +543,7 @@ def main():
             total_seconds=round(elapsed),
             file_size=os.path.getsize(output_path),
             timing_source=timing_source,
+            output_quality="720p 30fps AAC 256k",
         )
     except SystemExit:
         raise

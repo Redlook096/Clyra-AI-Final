@@ -21,10 +21,9 @@ class RootErrorBoundary extends Component<{ children: ReactNode }, { error: Erro
           <div className="max-w-lg rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <h1 className="text-lg font-semibold text-slate-900">Something went wrong</h1>
             <p className="mt-2 text-sm text-slate-600">
-              The app hit a runtime error. Check the browser console for details. Common fixes: set{" "}
-              <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-xs">GEMINI_API_KEY</code> in{" "}
-              <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-xs">.env.local</code> (optional for titles) and{" "}
-              <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-xs">DEEPSEEK_API_KEY</code> for chat (server).
+              The app hit a runtime error. Check the browser console for details. Make sure{" "}
+              <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-xs">DEEPSEEK_API_KEY</code> is set in{" "}
+              <code className="rounded bg-slate-100 px-1 py-0.5 font-mono text-xs">.env.local</code> for chat and title generation.
             </p>
             <pre className="mt-4 max-h-40 overflow-auto rounded-lg bg-slate-900 p-3 text-xs text-slate-100">
               {this.state.error.message}
@@ -45,7 +44,11 @@ class RootErrorBoundary extends Component<{ children: ReactNode }, { error: Erro
 }
 
 const rootElement = document.getElementById("root")!;
-const root = createRoot(rootElement);
+const rootHost = window as Window & {
+  __clyraRoot?: ReturnType<typeof createRoot>;
+};
+const root = rootHost.__clyraRoot ?? createRoot(rootElement);
+rootHost.__clyraRoot = root;
 
 const embedParams = new URLSearchParams(window.location.search);
 if (embedParams.get("vibe_embed") === "1") {
