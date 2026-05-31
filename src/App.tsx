@@ -571,12 +571,7 @@ export default function App() {
     selectedCommand?.id !== "clip" &&
     selectedCommand?.id !== "browse";
 
-  const isExpanded =
-    (isVibeComposerMode) ||
-    isInputExpanded ||
-    value.trim().length > 0 ||
-    attachments.length > 0 ||
-    selectedCommand !== null;
+  const isExpanded = isVibeComposerMode;
 
   useEffect(() => {
     if (messages.length === 0 || isTemporaryChat) return;
