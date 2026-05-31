@@ -1484,3 +1484,6 @@ body,
 
 @keyframes clyra-first-msg-up{0%{opacity:0;transform:translateY(32px) scale(.94)}55%{opacity:1;transform:translateY(-6px) scale(1.02)}75%{transform:translateY(2px) scale(.99)}100%{opacity:1;transform:translateY(0) scale(1)}}
 .clyra-chat-user-bubble--first{animation:clyra-first-msg-up .7s cubic-bezier(.22,1,.36,1) forwards}
+
+#chat-container{padding-bottom:80px}
+.clyra-composer-glass{backdrop-filter:blur(16px) saturate(180%);-webkit-backdrop-filter:blur(16px) saturate(180%)}

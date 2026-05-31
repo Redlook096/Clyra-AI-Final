@@ -400,7 +400,7 @@ export default function App() {
   const [markdownSupport, setMarkdownSupport] = useState(true);
   const [systemPrompt, setSystemPrompt] = useState("");
   const [temperature, setTemperature] = useState(0.7);
-  const [userBubbleColor, setUserBubbleColor] = useState("#e2e8f0");
+  const [userBubbleColor, setUserBubbleColor] = useState("#f8fafc");
   const commandPaletteRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   /** When true, stream / layout growth will keep the chat column pinned to the bottom (normal chat behavior). */
@@ -533,7 +533,7 @@ export default function App() {
     if (!el) return;
     const onScroll = () => {
       const gap = el.scrollHeight - el.scrollTop - el.clientHeight;
-      chatNearBottomRef.current = gap < 120;
+      chatNearBottomRef.current = gap < 80;
     };
     el.addEventListener("scroll", onScroll, { passive: true });
     onScroll();
@@ -545,7 +545,7 @@ export default function App() {
     const el = document.getElementById("chat-container");
     if (!el || messages.length === 0) return;
     if (!chatNearBottomRef.current) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+    el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
   }, [chatScrollSignature, autoScroll, messages.length, showVibeLivePreview]);
 
   useEffect(() => {
@@ -3004,7 +3004,7 @@ Please analyze the code you just wrote and fix this error.`;
                     >
                       <div
                         className={cn(
-                          "input-wrapper relative bg-white shadow-[0_8px_30px_rgb(0,0,0,0.04)] border transition-all duration-300 cursor-text rounded-[32px] sm:rounded-[40px] z-[3]",
+                          "input-wrapper relative bg-white/80 backdrop-blur-xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border transition-all duration-300 cursor-text rounded-[32px] sm:rounded-[40px] z-[3]",
                           isVibeWorkspace && "clyra-vibe-composer",
                           isExpanded ? "p-2 sm:p-3" : "p-1.5 sm:p-2",
                           "hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]",
