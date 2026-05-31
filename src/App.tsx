@@ -132,11 +132,7 @@ const AnimatedMessage = ({
         fontSizeClass,
       )}
     >
-      <ChatThinkingLabel
-        isThinking={!!isThinking}
-        isStreaming={!!isStreaming}
-        content={content}
-      />
+
       {content.length > 0 && !suppressVibeAnswerBody ? (
         <div
           className={cn("markdown-body mt-1", isVibe && "markdown-body--vibe")}
@@ -580,6 +576,7 @@ export default function App() {
     value.trim().length > 0 ||
     attachments.length > 0 ||
     selectedCommand !== null ||
+    isVibeComposerMode;
     isVibeComposerMode ||
     messages.length > 0;
 
@@ -3004,7 +3001,7 @@ Please analyze the code you just wrote and fix this error.`;
                         "clyra-composer-transition w-full shrink-0 relative z-20 transition-all duration-300",
                         messages.length === 0
                           ? "max-w-2xl mx-auto pb-0"
-                          : "pb-3 sm:pb-4",
+                          : "pb-4 sm:pb-6 mb-3",
                       )}
                     >
                       <div
