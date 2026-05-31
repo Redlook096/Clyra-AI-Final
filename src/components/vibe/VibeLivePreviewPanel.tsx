@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
   type FormEvent,
+  type ReactNode,
 } from "react";
 import {
   ChevronLeft,
@@ -98,6 +99,40 @@ function inferPreviewTestPrompt(files: Record<string, string>) {
     return "2d platformer game";
   if (/landing|hero|pricing|testimonial/.test(haystack)) return "landing page";
   return "interactive app";
+}
+
+const CODE_TOKEN_RE =
+  /(\/\/.*$|\/\*[\s\S]*?\*\/)|(["'`])(?:\\.|(?!\2).)*\2|\b(import|export|from|type|interface|function|const|let|return|if|else|for|while|map|filter|reduce|useState|useMemo|useEffect|className|default|extends|React)\b|\b([A-Z][A-Za-z0-9_]*)\b|\b(\d+(?:\.\d+)?)\b/g;
+
+function highlightCodeLine(line: string) {
+  const nodes: ReactNode[] = [];
+  let lastIndex = 0;
+
+  for (const match of line.matchAll(CODE_TOKEN_RE)) {
+    const index = match.index ?? 0;
+    if (index > lastIndex) nodes.push(line.slice(lastIndex, index));
+    const token = match[0];
+    const className = match[1]
+      ? "text-slate-400 italic"
+      : /^["'`]/.test(token)
+        ? "text-emerald-300"
+        : match[3]
+          ? "text-violet-300 font-semibold"
+          : match[4]
+            ? "text-sky-300"
+            : match[5]
+              ? "text-amber-300"
+              : "text-slate-200";
+    nodes.push(
+      <span key={`${index}-${token}`} className={className}>
+        {token}
+      </span>,
+    );
+    lastIndex = index + token.length;
+  }
+
+  if (lastIndex < line.length) nodes.push(line.slice(lastIndex));
+  return nodes;
 }
 
 function recordsEqual(a: Record<string, string>, b: Record<string, string>) {
@@ -308,6 +343,7 @@ export function VibeLivePreviewPanel({
     "": true,
   });
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("preview");
+  const [editorScroll, setEditorScroll] = useState({ top: 0, left: 0 });
   const [addressInput, setAddressInput] = useState("");
   const [lastError, setLastError] = useState<{
     message: string;
@@ -968,20 +1004,50 @@ export function VibeLivePreviewPanel({
                   Editable
                 </span>
               </div>
-              <textarea
-                key={activePath}
-                value={editorValue}
-                onChange={(event) => {
-                  const next = event.target.value;
-                  setMergedFiles((m) => {
-                    if (!activePath) return m;
-                    return { ...m, [activePath]: next };
-                  });
-                }}
-                spellCheck={false}
-                className="min-h-0 flex-1 resize-none overflow-auto bg-[#fbfcfe] px-4 py-3 font-mono text-[12px] leading-5 text-slate-800 outline-none scrollbar-none selection:bg-blue-100"
-                aria-label="Code editor"
-              />
+              <div className="relative min-h-0 flex-1 overflow-hidden bg-[#0f172a]">
+                <pre
+                  className="pointer-events-none absolute inset-0 overflow-hidden px-0 py-3 font-mono text-[12px] leading-5"
+                  aria-hidden="true"
+                >
+                  <code
+                    className="block min-w-max"
+                    style={{
+                      transform: `translate(${-editorScroll.left}px, ${-editorScroll.top}px)`,
+                    }}
+                  >
+                    {(editorValue || " ").split("\n").map((line, index) => (
+                      <span key={index} className="flex min-h-5">
+                        <span className="sticky left-0 mr-4 w-12 shrink-0 select-none border-r border-white/10 bg-[#0f172a] pr-3 text-right text-slate-500">
+                          {index + 1}
+                        </span>
+                        <span className="whitespace-pre pr-6">
+                          {highlightCodeLine(line)}
+                        </span>
+                      </span>
+                    ))}
+                  </code>
+                </pre>
+                <textarea
+                  key={activePath}
+                  value={editorValue}
+                  onChange={(event) => {
+                    const next = event.target.value;
+                    setMergedFiles((m) => {
+                      if (!activePath) return m;
+                      return { ...m, [activePath]: next };
+                    });
+                  }}
+                  onScroll={(event) => {
+                    setEditorScroll({
+                      top: event.currentTarget.scrollTop,
+                      left: event.currentTarget.scrollLeft,
+                    });
+                  }}
+                  spellCheck={false}
+                  className="relative z-10 h-full min-h-0 w-full resize-none overflow-auto bg-transparent py-3 pl-16 pr-6 font-mono text-[12px] leading-5 text-transparent caret-white outline-none scrollbar-none selection:bg-blue-400/30"
+                  aria-label="Code editor"
+                />
+              </div>
             </div>
           ) : null}
 

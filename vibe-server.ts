@@ -106,6 +106,16 @@ const FOCUS_MODE_SCRIPT = String.raw`<script>
 })();
 </script>`;
 
+const TAILWIND_CDN_WARNING_GUARD = String.raw`<script data-clyra="TAILWIND_CDN_WARNING_GUARD">
+(() => {
+  const originalWarn = console.warn.bind(console);
+  console.warn = (...args) => {
+    if (String(args[0] ?? "").includes("cdn.tailwindcss.com should not be used in production")) return;
+    originalWarn(...args);
+  };
+})();
+</script>`;
+
 type VibeFiles = Record<string, string>;
 
 export type VibeServerHandle = {
@@ -172,6 +182,13 @@ function injectFocusModeScript(html: string): string {
   return `${html}\n${FOCUS_MODE_SCRIPT}`;
 }
 
+function suppressTailwindCdnWarning(html: string): string {
+  if (!html.includes("cdn.tailwindcss.com") || html.includes("TAILWIND_CDN_WARNING_GUARD")) {
+    return html;
+  }
+  return html.replace(/<script\s+src=["']https:\/\/cdn\.tailwindcss\.com["']><\/script>/i, `${TAILWIND_CDN_WARNING_GUARD}\n$&`);
+}
+
 async function writeSandboxFiles(sessionDir: string, rawFiles: VibeFiles): Promise<VibeFiles> {
   const sanitized: VibeFiles = {};
 
@@ -201,7 +218,11 @@ async function writeSandboxFiles(sessionDir: string, rawFiles: VibeFiles): Promi
     const htmlPath = Object.keys(sanitized).find((p) => /\.html?$/i.test(p));
     if (htmlPath) sanitized["index.html"] = sanitized[htmlPath]!;
   }
-  if (sanitized["index.html"]) sanitized["index.html"] = injectFocusModeScript(sanitized["index.html"]!);
+  if (sanitized["index.html"]) {
+    sanitized["index.html"] = injectFocusModeScript(
+      suppressTailwindCdnWarning(sanitized["index.html"]!),
+    );
+  }
 
   for (const [rel, body] of Object.entries(sanitized)) {
     const resolved = path.resolve(sessionDir, rel);

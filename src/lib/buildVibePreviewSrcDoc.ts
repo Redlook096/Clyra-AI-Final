@@ -19,6 +19,10 @@ function isPreviewSourcePath(path: string): boolean {
   return /\.(tsx|jsx|ts|js)$/i.test(path) && !/(^|\/)(plan|readme)\.md$/i.test(path);
 }
 
+function isGeneratedEntrypoint(path: string): boolean {
+  return /(^|\/)(main|index)\.(tsx|jsx|ts|js)$/i.test(path);
+}
+
 export function pickPrimaryPreviewPath(files: Record<string, string>): string {
   const keys = Object.keys(files).filter(isPreviewSourcePath);
   const app = keys.find((k) => /App\.tsx$/i.test(k));
@@ -121,7 +125,11 @@ function preparePrimaryMount(src: string): { code: string; mount: string } {
 }
 
 export function buildVibePreviewSrcDoc(filesByPath: Record<string, string>): string {
-  const paths = orderPaths(Object.keys(filesByPath).filter(isPreviewSourcePath));
+  const paths = orderPaths(
+    Object.keys(filesByPath).filter(
+      (path) => isPreviewSourcePath(path) && !isGeneratedEntrypoint(path),
+    ),
+  );
   if (paths.length === 0) {
     return `<!DOCTYPE html><html><body style="font:14px system-ui;padding:16px;color:#64748b">No code to preview.</body></html>`;
   }

@@ -299,6 +299,13 @@ async function startServer() {
       await page.waitForLoadState("networkidle", { timeout: 6000 }).catch(() => {});
       res.json(await captureAgenticState(page, "navigated"));
     } catch (error) {
+      const page = agenticPage;
+      const message = error instanceof Error ? error.message : String(error);
+      if (page && message.includes("ERR_ABORTED")) {
+        await page.waitForLoadState("domcontentloaded", { timeout: 3000 }).catch(() => {});
+        res.json(await captureAgenticState(page, "navigation interrupted"));
+        return;
+      }
       console.error("Agentic browser navigate failed:", error);
       res.status(500).json({ error: "Agentic browser could not navigate." });
     }

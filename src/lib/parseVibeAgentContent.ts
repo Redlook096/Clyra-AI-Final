@@ -44,11 +44,58 @@ const M = {
   thinkE: "<<<END_VIBE_THINKING>>>",
   anaS: /<<<VIBE_ANALYZE path="([^"]*)">>+/,
   anaE: "<<<END_VIBE_ANALYZE>>>",
-  codeS: /<<<VIBE_CODE file="([^"]*)" added="(\d+)" removed="(\d+)">>+/,
+  codeS:
+    /<<<VIBE_CODE\s+file="([^"]*)"\s+added="(\d+)"\s+removed="(\d+)"(?:[ \t"']*>{1,3}[ \t"']*)+/,
   codeE: "<<<END_VIBE_CODE>>>",
+  codeBareE: "<<<VIBE_CODE>>>",
   runS: "<<<VIBE_RUN>>>",
   runE: "<<<END_VIBE_RUN>>>",
 } as const;
+
+function findCodeBlockEnd(raw: string, start: number): {
+  end: number;
+  next: number;
+  complete: boolean;
+} {
+  const explicitEnd = raw.indexOf(M.codeE, start);
+  const bareEnd = raw.indexOf(M.codeBareE, start);
+  const nextMarkers = [
+    "<<<VIBE_CODE ",
+    "<<<VIBE_THINKING>>>",
+    "<<<VIBE_RUN>>>",
+    "<<<VIBE_ANALYZE",
+  ]
+    .map((marker) => raw.indexOf(marker, start))
+    .filter((index) => index !== -1);
+  const nextMarker = nextMarkers.length > 0 ? Math.min(...nextMarkers) : -1;
+
+  if (
+    explicitEnd !== -1 &&
+    (nextMarker === -1 || explicitEnd < nextMarker) &&
+    (bareEnd === -1 || explicitEnd < bareEnd)
+  ) {
+    return { end: explicitEnd, next: explicitEnd + M.codeE.length, complete: true };
+  }
+  if (
+    bareEnd !== -1 &&
+    (nextMarker === -1 || bareEnd < nextMarker) &&
+    (explicitEnd === -1 || bareEnd < explicitEnd)
+  ) {
+    return { end: bareEnd, next: bareEnd + M.codeBareE.length, complete: true };
+  }
+  if (nextMarker !== -1) {
+    return { end: nextMarker, next: nextMarker, complete: true };
+  }
+  return { end: raw.length, next: raw.length, complete: false };
+}
+
+function cleanCodeBody(body: string): string {
+  return body
+    .replace(/^\n/, "")
+    .replace(/\n$/, "")
+    .replace(/\s*<<<VIBE_CODE>>>\s*$/g, "")
+    .replace(/\s*<<<END_VIBE_CODE>>>\s*$/g, "");
+}
 
 function pushText(segments: VibeParsedSegment[], buf: string) {
   const t = buf.trim();
@@ -108,9 +155,16 @@ export function parseVibeAgentContent(raw: string): VibeParsedSegment[] {
       const added = parseInt(codeMatch[2]!, 10) || 0;
       const removed = parseInt(codeMatch[3]!, 10) || 0;
       i += codeMatch[0]!.length;
-      const end = raw.indexOf(M.codeE, i);
-      if (end === -1) {
-        segments.push({ type: "code", file, added, removed, body: raw.slice(i), complete: false });
+      const boundary = findCodeBlockEnd(raw, i);
+      if (!boundary.complete) {
+        segments.push({
+          type: "code",
+          file,
+          added,
+          removed,
+          body: cleanCodeBody(raw.slice(i, boundary.end)),
+          complete: false,
+        });
         return segments;
       }
       segments.push({
@@ -118,10 +172,10 @@ export function parseVibeAgentContent(raw: string): VibeParsedSegment[] {
         file,
         added,
         removed,
-        body: raw.slice(i, end).replace(/^\n/, "").replace(/\n$/, ""),
+        body: cleanCodeBody(raw.slice(i, boundary.end)),
         complete: true,
       });
-      i = end + M.codeE.length;
+      i = boundary.next;
       continue;
     }
 

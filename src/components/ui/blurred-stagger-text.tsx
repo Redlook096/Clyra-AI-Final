@@ -52,10 +52,7 @@ export function BlurredStagger({
   );
 }
 
-/**
- * Smooth streaming reveal: keeps one stable text layer, types toward the latest
- * target text, and lets CSS run a single premium wave across the revealed copy.
- */
+/** Smooth letter-by-letter blur reveal. Lightweight, no lag. */
 export function BlurredStaggerStream({
   text,
   isStreaming,
@@ -65,41 +62,48 @@ export function BlurredStaggerStream({
   isStreaming?: boolean;
   className?: string;
 }) {
-  const [displayedText, setDisplayedText] = useState("");
+  const container = {
+    hidden: { opacity: 1 },
+    show: {
+      opacity: 1,
+      transition: { staggerChildren: 0.012 },
+    },
+  };
 
-  useEffect(() => {
-    if (!text) {
-      setDisplayedText("");
-      return;
-    }
-
-    if (!text.startsWith(displayedText)) {
-      setDisplayedText(text);
-      return;
-    }
-
-    if (displayedText.length >= text.length) return;
-
-    const remaining = text.length - displayedText.length;
-    const charsPerTick = isStreaming ? Math.min(5, Math.max(1, Math.ceil(remaining / 34))) : 8;
-    const id = window.setTimeout(() => {
-      setDisplayedText(text.slice(0, displayedText.length + charsPerTick));
-    }, isStreaming ? 18 : 12);
-
-    return () => window.clearTimeout(id);
-  }, [displayedText, isStreaming, text]);
+  const letter = {
+    hidden: { opacity: 0, filter: "blur(6px)" },
+    show: {
+      opacity: 1,
+      filter: "blur(0px)",
+      transition: { duration: 0.25 },
+    },
+  };
 
   if (!text) return null;
 
   return (
     <div
       className={cn(
-        "clyra-assistant-stream-line whitespace-pre-wrap font-medium leading-relaxed",
+        "whitespace-pre-wrap font-medium leading-relaxed",
         className,
       )}
-      data-streaming={isStreaming ? "true" : "false"}
     >
-      {displayedText}
+      <motion.span
+        variants={container}
+        initial={isStreaming ? "hidden" : "show"}
+        animate="show"
+        className="inline"
+      >
+        {text.split("").map((char, i) => (
+          <motion.span
+            key={`${i}-${char}`}
+            variants={letter}
+            className="inline"
+          >
+            {char === " " ? "\u00A0" : char}
+          </motion.span>
+        ))}
+      </motion.span>
     </div>
   );
 }
