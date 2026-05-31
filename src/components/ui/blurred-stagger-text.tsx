@@ -1,11 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { useMemo } from "react";
-import { motion, type Variants } from "motion/react";
+import { motion } from "motion/react";
 import { cn } from "@/lib/utils";
 
-/** Smooth letter-by-letter blur reveal. New chars animate in, existing ones stay visible. */
+/** Smooth character-by-character reveal. Prints one char at a time with fade-in. */
 export function BlurredStaggerStream({
   text,
   isStreaming,
@@ -15,48 +14,31 @@ export function BlurredStaggerStream({
   isStreaming?: boolean;
   className?: string;
 }) {
-  const prevLen = React.useRef(0);
-  const container = {
-    hidden: { opacity: 1 },
-    show: { opacity: 1, transition: { staggerChildren: 0.015 } },
-  };
-  const letterAnimation = {
-    hidden: { opacity: 0, filter: "blur(10px)" },
-    show: { opacity: 1, filter: "blur(0px)" },
-  };
+  const [visible, setVisible] = React.useState(0);
 
   React.useEffect(() => {
-    prevLen.current = text.length;
-  }, [text]);
+    if (!isStreaming) { setVisible(text.length); return; }
+    if (visible >= text.length) return;
+    const charsPerTick = Math.max(1, Math.ceil((text.length - visible) / 20));
+    const id = setTimeout(() => setVisible(v => Math.min(v + charsPerTick, text.length)), 25);
+    return () => clearTimeout(id);
+  }, [text, visible, isStreaming]);
 
   if (!text) return null;
 
   return (
-    <div
-      className={cn(
-        "whitespace-pre-wrap font-medium leading-relaxed",
-        className,
-      )}
-    >
-      <motion.span
-        variants={container}
-        initial="show"
-        animate="show"
-        className="inline text-base"
-      >
-        {text.split("").map((char, i) => (
-          <motion.span
-            key={`${i}-${char}`}
-            variants={i >= prevLen.current ? letterAnimation : {}}
-            initial={i >= prevLen.current ? "hidden" : "show"}
-            animate="show"
-            transition={{ duration: 0.3 }}
-            className="inline"
-          >
-            {char === " " ? "\u00A0" : char}
-          </motion.span>
-        ))}
-      </motion.span>
+    <div className={cn("whitespace-pre-wrap font-medium leading-relaxed", className)}>
+      {text.split("").map((char, i) => (
+        <motion.span
+          key={i}
+          initial={{ opacity: 0, filter: "blur(4px)" }}
+          animate={i < visible ? { opacity: 1, filter: "blur(0px)" } : { opacity: 0, filter: "blur(4px)" }}
+          transition={{ duration: 0.2 }}
+          className="inline"
+        >
+          {char === " " ? "\u00A0" : char === "\n" ? "\n" : char}
+        </motion.span>
+      ))}
     </div>
   );
 }

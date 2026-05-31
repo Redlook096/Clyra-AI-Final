@@ -44,7 +44,7 @@ const ButtonGroup = ({ options, value, onChange }: any) => {
                     key={opt.label}
                     onClick={() => onChange(opt.value)}
                     className={cn(
-                        "flex-1 py-1.5 px-3 rounded-lg text-[13px] font-medium transition-all duration-200 outline-none",
+                        "flex-1 py-1.5 px-3 rounded-lg text-[13px] font-medium transition-all duration-300 ease-out duration-200 outline-none",
                         value === opt.value 
                             ? "bg-white text-slate-800 shadow-[0_1px_3px_rgba(0,0,0,0.08)] border border-slate-200/50" 
                             : "text-slate-500 hover:text-slate-700 hover:bg-slate-200/50 border border-transparent"
@@ -125,7 +125,7 @@ export function SettingsModal({
                                     key={tab.id}
                                     onClick={() => setActiveTab(tab.id)}
                                     className={cn(
-                                        "flex items-center gap-3 px-3 py-2 sm:py-2 rounded-lg transition-all duration-200 text-[13.5px]",
+                                        "flex items-center gap-3 px-3 py-2 sm:py-2 rounded-lg transition-all duration-300 ease-out duration-200 text-[13.5px]",
                                         isActive 
                                             ? "bg-white text-slate-900 font-medium shadow-[0_1px_3px_rgba(0,0,0,0.05)] border border-slate-200/50" 
                                             : "hover:bg-slate-100/80 text-slate-500 font-medium border border-transparent"
