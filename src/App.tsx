@@ -2969,7 +2969,7 @@ Please analyze the code you just wrote and fix this error.`;
                       key="composer"
                       ref={inputContainerRef}
                       onClick={() => {
-                        if (!isInputExpanded && !isVibeWorkspace) {
+                        if (!isInputExpanded && isVibeWorkspace) {
                           setIsInputExpanded(true);
                         }
                       }}
@@ -3124,7 +3124,7 @@ Please analyze the code you just wrote and fix this error.`;
                               }}
                               onKeyDown={handleKeyDown}
                               onFocus={() => {
-                                if (!isVibeWorkspace) {
+                                if (isVibeWorkspace) {
                                   setIsInputExpanded(true);
                                 }
                                 adjustHeight();
