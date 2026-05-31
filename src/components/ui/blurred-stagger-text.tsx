@@ -1,58 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { motion, type Variants } from "motion/react";
 import { cn } from "@/lib/utils";
-import {
-  TEXT_EFFECT_BLUR_CHAR_STAGGER,
-  textEffectBlurCharItemVariants,
-} from "@/components/ui/text-effect";
 
-/** One-shot reveal: full string uses same blur-per-char preset as TextEffect. */
-const oneShotBlurContainer: Variants = {
-  hidden: { opacity: 1 },
-  show: {
-    opacity: 1,
-    transition: {
-      staggerChildren: TEXT_EFFECT_BLUR_CHAR_STAGGER,
-      delayChildren: 0.016,
-    },
-  },
-};
-
-export function BlurredStagger({
-  text,
-  className,
-}: {
-  text: string;
-  className?: string;
-}) {
-  const chars = useMemo(() => text.split(""), [text]);
-
-  return (
-    <div className={cn("inline-block max-w-full", className)}>
-      <motion.span
-        variants={oneShotBlurContainer}
-        initial="hidden"
-        animate="show"
-        className="inline whitespace-pre-wrap font-medium text-inherit"
-      >
-        {chars.map((char, index) => (
-          <motion.span
-            key={`b-${index}`}
-            variants={textEffectBlurCharItemVariants}
-            className="inline"
-          >
-            {char === " " ? "\u00A0" : char === "\n" ? "\n" : char}
-          </motion.span>
-        ))}
-      </motion.span>
-    </div>
-  );
-}
-
-/** Smooth letter-by-letter blur reveal matching exact spec. */
+/** Smooth letter-by-letter blur reveal. New chars animate in, existing ones stay visible. */
 export function BlurredStaggerStream({
   text,
   isStreaming,
@@ -62,18 +15,19 @@ export function BlurredStaggerStream({
   isStreaming?: boolean;
   className?: string;
 }) {
+  const prevLen = React.useRef(0);
   const container = {
-    hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: { staggerChildren: 0.015 },
-    },
+    hidden: { opacity: 1 },
+    show: { opacity: 1, transition: { staggerChildren: 0.015 } },
   };
-
   const letterAnimation = {
     hidden: { opacity: 0, filter: "blur(10px)" },
     show: { opacity: 1, filter: "blur(0px)" },
   };
+
+  React.useEffect(() => {
+    prevLen.current = text.length;
+  }, [text]);
 
   if (!text) return null;
 
@@ -86,14 +40,16 @@ export function BlurredStaggerStream({
     >
       <motion.span
         variants={container}
-        initial="hidden"
+        initial="show"
         animate="show"
         className="inline text-base"
       >
         {text.split("").map((char, i) => (
           <motion.span
             key={`${i}-${char}`}
-            variants={letterAnimation}
+            variants={i >= prevLen.current ? letterAnimation : {}}
+            initial={i >= prevLen.current ? "hidden" : "show"}
+            animate="show"
             transition={{ duration: 0.3 }}
             className="inline"
           >
