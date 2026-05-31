@@ -577,7 +577,6 @@ export default function App() {
     value.trim().length > 0 ||
     attachments.length > 0 ||
     selectedCommand !== null;
-    messages.length > 0;
 
   useEffect(() => {
     if (messages.length === 0 || isTemporaryChat) return;
