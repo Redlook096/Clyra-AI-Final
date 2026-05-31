@@ -1487,3 +1487,5 @@ body,
 
 #chat-container{padding-bottom:80px}
 .clyra-composer-glass{backdrop-filter:blur(16px) saturate(180%);-webkit-backdrop-filter:blur(16px) saturate(180%)}
+
+.clyra-chat-user-bubble{box-shadow:0 0 18px rgba(59,130,246,.15),0 2px 6px rgba(0,0,0,.04)!important;transition:box-shadow .3s ease}
