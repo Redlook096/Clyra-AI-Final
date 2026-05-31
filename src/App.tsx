@@ -577,7 +577,6 @@ export default function App() {
     value.trim().length > 0 ||
     attachments.length > 0 ||
     selectedCommand !== null;
-    isVibeComposerMode ||
     messages.length > 0;
 
   useEffect(() => {
