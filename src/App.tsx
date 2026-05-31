@@ -572,11 +572,11 @@ export default function App() {
     selectedCommand?.id !== "browse";
 
   const isExpanded =
-    (!isVibeComposerMode && isInputExpanded) ||
+    (isVibeComposerMode) ||
+    isInputExpanded ||
     value.trim().length > 0 ||
     attachments.length > 0 ||
-    selectedCommand !== null ||
-    isVibeComposerMode;
+    selectedCommand !== null;
     isVibeComposerMode ||
     messages.length > 0;
 
@@ -2625,12 +2625,12 @@ Please analyze the code you just wrote and fix this error.`;
                   isClipWorkspace || isBrowserWorkspace
                     ? "px-0 sm:px-0"
                     : messages.length === 0
-                      ? "justify-center px-4 sm:px-6"
+                      ? "justify-center px-5 sm:px-8"
                       : cn(
-                          "pt-[72px] sm:pt-20",
+                          "pt-3 sm:pt-4",
                           showWorkspaceLivePreview
                             ? "px-3 sm:px-4"
-                            : "px-4 sm:px-6",
+                            : "px-5 sm:px-8",
                         ),
                 )}
               >

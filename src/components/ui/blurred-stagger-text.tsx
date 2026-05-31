@@ -52,7 +52,7 @@ export function BlurredStagger({
   );
 }
 
-/** Smooth letter-by-letter blur reveal. Lightweight, no lag. */
+/** Smooth letter-by-letter blur reveal matching exact spec. */
 export function BlurredStaggerStream({
   text,
   isStreaming,
@@ -63,20 +63,16 @@ export function BlurredStaggerStream({
   className?: string;
 }) {
   const container = {
-    hidden: { opacity: 1 },
+    hidden: { opacity: 0 },
     show: {
       opacity: 1,
-      transition: { staggerChildren: 0.012 },
+      transition: { staggerChildren: 0.015 },
     },
   };
 
-  const letter = {
-    hidden: { opacity: 0, filter: "blur(6px)" },
-    show: {
-      opacity: 1,
-      filter: "blur(0px)",
-      transition: { duration: 0.25 },
-    },
+  const letterAnimation = {
+    hidden: { opacity: 0, filter: "blur(10px)" },
+    show: { opacity: 1, filter: "blur(0px)" },
   };
 
   if (!text) return null;
@@ -90,14 +86,15 @@ export function BlurredStaggerStream({
     >
       <motion.span
         variants={container}
-        initial={isStreaming ? "hidden" : "show"}
+        initial="hidden"
         animate="show"
-        className="inline"
+        className="inline text-base"
       >
         {text.split("").map((char, i) => (
           <motion.span
             key={`${i}-${char}`}
-            variants={letter}
+            variants={letterAnimation}
+            transition={{ duration: 0.3 }}
             className="inline"
           >
             {char === " " ? "\u00A0" : char}
