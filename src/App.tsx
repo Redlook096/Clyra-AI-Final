@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { cn } from "./lib/utils";
 import { SettingsModal } from "./components/SettingsModal";
+import { ChatSearchModal } from "./components/ChatSearchModal";
 import { ShiningText } from "./components/ShiningText";
 import { BlurredStaggerStream } from "@/components/ui/blurred-stagger-text";
 import { MarkdownMessageContent } from "./components/MarkdownMessageContent";
@@ -122,9 +123,9 @@ const AnimatedMessage = ({
    *  content yet, show the unified "Thinking" shimmer so the seam into the inline VibeThoughtPanel is clean. */
   const suppressVibeAnswerBody = isVibe && !!isThinking && content.length === 0;
   const hasMarkdownStructure =
-    /```|^\s{0,3}#{1,6}\s|^\s*[-*]\s|\n\s*\d+\.\s|\|.+\|/m.test(content);
+    /```|^\s{0,3}#{1,6}\s|^\s*[-*]\s|\n\s*\d+\.\s|\|.+\||\*\*[^*]+\*\*/m.test(content);
   const shouldRenderMarkdown =
-    markdownSupport && !isStreaming && hasMarkdownStructure;
+    markdownSupport && hasMarkdownStructure;
   return (
     <div
       className={cn(
@@ -384,8 +385,16 @@ export default function App() {
     maxHeight: 200,
   });
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-  const [isProjectsOpen, setIsProjectsOpen] = useState(true);
+  const [isProjectsOpen, setIsProjectsOpen] = useState(false);
+  const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
+  const [isChatInitialLoad, setIsChatInitialLoad] = useState(false);
+  useEffect(() => {
+    setIsChatInitialLoad(true);
+    const timer = setTimeout(() => setIsChatInitialLoad(false), 100);
+    return () => clearTimeout(timer);
+  }, [currentChatId]);
+
   const [isTemporaryChat, setIsTemporaryChat] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -401,6 +410,8 @@ export default function App() {
   const [systemPrompt, setSystemPrompt] = useState("");
   const [temperature, setTemperature] = useState(0.7);
   const [userBubbleColor, setUserBubbleColor] = useState("#f8fafc");
+  const [orbColorTheme, setOrbColorTheme] = useState<import("./components/AiOrb").OrbColorTheme>("default");
+  const [chatBackground, setChatBackground] = useState("none");
   const commandPaletteRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   /** When true, stream / layout growth will keep the chat column pinned to the bottom (normal chat behavior). */
@@ -409,6 +420,18 @@ export default function App() {
   useEffect(() => {
     setIsSearching(searchQuery.length > 0);
   }, [searchQuery]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'f') {
+        e.preventDefault();
+        setIsSearchModalOpen(true);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
 
   const lastAssistantId = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -545,7 +568,7 @@ export default function App() {
     const el = document.getElementById("chat-container");
     if (!el || messages.length === 0) return;
     if (!chatNearBottomRef.current) return;
-    el.scrollTo({ top: el.scrollHeight, behavior: "auto" });
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
   }, [chatScrollSignature, autoScroll, messages.length, showVibeLivePreview]);
 
   useEffect(() => {
@@ -571,7 +594,8 @@ export default function App() {
     selectedCommand?.id !== "clip" &&
     selectedCommand?.id !== "browse";
 
-  const isExpanded = isVibeComposerMode;
+  const isAiResponding = messages.some(m => m.isStreaming || m.isThinking);
+  const isExpanded = !isAiResponding && (isInputExpanded || value.trim().length > 0 || attachments.length > 0 || selectedCommand !== null || messages.length > 0);
 
   useEffect(() => {
     if (messages.length === 0 || isTemporaryChat) return;
@@ -1792,7 +1816,7 @@ Please analyze the code you just wrote and fix this error.`;
     ? "Clyra Vibe is ready."
     : "Hi there, I'm Clyra";
   const emptyStateSubtitle = isVibeWorkspace
-    ? "Describe the product, mood, and constraints. Clyra will reason through the build and keep the preview moving."
+    ? ""
     : "What can I help you with today?";
   const workflowTabs: Array<{
     id: WorkspaceTabId;
@@ -1896,14 +1920,26 @@ Please analyze the code you just wrote and fix this error.`;
     },
   ];
 
+  const typingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const applyQuickPrompt = (prompt: string) => {
     setActiveWorkspaceTab("chat");
     setSelectedCommand(null);
-    setValue(prompt);
     setIsInputExpanded(true);
+    if (typingIntervalRef.current) clearInterval(typingIntervalRef.current);
+    let i = 0;
+    setValue("");
     window.setTimeout(() => {
       textareaRef.current?.focus();
-      adjustHeight();
+      typingIntervalRef.current = setInterval(() => {
+        i++;
+        if (i <= prompt.length) {
+          setValue(prompt.slice(0, i));
+          adjustHeight();
+        } else {
+          if (typingIntervalRef.current) clearInterval(typingIntervalRef.current);
+          typingIntervalRef.current = null;
+        }
+      }, 18);
     }, 30);
   };
 
@@ -1939,6 +1975,8 @@ Please analyze the code you just wrote and fix this error.`;
     setShowCommandPalette(false);
     setClipInitialUrl("");
     setBrowserInitialQuery("");
+    setIsInputExpanded(false);
+    adjustHeight(true);
 
     if (tabId === "vibe" && !currentIsVibeChat) {
       setMessages([]);
@@ -2100,8 +2138,10 @@ Please analyze the code you just wrote and fix this error.`;
                           animate={{ height: "auto", opacity: 1 }}
                           exit={{ height: 0, opacity: 0 }}
                           transition={{
-                            duration: 0.22,
-                            ease: [0.22, 1, 0.36, 1],
+                            type: "spring",
+                            stiffness: 220,
+                            damping: 34,
+                            mass: 0.9,
                           }}
                           className="overflow-hidden pl-3"
                         >
@@ -2235,25 +2275,15 @@ Please analyze the code you just wrote and fix this error.`;
 		                  )}
 		                </AnimatePresence>
 
-	                  <div className="relative mt-1.5 mb-0 px-1">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 stroke-[2.5] pointer-events-none" />
-                    <input
-                      ref={searchInputRef}
-                      type="text"
-                      placeholder="Search chats"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="clyra-sidebar-search w-full pl-9 pr-8 py-2 rounded-[12px] text-sm placeholder:text-slate-500 text-slate-700 font-medium focus:outline-none transition-all"
-                    />
-                    {searchQuery && (
-                      <button
-                        onClick={() => setSearchQuery("")}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-slate-600 rounded-full"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-	                    )}
-	                  </div>
+	                  <button
+                      type="button"
+                      onClick={() => setIsSearchModalOpen(true)}
+                      className="clyra-sidebar-action w-full flex items-center gap-3 px-2 py-2 mt-1.5 rounded-lg text-slate-700 transition-colors font-medium text-[13.5px]"
+                    >
+                      <Search className="w-4 h-4 stroke-[2]" />
+                      <span className="flex-1 text-left">Search</span>
+                      <kbd className="text-[11px] text-slate-400 font-medium bg-slate-100 px-1.5 py-0.5 rounded-md">⌘F</kbd>
+                    </button>
 	                </div>
 	              </div>
 
@@ -2713,7 +2743,7 @@ Please analyze the code you just wrote and fix this error.`;
                             ease: [0.16, 1, 0.3, 1],
                           }}
                         >
-                          <AiOrb />
+                          <AiOrb colorTheme={orbColorTheme} />
                         </motion.div>
 	                        <motion.h1
 	                          className="text-3xl sm:text-4xl font-semibold tracking-tight text-slate-800"
@@ -2752,54 +2782,7 @@ Please analyze the code you just wrote and fix this error.`;
                           >
                             {emptyStateSubtitle}
                           </motion.p>
-                          {isVibeWorkspace && (
-	                            <motion.div
-	                              className="clyra-vibe-launch-panel mt-5 backdrop-blur-md backdrop-saturate-125"
-	                              initial={isWorkspaceSwitching ? false : {
-	                                opacity: 0,
-	                                y: 10,
-	                                filter: "blur(6px)",
-	                              }}
-                              animate={{
-                                opacity: 1,
-                                y: 0,
-                                filter: "blur(0px)",
-                              }}
-                              transition={{
-                                delay: 0.34,
-                                duration: 0.56,
-                                ease: [0.22, 1, 0.36, 1],
-                              }}
-                            >
-                              <div
-                                className="clyra-vibe-status-row"
-                                aria-hidden="true"
-                              >
-                                <span>Brief</span>
-                                <span>Canvas</span>
-                                <span>Checks</span>
-                              </div>
-                              <div className="clyra-vibe-chip-grid">
-                                {vibeQuickActions.map((action) => {
-                                  const VibeIcon = action.icon;
-
-                                  return (
-                                    <button
-                                      key={action.label}
-                                      type="button"
-                                      className="clyra-vibe-chip"
-                                      onClick={() =>
-                                        applyVibePrompt(action.prompt)
-                                      }
-                                    >
-                                      <VibeIcon className="h-3.5 w-3.5" />
-                                      <span>{action.label}</span>
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            </motion.div>
-                          )}
+                          
                           {!isVibeWorkspace && (
 	                            <motion.div
 	                              className="clyra-chat-quick-actions mt-4"
@@ -2865,6 +2848,9 @@ Please analyze the code you just wrote and fix this error.`;
                       <div
                         className="flex flex-1 w-full flex-col space-y-6 overflow-y-auto pb-4 pt-0 scrollbar-none"
                         id="chat-container"
+                        style={{
+                          background: chatBackground !== "none" ? chatBackground : undefined,
+                        }}
                       >
                         {messages.map((message) => {
                           const fontClass =
@@ -2884,8 +2870,9 @@ Please analyze the code you just wrote and fix this error.`;
                               animate={{ opacity: 1, y: 0, scale: 1 }}
                               transition={{
                                 type: "spring",
-                                bounce: 0,
-                                duration: 0.5 * animationSpeed,
+                                stiffness: 220,
+                                damping: 34,
+                                mass: 0.9,
                               }}
                               className={cn(
                                 "flex w-full",
@@ -2993,16 +2980,16 @@ Please analyze the code you just wrote and fix this error.`;
                       className={cn(
                         "clyra-composer-transition w-full shrink-0 relative z-20 transition-all duration-300",
                         messages.length === 0
-                          ? "max-w-2xl mx-auto pb-0"
+                          ? "max-w-2xl mx-auto pb-0 mb-8"
                           : "pb-4 sm:pb-6 mb-3",
                       )}
                     >
                       <div
                         className={cn(
-                          "input-wrapper relative bg-white/80 backdrop-blur-xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border transition-all duration-300 cursor-text rounded-[32px] sm:rounded-[40px] z-[3]",
-                          isVibeWorkspace && "clyra-vibe-composer",
+                          "input-wrapper relative bg-white/80 backdrop-blur-xl  border transition-all duration-300 cursor-text rounded-[32px] sm:rounded-[40px] z-[3]",
+                          
                           isExpanded ? "p-2 sm:p-3" : "p-1.5 sm:p-2",
-                          "hover:shadow-[0_8px_30px_rgb(0,0,0,0.08)]",
+                          "",
                           "border-slate-200/60",
                         )}
                       >
@@ -3168,21 +3155,10 @@ Please analyze the code you just wrote and fix this error.`;
                             )}
                           </AnimatePresence>
 
-                          <AnimatePresence>
-                            {isExpanded && (
-                              <motion.div
-                                layout
-                                initial={{ opacity: 0, height: 0, scale: 0.95 }}
-                                animate={{
-                                  opacity: 1,
-                                  height: "auto",
-                                  scale: 1,
-                                }}
-                                exit={{ opacity: 0, height: 0, scale: 0.95 }}
-                                transition={{ duration: 0.2 }}
+                          <div
                                 className={cn(
                                   "flex items-center justify-between p-2 pt-0",
-                                  isVibeWorkspace && "clyra-vibe-controls",
+                                  
                                 )}
                               >
                                 <div className="flex items-center gap-1 sm:gap-2">
@@ -3311,9 +3287,7 @@ Please analyze the code you just wrote and fix this error.`;
                                     <ArrowUpIcon className="w-5 h-5" />
                                   </motion.button>
                                 </div>
-                    </motion.div>
-                  )}
-		                </AnimatePresence>
+                    </div>
 		                      </div>
 	                      </div>
 		                    </motion.div>
@@ -3383,7 +3357,22 @@ Please analyze the code you just wrote and fix this error.`;
           </AnimatePresence>
         </div>
       </div>
-      <SettingsModal
+      
+      <ChatSearchModal
+        isOpen={isSearchModalOpen}
+        onClose={() => setIsSearchModalOpen(false)}
+        chats={chats}
+        currentChatId={currentChatId}
+        onSelectChat={(id) => {
+          handleChatSelect(id);
+          setIsSearchModalOpen(false);
+        }}
+        onNewChat={() => {
+          handleNewChat();
+          setIsSearchModalOpen(false);
+        }}
+      />
+<SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         theme={theme}
@@ -3406,6 +3395,10 @@ Please analyze the code you just wrote and fix this error.`;
         setTemperature={setTemperature}
         userBubbleColor={userBubbleColor}
         setUserBubbleColor={setUserBubbleColor}
+        orbColorTheme={orbColorTheme}
+        setOrbColorTheme={setOrbColorTheme}
+        chatBackground={chatBackground}
+        setChatBackground={setChatBackground}
         chats={chats}
         clearChats={() => {
           setChats([]);

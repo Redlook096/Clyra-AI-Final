@@ -292,8 +292,8 @@
     opacity: 0;
     transform: scale(0.92);
     transition:
-        opacity 260ms cubic-bezier(0.22, 1, 0.36, 1),
-        transform 320ms cubic-bezier(0.18, 1, 0.32, 1);
+        opacity 150ms cubic-bezier(0.22, 1, 0.36, 1),
+        transform 180ms cubic-bezier(0.18, 1, 0.32, 1);
 }
 
 .clyra-sidebar-toggle:hover::before,
@@ -340,11 +340,11 @@
         inset 0 1px 0 rgba(255, 255, 255, 0),
         0 8px 18px rgba(15, 23, 42, 0);
     transition:
-        color 180ms ease,
-        border-color 180ms ease,
-        background 180ms ease,
-        box-shadow 180ms ease,
-        transform 180ms ease;
+        color 100ms ease,
+        border-color 100ms ease,
+        background 100ms ease,
+        box-shadow 100ms ease,
+        transform 100ms ease;
 }
 
 .clyra-sidebar-action:hover,
@@ -372,9 +372,9 @@
     opacity: 0;
     transform: scale(0.7);
     transition:
-        opacity 180ms ease,
-        transform 180ms ease,
-        background-color 180ms ease;
+        opacity 100ms ease,
+        transform 100ms ease,
+        background-color 100ms ease;
 }
 
 .group:hover .clyra-sidebar-project-dot,

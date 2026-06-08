@@ -24,9 +24,19 @@ export function BlurredStaggerStream({
     return () => clearTimeout(id);
   }, [text, visible, isStreaming]);
 
+
   if (!text) return null;
 
+  if (!isStreaming) {
+    return (
+      <div className={cn("whitespace-pre-wrap font-medium leading-relaxed", className)}>
+        {text}
+      </div>
+    );
+  }
+
   return (
+
     <div className={cn("whitespace-pre-wrap font-medium leading-relaxed", className)}>
       {text.split("").map((char, i) => (
         <motion.span

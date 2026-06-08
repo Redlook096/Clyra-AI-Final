@@ -1,4 +1,20 @@
-export function AiOrb() {
+export type OrbColorTheme = "default" | "ocean" | "sunset" | "forest" | "mono";
+
+const ORB_GRADIENTS: Record<OrbColorTheme, string> = {
+  default: "conic-gradient(from 45deg, #0f172a, #2563eb, #22d3ee, #8b5cf6, #0f172a)",
+  ocean:   "conic-gradient(from 45deg, #0c4a6e, #0284c7, #06b6d4, #0ea5e9, #0c4a6e)",
+  sunset:  "conic-gradient(from 45deg, #7c2d12, #ea580c, #f472b6, #a855f7, #7c2d12)",
+  forest:  "conic-gradient(from 45deg, #14532d, #16a34a, #2dd4bf, #059669, #14532d)",
+  mono:    "conic-gradient(from 45deg, #1e293b, #64748b, #cbd5e1, #94a3b8, #1e293b)",
+};
+
+interface AiOrbProps {
+  colorTheme?: OrbColorTheme;
+}
+
+export function AiOrb({ colorTheme = "default" }: AiOrbProps) {
+  const gradient = ORB_GRADIENTS[colorTheme];
+
   return (
     <div className="clyra-ai-orb-shell" aria-hidden="true">
       <div className="clyra-ai-orb">
@@ -23,7 +39,10 @@ export function AiOrb() {
             />
           </svg>
         </span>
-        <span className="clyra-ai-orb-ball">
+        <span
+          className="clyra-ai-orb-ball"
+          style={{ background: gradient }}
+        >
           <span className="clyra-ai-orb-lines" />
           <span className="clyra-ai-orb-rings" />
           <span className="clyra-ai-orb-glow" />
