@@ -238,7 +238,7 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
       <div className={cn("relative flex items-center", containerClassName)}>
         <textarea
           className={cn(
-            "flex w-full bg-transparent px-4 py-3 text-base text-slate-800",
+            "flex w-full bg-transparent px-4 text-base text-slate-800",
             "transition-all duration-200 ease-in-out",
             "placeholder:text-slate-400 font-medium",
             "disabled:cursor-not-allowed disabled:opacity-50",
@@ -380,8 +380,12 @@ export default function App() {
   const [recentCommand, setRecentCommand] = useState<string | null>(null);
   const [isInputExpanded, setIsInputExpanded] = useState(false);
   const inputContainerRef = useRef<HTMLDivElement>(null);
+
+  const isAiResponding = messages.some(m => m.isStreaming || m.isThinking);
+  const isExpanded = !isAiResponding && (isInputExpanded || attachments.length > 0 || selectedCommand !== null || activeWorkspaceTab === "vibe");
+
   const { textareaRef, adjustHeight } = useAutoResizeTextarea({
-    minHeight: 52,
+    minHeight: 40,
     maxHeight: 200,
   });
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
@@ -594,8 +598,6 @@ export default function App() {
     selectedCommand?.id !== "clip" &&
     selectedCommand?.id !== "browse";
 
-  const isAiResponding = messages.some(m => m.isStreaming || m.isThinking);
-  const isExpanded = !isAiResponding && (isInputExpanded || value.trim().length > 0 || attachments.length > 0 || selectedCommand !== null || messages.length > 0);
 
   useEffect(() => {
     if (messages.length === 0 || isTemporaryChat) return;
@@ -1850,10 +1852,10 @@ Please analyze the code you just wrote and fix this error.`;
       : Math.max(1040, window.innerWidth * 1.04);
   const workspacePanelVariants = {
     enter: (direction: number) => ({
-      opacity: 1,
-      x: -workspaceTravelPx * direction,
+      opacity: 0,
+      x: direction > 0 ? 30 : -30,
       y: 0,
-      scale: 1,
+      scale: 0.98,
       filter: "blur(0px)",
     }),
     center: {
@@ -1864,10 +1866,10 @@ Please analyze the code you just wrote and fix this error.`;
       filter: "blur(0px)",
     },
     exit: (direction: number) => ({
-      opacity: 1,
-      x: workspaceTravelPx * direction,
+      opacity: 0,
+      x: direction > 0 ? -30 : 30,
       y: 0,
-      scale: 1,
+      scale: 0.98,
       filter: "blur(0px)",
     }),
   };
@@ -2660,6 +2662,7 @@ Please analyze the code you just wrote and fix this error.`;
                 <AnimatePresence
                   initial={false}
                   custom={workspaceTransitionDirection}
+                  mode="popLayout"
                 >
                 <motion.div
                   key={workspaceViewKey}
@@ -2676,11 +2679,12 @@ Please analyze the code you just wrote and fix this error.`;
                   animate="center"
                   exit="exit"
                   transition={{
-                      type: "tween",
-                      duration: 0.64,
-                      ease: [0.18, 0.86, 0.2, 1],
-                      opacity: { duration: 0.12, ease: "linear" },
-                    }}
+                    type: "spring",
+                    stiffness: 280,
+                    damping: 28,
+                    mass: 0.8,
+                    opacity: { duration: 0.2 },
+                  }}
                     style={{
                       backfaceVisibility: "hidden",
                     }}
@@ -3089,7 +3093,9 @@ Please analyze the code you just wrote and fix this error.`;
                             )}
                           </AnimatePresence>
 
-                          <div className="px-3 py-1">
+                          <div className={cn(
+                            isExpanded ? "px-3 py-1" : "flex items-center gap-1 px-2 py-0.5"
+                          )}>
                             <input
                               ref={fileInputRef}
                               type="file"
@@ -3097,8 +3103,22 @@ Please analyze the code you just wrote and fix this error.`;
                               className="hidden"
                               onChange={handleFilesSelected}
                             />
+                            {!isExpanded && (
+                              <motion.button
+                                type="button"
+                                onClick={handleAttachFile}
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                                className="p-2 text-slate-500 hover:text-slate-800 rounded-full transition-colors flex items-center justify-center shrink-0"
+                                aria-label="Attach files"
+                                title="Attach files"
+                              >
+                                <Paperclip className="w-4.5 h-4.5 sm:w-5 sm:h-5" />
+                              </motion.button>
+                            )}
                             <Textarea
                               ref={textareaRef}
+                              rows={1}
                               value={value}
                               onChange={(e) => {
                                 setValue(e.target.value);
@@ -3119,10 +3139,32 @@ Please analyze the code you just wrote and fix this error.`;
                                 "placeholder:text-slate-400",
                                 isExpanded
                                   ? "min-h-[50px] max-h-[35vh] py-3 px-1"
-                                  : "h-[40px] min-h-[40px] max-h-[40px] py-1.5 px-1",
+                                  : "min-h-[40px] max-h-[35vh] py-2 px-1",
                                 "scrollbar-none transition-all duration-300",
                               )}
                             />
+                            {!isExpanded && (
+                              <motion.button
+                                type="button"
+                                onClick={handleSendMessage}
+                                aria-label="Send message"
+                                whileHover={{ scale: 1.05 }}
+                                whileTap={{ scale: 0.95 }}
+                                disabled={
+                                  value.trim().length === 0 &&
+                                  !selectedCommand
+                                }
+                                className={cn(
+                                  "p-2 rounded-full transition-all duration-200 shrink-0",
+                                  "flex items-center justify-center",
+                                  value.trim() || selectedCommand
+                                    ? "bg-slate-900 text-white hover:bg-slate-800"
+                                    : "bg-slate-100 text-slate-400 cursor-not-allowed",
+                                )}
+                              >
+                                <ArrowUpIcon className="w-4.5 h-4.5" />
+                              </motion.button>
+                            )}
                           </div>
 
                           <AnimatePresence>
@@ -3155,6 +3197,7 @@ Please analyze the code you just wrote and fix this error.`;
                             )}
                           </AnimatePresence>
 
+                          {isExpanded && (
                           <div
                                 className={cn(
                                   "flex items-center justify-between p-2 pt-0",
@@ -3288,6 +3331,7 @@ Please analyze the code you just wrote and fix this error.`;
                                   </motion.button>
                                 </div>
                     </div>
+                          )}
 		                      </div>
 	                      </div>
 		                    </motion.div>
