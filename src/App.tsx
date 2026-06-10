@@ -1855,8 +1855,8 @@ Please analyze the code you just wrote and fix this error.`;
     enter: (direction: number) => ({
       opacity: 1,
       x: direction > 0 ? workspaceTravelPx : -workspaceTravelPx,
-      scale: 1,
-      filter: "blur(0px)",
+      scale: 0.95,
+      filter: "blur(4px)",
     }),
     center: {
       opacity: 1,
@@ -1868,8 +1868,8 @@ Please analyze the code you just wrote and fix this error.`;
     exit: (direction: number) => ({
       opacity: 1,
       x: direction > 0 ? -workspaceTravelPx : workspaceTravelPx,
-      scale: 1,
-      filter: "blur(0px)",
+      scale: 0.95,
+      filter: "blur(4px)",
     }),
   };
 
@@ -2034,7 +2034,12 @@ Please analyze the code you just wrote and fix this error.`;
           }}
         />
       )}
-      <div className="clyra-app-shell h-dvh flex min-w-0 bg-white text-slate-900 font-sans selection:bg-slate-200 overflow-hidden scalable-container relative">
+      <motion.div 
+        className="clyra-app-shell h-dvh flex min-w-0 bg-white text-slate-900 font-sans selection:bg-slate-200 overflow-hidden scalable-container relative"
+        initial={{ opacity: 0, scale: 0.97, filter: "blur(12px)", y: 12 }}
+        animate={{ opacity: 1, scale: 1, filter: "blur(0px)", y: 0 }}
+        transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1], delay: 0.05 }}
+      >
         <motion.aside
           aria-hidden={!isSidebarOpen}
           initial={false}
@@ -2711,9 +2716,9 @@ Please analyze the code you just wrote and fix this error.`;
                   exit="exit"
                   transition={{
                     type: "spring",
-                    stiffness: 300,
-                    damping: 32,
-                    mass: 0.9,
+                    stiffness: 350,
+                    damping: 34,
+                    mass: 0.8,
                   }}
                     style={{
                       backfaceVisibility: "hidden",
@@ -3429,7 +3434,7 @@ Please analyze the code you just wrote and fix this error.`;
             )}
           </AnimatePresence>
         </div>
-      </div>
+      </motion.div>
       
       <ChatSearchModal
         isOpen={isSearchModalOpen}
