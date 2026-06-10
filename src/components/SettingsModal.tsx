@@ -156,7 +156,7 @@ export function SettingsModal({
                         style={{ willChange: "transform, opacity" }}
                         className={cn(
                             "w-full max-w-[740px] h-[560px] max-h-[85vh] rounded-3xl flex relative overflow-hidden z-10 border",
-                            isDark ? "bg-[#0b0f19] border-slate-800 shadow-none" : "bg-white border-transparent shadow-[0_24px_64px_-16px_rgba(0,0,0,0.16)]"
+                            isDark ? "bg-black border-slate-800 shadow-none" : "bg-white border-transparent shadow-[0_24px_64px_-16px_rgba(0,0,0,0.16)]"
                         )}
                     >
                         {/* Clean Close Button */}
@@ -167,7 +167,7 @@ export function SettingsModal({
                         </div>
 
                         {/* Ultra-Minimal Sidebar */}
-                        <div className={cn("hidden sm:flex w-[220px] shrink-0 pt-8 px-4 flex-col gap-1 border-r", isDark ? "bg-[#0f172a] border-slate-800" : "bg-slate-50/30 border-slate-100/50")}>
+                        <div className={cn("hidden sm:flex w-[220px] shrink-0 pt-8 px-4 flex-col gap-1 border-r", isDark ? "bg-black border-slate-800" : "bg-slate-50/30 border-slate-100/50")}>
                             <h2 className={cn("text-[17px] font-semibold tracking-tight px-4 mb-6 mt-2", isDark ? "text-slate-100" : "text-slate-800")}>Settings</h2>
                             {tabs.map(tab => {
                                 const isActive = activeTab === tab.id;
@@ -189,7 +189,7 @@ export function SettingsModal({
                         </div>
 
                         {/* Main Content Area */}
-                        <div className={cn("flex-1 pt-8 sm:pt-14 px-6 sm:px-10 overflow-y-auto no-scrollbar relative", isDark ? "bg-[#0b0f19]" : "bg-white")}>
+                        <div className={cn("flex-1 pt-8 sm:pt-14 px-6 sm:px-10 overflow-y-auto no-scrollbar relative", isDark ? "bg-black" : "bg-white")}>
                             <div className="sm:hidden mb-6 flex items-center justify-between">
                                 <h2 className={cn("text-[22px] font-semibold tracking-tight", isDark ? "text-slate-100" : "text-slate-900")}>Settings</h2>
                                 <select 

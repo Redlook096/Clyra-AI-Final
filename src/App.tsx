@@ -1876,23 +1876,27 @@ Please analyze the code you just wrote and fix this error.`;
   };
 
   const chatQuickActions: Array<{
-    label: string;
+    baseLabel: string;
+    skeletonLabel: string;
     prompt: string;
     icon: React.ComponentType<{ className?: string }>;
   }> = [
     {
-      label: "Plan a launch",
+      baseLabel: "Plan a launch",
+      skeletonLabel: "[for a new product]",
       prompt:
         "Help me create a crisp launch plan with priorities, risks, and next actions.",
       icon: Check,
     },
     {
-      label: "Refine an idea",
+      baseLabel: "Refine an idea",
+      skeletonLabel: "[for a mobile app]",
       prompt: "Help me refine this idea into a polished product concept:",
       icon: MessageCircleDashed,
     },
     {
-      label: "Draft something",
+      baseLabel: "Draft something",
+      skeletonLabel: "[like a blog post]",
       prompt: "Write a concise, professional draft for:",
       icon: SquarePen,
     },
@@ -2506,7 +2510,7 @@ Please analyze the code you just wrote and fix this error.`;
           >
             <div className="absolute left-1/2 top-5 sm:top-6 -translate-x-1/2">
               <div
-              className="clyra-workflow-tabs"
+              className={cn("clyra-workflow-tabs", theme === "Dark" && "dark-tabs")}
               role="tablist"
               aria-label="Clyra workspace"
               data-invert-ignore="true"
@@ -2813,40 +2817,42 @@ Please analyze the code you just wrote and fix this error.`;
                           {!isVibeWorkspace && (
 	                            <motion.div
 	                              className="clyra-chat-quick-actions mt-4"
-	                              initial={isWorkspaceSwitching ? false : {
-	                                opacity: 0,
-	                                y: 8,
-	                                filter: "blur(5px)",
-	                              }}
-                              animate={{
-                                opacity: 1,
-                                y: 0,
-                                filter: "blur(0px)",
-                              }}
-                              transition={{
-                                delay: 0.36,
-                                duration: 0.52,
-                                ease: [0.22, 1, 0.36, 1],
-                              }}
-                            >
-                              {chatQuickActions.map((action) => {
-                                const QuickIcon = action.icon;
-
-                                return (
-                                  <button
-                                    key={action.label}
-                                    type="button"
-                                    className="clyra-chat-chip"
-                                    onClick={() =>
-                                      applyQuickPrompt(action.prompt)
+	                              initial="hidden"
+                                animate="visible"
+                                variants={{
+                                  hidden: { opacity: 0 },
+                                  visible: {
+                                    opacity: 1,
+                                    transition: {
+                                      staggerChildren: 0.12,
+                                      delayChildren: 0.2,
                                     }
-                                  >
-                                    <QuickIcon className="h-3.5 w-3.5" />
-                                    <span>{action.label}</span>
-                                  </button>
-                                );
-                              })}
-                            </motion.div>
+                                  }
+                                }}
+                             >
+                               {chatQuickActions.map((action) => {
+                                 const QuickIcon = action.icon;
+
+                                 return (
+                                    <motion.button
+                                      variants={{
+                                        hidden: { opacity: 0, y: 15, filter: "blur(4px)" },
+                                        visible: { opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: 0.7, ease: [0.16, 1, 0.3, 1] } }
+                                      }}
+                                      key={action.baseLabel}
+                                      type="button"
+                                      className="clyra-chat-chip group"
+                                      onClick={() =>
+                                        applyQuickPrompt(action.prompt)
+                                      }
+                                    >
+                                      <QuickIcon className="h-3.5 w-3.5" />
+                                      <span>{action.baseLabel}</span>
+                                      <span className="opacity-60 font-normal animate-pulse ml-0.5 tracking-tight text-slate-500 group-hover:text-slate-700 transition-colors">{action.skeletonLabel}</span>
+                                    </motion.button>
+                                 );
+                               })}
+                             </motion.div>
                           )}
                           <AnimatePresence>
                             {isTemporaryChat && (

@@ -233,6 +233,31 @@
     transform: translateY(0);
 }
 
+.clyra-workflow-tabs.dark-tabs {
+    background: #000;
+    border-color: rgba(255, 255, 255, 0.2) !important;
+}
+.clyra-workflow-tabs.dark-tabs:hover,
+.clyra-workflow-tabs.dark-tabs:focus-within {
+    border-color: rgba(255, 255, 255, 0.8) !important;
+    background: #000;
+}
+
+.clyra-workflow-tabs.dark-tabs .clyra-workflow-tab {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.clyra-workflow-tabs.dark-tabs .clyra-workflow-tab:hover,
+.clyra-workflow-tabs.dark-tabs .clyra-workflow-tab--active {
+    color: #fff;
+}
+
+.clyra-workflow-tabs.dark-tabs .clyra-workflow-tab__hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.2);
+    box-shadow: none;
+}
+
 .clyra-workspace-scene {
     contain: layout paint;
     background: transparent;
