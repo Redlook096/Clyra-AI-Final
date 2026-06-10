@@ -2497,32 +2497,8 @@ Please analyze the code you just wrote and fix this error.`;
               </motion.button>
             )}
           </AnimatePresence>
-          <motion.div
-            className="clyra-screen-stage relative flex min-h-0 min-w-0 flex-1 flex-col"
-            animate={{ x: sidebarAvoidShift }}
-            transition={{
-              type: "spring",
-              stiffness: 220,
-              damping: 34,
-              mass: 0.9,
-            }}
-            style={{
-              willChange: "transform",
-            }}
-          >
-          <div
-            className="relative z-[90] h-[52px] w-full shrink-0"
-          >
-            <motion.div 
-              className="absolute left-1/2 top-5 sm:top-6"
-              animate={{ x: `calc(-50% - ${sidebarAvoidShift}px)` }}
-              transition={{
-                type: "spring",
-                stiffness: 220,
-                damping: 34,
-                mass: 0.9,
-              }}
-            >
+          <div className="relative z-[90] h-[52px] w-full shrink-0">
+            <div className="absolute left-1/2 top-5 sm:top-6 -translate-x-1/2">
               <div
               className={cn("clyra-workflow-tabs", theme === "Dark" && "dark-tabs")}
               role="tablist"
@@ -2579,8 +2555,21 @@ Please analyze the code you just wrote and fix this error.`;
                 );
 	              })}
 	            </div>
-            </motion.div>
-	          </div>
+            </div>
+	        </div>
+          <motion.div
+            className="clyra-screen-stage relative flex min-h-0 min-w-0 flex-1 flex-col"
+            animate={{ x: sidebarAvoidShift }}
+            transition={{
+              type: "spring",
+              stiffness: 220,
+              damping: 34,
+              mass: 0.9,
+            }}
+            style={{
+              willChange: "transform",
+            }}
+          >
           <AnimatePresence>
             {(messages.length === 0 || isTemporaryChat) &&
               !isBrowserWorkspace &&
@@ -2705,14 +2694,13 @@ Please analyze the code you just wrote and fix this error.`;
                 <AnimatePresence
                   initial={false}
                   custom={workspaceTransitionDirection}
-                  mode="popLayout"
                 >
                 <motion.div
                   key={workspaceViewKey}
                   custom={workspaceTransitionDirection}
                   variants={workspacePanelVariants}
                   className={cn(
-                    "clyra-workspace-card flex h-full min-h-0 w-full flex-1 flex-col transform-gpu",
+                    "clyra-workspace-card absolute inset-0 flex flex-col transform-gpu",
                     messages.length === 0 &&
                       !isClipWorkspace &&
                       !isBrowserWorkspace &&
