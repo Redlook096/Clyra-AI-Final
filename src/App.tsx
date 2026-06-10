@@ -402,7 +402,7 @@ export default function App() {
       clearTimeout(t4);
       clearTimeout(t5);
     };
-  }, [progressDuration, introState]);
+  }, [progressDuration]);
 
 
 
@@ -3085,14 +3085,15 @@ Please analyze the code you just wrote and fix this error.`;
                           isExpanded ? "p-2 sm:p-3" : "p-1.5 sm:p-2",
                           (introState === "booting" || introState === "progress") ? "opacity-0" : "opacity-100"
                         )}
-                        initial={isWorkspaceSwitching ? false : introState !== "complete" ? { width: 48, borderRadius: 24 } : false}
+                        initial={isWorkspaceSwitching ? false : introState !== "complete" ? { width: 48, height: 48, borderRadius: 24 } : false}
                         animate={{ 
                           width: (introState === "booting" || introState === "progress" || introState === "input_circle") ? 48 : "100%",
+                          height: (introState === "booting" || introState === "progress" || introState === "input_circle") ? 48 : "auto",
                           borderRadius: (introState === "booting" || introState === "progress" || introState === "input_circle") ? 24 : (isExpanded ? 32 : 40),
                         }}
                         transition={{ type: "spring", stiffness: 120, damping: 20, mass: 1 }}
                       >
-                        <div className="relative z-10 w-full h-full">
+                        <div className={cn("relative z-10 w-full h-full transition-opacity duration-700", (introState === "booting" || introState === "progress" || introState === "input_circle") ? "opacity-0 pointer-events-none" : "opacity-100")}>
                           <AnimatePresence>
                             {commandPaletteEnabled && showCommandPalette && (
                               <motion.div
