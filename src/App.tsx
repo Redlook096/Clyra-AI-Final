@@ -1854,9 +1854,9 @@ Please analyze the code you just wrote and fix this error.`;
   const workspacePanelVariants = {
     enter: (direction: number) => ({
       opacity: 0,
-      x: direction > 0 ? 40 : -40,
-      scale: 0.985,
-      filter: "blur(6px)",
+      x: direction > 0 ? 60 : -60,
+      scale: 0.96,
+      filter: "blur(8px)",
     }),
     center: {
       opacity: 1,
@@ -1867,9 +1867,9 @@ Please analyze the code you just wrote and fix this error.`;
     },
     exit: (direction: number) => ({
       opacity: 0,
-      x: direction > 0 ? -40 : 40,
-      scale: 0.985,
-      filter: "blur(6px)",
+      x: direction > 0 ? -60 : 60,
+      scale: 0.96,
+      filter: "blur(8px)",
     }),
   };
 
@@ -2543,7 +2543,9 @@ Please analyze the code you just wrote and fix this error.`;
                 const Icon = tabItem.icon;
                 const isActive =
                   activeWorkspaceTab === tabItem.id && !isClipWorkspace;
-                const isHovered = hoveredWorkspaceTab === tabItem.id;
+                const isHovered =
+                  hoveredWorkspaceTab === tabItem.id ||
+                  (hoveredWorkspaceTab === null && isActive);
 
                 return (
                   <button
@@ -2720,8 +2722,8 @@ Please analyze the code you just wrote and fix this error.`;
                   animate="center"
                   exit="exit"
                   transition={{
-                    duration: 0.65,
-                    ease: [0.16, 1, 0.3, 1]
+                    duration: 0.5,
+                    ease: [0.22, 1, 0.36, 1]
                   }}
                     style={{
                       backfaceVisibility: "hidden",
