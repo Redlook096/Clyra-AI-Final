@@ -364,34 +364,35 @@ export default function App() {
   }, []);
   type IntroState = "booting" | "progress" | "input_circle" | "input_expand" | "progress_complete" | "complete";
   const [introState, setIntroState] = useState<IntroState>("booting");
-  const [introProgressText, setIntroProgressText] = useState("Preparing environment...");
+  const [introProgressText, setIntroProgressText] = useState("INITIALIZING");
+  const [progressDuration] = useState(() => 3 + Math.random() * 3);
   
   useEffect(() => {
     if (introState === "complete") {
       return;
     }
 
+    const pdMs = progressDuration * 1000;
     const texts = [
-      "Preparing environment...",
-      "Optimizing neural pathways...",
-      "Allocating memory...",
-      "Initializing core systems...",
-      "Ready."
+      "INITIALIZING",
+      "LOADING WORKSPACE",
+      "OPTIMIZING",
+      "READY"
     ];
     let step = 0;
     const textInterval = setInterval(() => {
       step++;
       if (step < texts.length) setIntroProgressText(texts[step]);
-    }, 700);
+    }, pdMs / texts.length);
 
     const t1 = setTimeout(() => setIntroState("progress"), 600); 
-    const t2 = setTimeout(() => setIntroState("input_circle"), 1100); 
-    const t3 = setTimeout(() => setIntroState("input_expand"), 2100); 
-    const t4 = setTimeout(() => setIntroState("progress_complete"), 3800); 
+    const t2 = setTimeout(() => setIntroState("input_circle"), 600 + pdMs * 0.15); 
+    const t3 = setTimeout(() => setIntroState("input_expand"), 600 + pdMs * 0.15 + 1000); 
+    const t4 = setTimeout(() => setIntroState("progress_complete"), 600 + pdMs); 
     const t5 = setTimeout(() => {
       setIntroState("complete");
       setIsSidebarOpen(true);
-    }, 4600);
+    }, 600 + pdMs + 800);
 
     return () => {
       clearInterval(textInterval);
@@ -401,7 +402,9 @@ export default function App() {
       clearTimeout(t4);
       clearTimeout(t5);
     };
-  }, []);
+  }, [progressDuration, introState]);
+
+
 
   useEffect(() => {
     return () => {
@@ -2544,7 +2547,12 @@ Please analyze the code you just wrote and fix this error.`;
             )}
           </AnimatePresence>
           <div className="relative z-[90] h-[52px] w-full shrink-0">
-            <div className="absolute left-1/2 top-5 sm:top-6 -translate-x-1/2">
+            <motion.div 
+              className="absolute left-1/2 top-5 sm:top-6 -translate-x-1/2 z-50"
+              initial={introState !== "complete" ? { y: -50 } : false}
+              animate={{ y: introState === "complete" ? 0 : -50 }}
+              transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+            >
               <div
               className={cn("clyra-workflow-tabs transition-opacity duration-700", introState === "complete" ? "opacity-100" : "opacity-0", theme === "Dark" && "dark-tabs")}
               role="tablist"
@@ -2601,7 +2609,7 @@ Please analyze the code you just wrote and fix this error.`;
                 );
 	              })}
 	            </div>
-            </div>
+            </motion.div>
 	        </div>
           <motion.div
             className="clyra-screen-stage relative flex min-h-0 min-w-0 flex-1 flex-col"
@@ -2821,7 +2829,7 @@ Please analyze the code you just wrote and fix this error.`;
                                     className="h-full bg-slate-800 rounded-full shadow-[0_0_8px_rgba(30,41,59,0.5)]"
                                     initial={{ width: "0%" }}
                                     animate={{ width: "100%" }}
-                                    transition={{ duration: 3.2, ease: [0.25, 1, 0.5, 1] }}
+                                    transition={{ duration: progressDuration, ease: [0.25, 1, 0.5, 1] }}
                                   />
                                 </div>
                                 <motion.span 
@@ -3077,13 +3085,12 @@ Please analyze the code you just wrote and fix this error.`;
                           isExpanded ? "p-2 sm:p-3" : "p-1.5 sm:p-2",
                           (introState === "booting" || introState === "progress") ? "opacity-0" : "opacity-100"
                         )}
-                        initial={isWorkspaceSwitching ? false : introState !== "complete" ? { width: 48, borderRadius: 24, y: 20 } : false}
+                        initial={isWorkspaceSwitching ? false : introState !== "complete" ? { width: 48, borderRadius: 24 } : false}
                         animate={{ 
                           width: (introState === "booting" || introState === "progress" || introState === "input_circle") ? 48 : "100%",
                           borderRadius: (introState === "booting" || introState === "progress" || introState === "input_circle") ? 24 : (isExpanded ? 32 : 40),
-                          y: (introState === "booting" || introState === "progress") ? 20 : 0
                         }}
-                        transition={{ type: "spring", stiffness: 350, damping: 30, mass: 0.8 }}
+                        transition={{ type: "spring", stiffness: 120, damping: 20, mass: 1 }}
                       >
                         <div className="relative z-10 w-full h-full">
                           <AnimatePresence>
@@ -3197,7 +3204,7 @@ Please analyze the code you just wrote and fix this error.`;
                                 onClick={handleAttachFile}
                                 whileHover={{ scale: 1.05 }}
                                 whileTap={{ scale: 0.95 }}
-                                className="p-2 text-slate-500 hover:text-slate-800 rounded-full transition-colors flex items-center justify-center shrink-0"
+                                className={cn("p-2 text-slate-500 hover:text-slate-800 rounded-full transition-all duration-700 flex items-center justify-center shrink-0", introState === "complete" ? "opacity-100" : "opacity-0")}
                                 aria-label="Attach files"
                                 title="Attach files"
                               >
@@ -3244,8 +3251,9 @@ Please analyze the code you just wrote and fix this error.`;
                                   !selectedCommand
                                 }
                                 className={cn(
-                                  "p-2 rounded-full transition-all duration-200 shrink-0",
+                                  "p-2 rounded-full transition-all duration-700 shrink-0",
                                   "flex items-center justify-center",
+                                  introState === "complete" ? "opacity-100" : "opacity-0",
                                   value.trim() || selectedCommand
                                     ? "bg-slate-900 text-white hover:bg-slate-800"
                                     : "bg-slate-100 text-slate-400 cursor-not-allowed",
