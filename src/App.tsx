@@ -386,13 +386,13 @@ export default function App() {
     }, pdMs / texts.length);
 
     const t1 = setTimeout(() => setIntroState("progress"), 600); 
-    const t2 = setTimeout(() => setIntroState("input_circle"), 600 + pdMs * 0.15); 
-    const t3 = setTimeout(() => setIntroState("input_expand"), 600 + pdMs * 0.15 + 1000); 
-    const t4 = setTimeout(() => setIntroState("progress_complete"), 600 + pdMs); 
+    const t2 = setTimeout(() => setIntroState("progress_complete"), 600 + pdMs); 
+    const t3 = setTimeout(() => setIntroState("input_circle"), 600 + pdMs + 800); 
+    const t4 = setTimeout(() => setIntroState("input_expand"), 600 + pdMs + 800 + 400); 
     const t5 = setTimeout(() => {
       setIntroState("complete");
       setIsSidebarOpen(true);
-    }, 600 + pdMs + 800);
+    }, 600 + pdMs + 800 + 400 + 1000);
 
     return () => {
       clearInterval(textInterval);
@@ -2808,7 +2808,7 @@ Please analyze the code you just wrote and fix this error.`;
 	                        <motion.div
 	                          className="mb-2 flex w-full justify-center relative"
 	                          initial={isWorkspaceSwitching ? false : introState !== "complete" ? { y: 150 } : false}
-                          animate={introState === "progress_complete" || introState === "complete" ? { y: 0 } : { y: 150 }}
+                          animate={introState === "progress_complete" || introState === "input_circle" || introState === "input_expand" || introState === "complete" ? { y: 0 } : { y: 150 }}
                           transition={{
                             duration: 0.8,
                             ease: [0.16, 1, 0.3, 1],
@@ -3083,7 +3083,7 @@ Please analyze the code you just wrote and fix this error.`;
                           "input-wrapper relative backdrop-blur-xl border transition-[background-color,border-color,padding] duration-300 cursor-text overflow-hidden mx-auto z-[3]",
                           theme === "Dark" ? "bg-slate-200/90 border-slate-400/50" : "bg-white/80 border-slate-200/60",
                           isExpanded ? "p-2 sm:p-3" : "p-1.5 sm:p-2",
-                          (introState === "booting" || introState === "progress") ? "opacity-0" : "opacity-100"
+                          (introState === "booting" || introState === "progress" || introState === "progress_complete") ? "opacity-0" : "opacity-100"
                         )}
                         initial={isWorkspaceSwitching ? false : introState !== "complete" ? { width: 48, height: 48, borderRadius: 24 } : false}
                         animate={{ 
@@ -3093,7 +3093,7 @@ Please analyze the code you just wrote and fix this error.`;
                         }}
                         transition={{ type: "spring", stiffness: 120, damping: 20, mass: 1 }}
                       >
-                        <div className={cn("relative z-10 w-full h-full transition-opacity duration-700", (introState === "booting" || introState === "progress" || introState === "input_circle") ? "opacity-0 pointer-events-none" : "opacity-100")}>
+                        <div className={cn("relative z-10 w-full h-full transition-opacity duration-700", (introState === "booting" || introState === "progress" || introState === "progress_complete" || introState === "input_circle") ? "opacity-0 pointer-events-none" : "opacity-100")}>
                           <AnimatePresence>
                             {commandPaletteEnabled && showCommandPalette && (
                               <motion.div
