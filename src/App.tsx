@@ -363,17 +363,11 @@ export default function App() {
     };
   }, []);
   type IntroState = "booting" | "progress" | "input_circle" | "input_expand" | "progress_complete" | "complete";
-  const [introState, setIntroState] = useState<IntroState>(() => {
-    if (typeof sessionStorage !== "undefined" && sessionStorage.getItem("clyra_intro_seen")) {
-      return "complete";
-    }
-    return "booting";
-  });
+  const [introState, setIntroState] = useState<IntroState>("booting");
   const [introProgressText, setIntroProgressText] = useState("Preparing environment...");
   
   useEffect(() => {
     if (introState === "complete") {
-      sessionStorage.setItem("clyra_intro_seen", "true");
       return;
     }
 
@@ -435,12 +429,7 @@ export default function App() {
     minHeight: 40,
     maxHeight: 200,
   });
-  const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
-    if (typeof sessionStorage !== "undefined" && sessionStorage.getItem("clyra_intro_seen")) {
-      return true;
-    }
-    return false;
-  });
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isProjectsOpen, setIsProjectsOpen] = useState(false);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
