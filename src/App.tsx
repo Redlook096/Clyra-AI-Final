@@ -2017,6 +2017,10 @@ Please analyze the code you just wrote and fix this error.`;
                 body { background: #fff; }
                 /* Make grey text more visible (white) in dark mode */
                 .text-slate-400, .text-slate-500, .text-slate-600 { color: #000 !important; }
+                /* Remove all glow effects (inverted shadows) in dark mode except for AI orb */
+                *:not(.clyra-ai-orb-shell):not(.clyra-ai-orb-shell *):not(.clyra-ai-orb):not(.clyra-ai-orb *) {
+                    box-shadow: none !important;
+                }
             `,
           }}
         />
@@ -3008,11 +3012,9 @@ Please analyze the code you just wrote and fix this error.`;
                     >
                       <div
                         className={cn(
-                          "input-wrapper relative bg-white/80 backdrop-blur-xl  border transition-all duration-300 cursor-text rounded-[32px] sm:rounded-[40px] z-[3]",
-                          
+                          "input-wrapper relative backdrop-blur-xl border transition-all duration-300 cursor-text rounded-[32px] sm:rounded-[40px] z-[3]",
+                          theme === "Dark" ? "bg-slate-200/90 border-slate-400/50" : "bg-white/80 border-slate-200/60",
                           isExpanded ? "p-2 sm:p-3" : "p-1.5 sm:p-2",
-                          "",
-                          "border-slate-200/60",
                         )}
                       >
                         <div className="relative z-10 w-full h-full">
@@ -3152,9 +3154,9 @@ Please analyze the code you just wrote and fix this error.`;
                               placeholder={inputPlaceholder}
                               containerClassName="w-full"
                               className={cn(
-                                "resize-none overflow-y-auto overflow-x-hidden",
-                                "text-slate-800 text-[15px] leading-relaxed sm:text-lg",
-                                "placeholder:text-slate-400",
+                                "resize-none overflow-y-auto overflow-x-hidden bg-transparent outline-none disabled:opacity-50",
+                                "text-[15px] leading-relaxed sm:text-lg font-medium transition-colors",
+                                theme === "Dark" ? "placeholder:text-slate-500 text-slate-900" : "placeholder:text-slate-400 text-slate-800",
                                 isExpanded
                                   ? "min-h-[50px] max-h-[35vh] py-3 px-1"
                                   : "min-h-[40px] max-h-[35vh] py-2 px-1",

@@ -136,7 +136,7 @@ export function SettingsModal({
     return (
         <AnimatePresence>
             {isOpen && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 pb-20 sm:pb-6">
+                <div data-invert-ignore={isDark ? "true" : undefined} className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 pb-20 sm:pb-6">
                     {/* Backdrop */}
                     <motion.div 
                         initial={{ opacity: 0 }}
