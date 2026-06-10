@@ -1854,21 +1854,22 @@ Please analyze the code you just wrote and fix this error.`;
   const workspacePanelVariants = {
     enter: (direction: number) => ({
       opacity: 0,
-      y: 16,
+      x: direction > 0 ? 40 : -40,
       scale: 0.985,
-      filter: "blur(8px)",
+      filter: "blur(6px)",
     }),
     center: {
       opacity: 1,
+      x: 0,
       y: 0,
       scale: 1,
       filter: "blur(0px)",
     },
     exit: (direction: number) => ({
       opacity: 0,
-      y: -12,
+      x: direction > 0 ? -40 : 40,
       scale: 0.985,
-      filter: "blur(8px)",
+      filter: "blur(6px)",
     }),
   };
 
@@ -1972,7 +1973,7 @@ Please analyze the code you just wrote and fix this error.`;
     );
     const fromIndex = WORKSPACE_TAB_ORDER.indexOf(activeWorkspaceTab);
     const toIndex = WORKSPACE_TAB_ORDER.indexOf(tabId);
-    setWorkspaceTransitionDirection(toIndex > fromIndex ? -1 : 1);
+    setWorkspaceTransitionDirection(toIndex > fromIndex ? 1 : -1);
     setIsWorkspaceSwitching(true);
     if (workspaceSwitchTimeoutRef.current != null) {
       window.clearTimeout(workspaceSwitchTimeoutRef.current);
