@@ -415,7 +415,8 @@ export default function App() {
   const [temperature, setTemperature] = useState(0.7);
   const [userBubbleColor, setUserBubbleColor] = useState("#f8fafc");
   const [orbColorTheme, setOrbColorTheme] = useState<import("./components/AiOrb").OrbColorTheme>("default");
-  const [chatBackground, setChatBackground] = useState("none");
+  const [bgAnimEnabled, setBgAnimEnabled] = useState(false);
+  const [bgAnimColor, setBgAnimColor] = useState("#8b5cf6");
   const commandPaletteRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   /** When true, stream / layout growth will keep the chat column pinned to the bottom (normal chat behavior). */
@@ -2497,9 +2498,10 @@ Please analyze the code you just wrote and fix this error.`;
             }}
           >
           <div
-            className="relative z-[90] flex shrink-0 justify-center px-3 pt-5 sm:pt-6"
+            className="relative z-[90] h-[52px] w-full shrink-0"
           >
-            <div
+            <div className="absolute left-1/2 top-5 sm:top-6 -translate-x-1/2">
+              <div
               className="clyra-workflow-tabs"
               role="tablist"
               aria-label="Clyra workspace"
@@ -2531,7 +2533,7 @@ Please analyze the code you just wrote and fix this error.`;
                     onMouseEnter={() => setHoveredWorkspaceTab(tabItem.id)}
                     onFocus={() => setHoveredWorkspaceTab(tabItem.id)}
                     className={cn(
-                      "clyra-workflow-tab",
+                      "clyra-workflow-tab w-[105px] justify-center",
                       isActive && "clyra-workflow-tab--active",
                     )}
                   >
@@ -2553,6 +2555,7 @@ Please analyze the code you just wrote and fix this error.`;
                 );
 	              })}
 	            </div>
+              </div>
 	          </div>
           <AnimatePresence>
             {(messages.length === 0 || isTemporaryChat) &&
@@ -2639,6 +2642,22 @@ Please analyze the code you just wrote and fix this error.`;
 	                showWorkspaceLivePreview && "border-r border-slate-200/70",
 	              )}
 	            >
+                  {bgAnimEnabled && (
+                    <div className="pointer-events-none absolute inset-[-20%] z-0 overflow-hidden clyra-fluid-bg-container">
+                      <div 
+                        className="clyra-fluid-blob clyra-fluid-blob-1"
+                        style={{ backgroundColor: bgAnimColor }}
+                      />
+                      <div 
+                        className="clyra-fluid-blob clyra-fluid-blob-2"
+                        style={{ backgroundColor: bgAnimColor }}
+                      />
+                      <div 
+                        className="clyra-fluid-blob clyra-fluid-blob-3"
+                        style={{ backgroundColor: bgAnimColor }}
+                      />
+                    </div>
+                  )}
 	              <div
                 className={cn(
                   "relative z-10 flex flex-col h-full min-h-0 w-full",
@@ -2849,13 +2868,11 @@ Please analyze the code you just wrote and fix this error.`;
                         </motion.div>
                       </motion.div>
                     ) : (
-                      <div
-                        className="flex flex-1 w-full flex-col space-y-6 overflow-y-auto pb-4 pt-0 scrollbar-none"
-                        id="chat-container"
-                        style={{
-                          background: chatBackground !== "none" ? chatBackground : undefined,
-                        }}
-                      >
+                      <div className="relative flex flex-1 w-full overflow-hidden z-0">
+                        <div
+                          className="flex flex-1 w-full flex-col space-y-6 overflow-y-auto pb-4 pt-0 scrollbar-none relative z-10"
+                          id="chat-container"
+                        >
                         {messages.map((message) => {
                           const fontClass =
                             fontSize === "Small"
@@ -2948,7 +2965,8 @@ Please analyze the code you just wrote and fix this error.`;
                           );
                         })}
                       </div>
-                    )}
+                    </div>
+                  )}
                     <AnimatePresence initial={false}>
                       {!isFullscreen && !isClipWorkspace && !isBrowserWorkspace && (
                         <motion.div
@@ -3441,8 +3459,6 @@ Please analyze the code you just wrote and fix this error.`;
         setUserBubbleColor={setUserBubbleColor}
         orbColorTheme={orbColorTheme}
         setOrbColorTheme={setOrbColorTheme}
-        chatBackground={chatBackground}
-        setChatBackground={setChatBackground}
         chats={chats}
         clearChats={() => {
           setChats([]);

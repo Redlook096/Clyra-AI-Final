@@ -41,10 +41,8 @@ const HighlightMatch = React.memo(({ text, query }: { text: string; query: strin
 
 const ONE_DAY = 24 * 60 * 60 * 1000;
 
-// Buttery smooth Apple-like spring for the modal
-const MODAL_SPRING = { type: "spring" as const, damping: 24, stiffness: 280, mass: 0.6 };
-// Bouncy, light spring for height expansion
-const EXPAND_SPRING = { type: "spring" as const, damping: 20, stiffness: 230, mass: 0.7 };
+// Buttery smooth Apple-like ease
+const MODAL_EASE = [0.23, 1, 0.32, 1];
 const ITEM_SPRING = { type: "spring" as const, damping: 24, stiffness: 300, mass: 0.4 };
 
 const listVariants = {
@@ -129,31 +127,23 @@ export function ChatSearchModal({
   onSelectChat,
 }: ChatSearchModalProps) {
   const [query, setQuery] = useState("");
-  const [isListExpanded, setIsListExpanded] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (isOpen) {
       const t1 = setTimeout(() => inputRef.current?.focus(), 40);
-      const t2 = setTimeout(() => setIsListExpanded(true), 150); // Fast delay to let modal settle before bouncy expand
-      return () => {
-        clearTimeout(t1);
-        clearTimeout(t2);
-      };
+      return () => clearTimeout(t1);
     } else {
       setQuery("");
-      setIsListExpanded(false);
     }
   }, [isOpen]);
 
   const initiateClose = useCallback(() => {
-    setIsListExpanded(false);
-    setTimeout(() => onClose(), 120); // Let collapse start before closing modal
+    onClose();
   }, [onClose]);
 
   const handleSelect = useCallback((id: string) => {
-    setIsListExpanded(false);
-    setTimeout(() => onSelectChat(id), 120);
+    onSelectChat(id);
   }, [onSelectChat]);
 
   const filteredChats = useMemo(() => {
@@ -201,7 +191,11 @@ export function ChatSearchModal({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-[9999] flex items-start justify-center pt-[10vh] px-4">
+        <motion.div 
+          key="chat-search-modal"
+          exit={{ opacity: 0, transition: { duration: 0.2 } }}
+          className="fixed inset-0 z-[9999] flex items-start justify-center pt-[10vh] px-4"
+        >
           {/* Backdrop: solid color for massive performance gain */}
           <motion.div
             initial={{ opacity: 0 }}
@@ -212,12 +206,12 @@ export function ChatSearchModal({
             onClick={initiateClose}
           />
 
-          {/* Modal panel: uses willChange and spring */}
+          {/* Modal panel: uses willChange and ease */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 15 }}
+            initial={{ opacity: 0, scale: 0.97, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.97, y: -10 }}
-            transition={{ ...MODAL_SPRING, opacity: { duration: 0.2 } }}
+            exit={{ opacity: 0, scale: 0.98, y: -5 }}
+            transition={{ duration: 0.4, ease: MODAL_EASE }}
             style={{ willChange: "transform, opacity", transformOrigin: "top center" }}
             className="relative w-full max-w-[680px] bg-white rounded-[24px] shadow-[0_24px_64px_-16px_rgba(0,0,0,0.16),0_0_0_1px_rgba(0,0,0,0.06)] flex flex-col max-h-[80vh] overflow-hidden"
           >
@@ -242,21 +236,9 @@ export function ChatSearchModal({
               </button>
             </div>
 
-            {/* Content Accordion (Optimized Bouncy Height) */}
-            <AnimatePresence>
-              {isListExpanded && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: "auto", opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{
-                    height: EXPAND_SPRING,
-                    opacity: { duration: 0.2 },
-                  }}
-                  style={{ willChange: "height, opacity" }}
-                  className="overflow-hidden"
-                >
-                  <div className="overflow-y-auto px-2 py-3 max-h-[calc(80vh-65px)]">
+            {/* Content Area */}
+            <div className="overflow-hidden">
+              <div className="overflow-y-auto px-2 py-3 max-h-[calc(80vh-65px)]">
                     <AnimatePresence mode="wait">
                       <motion.div
                         key={query ? "search" : "browse"}
@@ -325,11 +307,9 @@ export function ChatSearchModal({
                       </motion.div>
                     </AnimatePresence>
                   </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            </div>
           </motion.div>
-        </div>
+        </motion.div>
       )}
     </AnimatePresence>
   );
