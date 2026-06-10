@@ -362,14 +362,14 @@ export default function App() {
       window.visualViewport?.removeEventListener("resize", updateViewportWidth);
     };
   }, []);
-  type IntroState = "booting" | "progress" | "progress_complete" | "expanding_input" | "complete";
+  type IntroState = "booting" | "progress" | "input_circle" | "input_expand" | "progress_complete" | "complete";
   const [introState, setIntroState] = useState<IntroState>(() => {
     if (typeof sessionStorage !== "undefined" && sessionStorage.getItem("clyra_intro_seen")) {
       return "complete";
     }
     return "booting";
   });
-  const [introProgressText, setIntroProgressText] = useState("Preparing systems...");
+  const [introProgressText, setIntroProgressText] = useState("Preparing environment...");
   
   useEffect(() => {
     if (introState === "complete") {
@@ -377,35 +377,37 @@ export default function App() {
       return;
     }
 
-    if (introState === "booting") {
-      const t = setTimeout(() => setIntroState("progress"), 600);
-      return () => clearTimeout(t);
-    } else if (introState === "progress") {
-      const texts = [
-        "Preparing everything...",
-        "Optimizing resources...",
-        "Initializing core systems...",
-        "Ready."
-      ];
-      let step = 0;
-      const textInterval = setInterval(() => {
-        step++;
-        if (step < texts.length) setIntroProgressText(texts[step]);
-      }, 500);
-      
-      const t = setTimeout(() => {
-        clearInterval(textInterval);
-        setIntroState("progress_complete");
-      }, 2200);
-      return () => { clearTimeout(t); clearInterval(textInterval); };
-    } else if (introState === "progress_complete") {
-      const t = setTimeout(() => setIntroState("expanding_input"), 800); 
-      return () => clearTimeout(t);
-    } else if (introState === "expanding_input") {
-      const t = setTimeout(() => setIntroState("complete"), 600);
-      return () => clearTimeout(t);
-    }
-  }, [introState]);
+    const texts = [
+      "Preparing environment...",
+      "Optimizing neural pathways...",
+      "Allocating memory...",
+      "Initializing core systems...",
+      "Ready."
+    ];
+    let step = 0;
+    const textInterval = setInterval(() => {
+      step++;
+      if (step < texts.length) setIntroProgressText(texts[step]);
+    }, 700);
+
+    const t1 = setTimeout(() => setIntroState("progress"), 600); 
+    const t2 = setTimeout(() => setIntroState("input_circle"), 1100); 
+    const t3 = setTimeout(() => setIntroState("input_expand"), 2100); 
+    const t4 = setTimeout(() => setIntroState("progress_complete"), 3800); 
+    const t5 = setTimeout(() => {
+      setIntroState("complete");
+      setIsSidebarOpen(true);
+    }, 4600);
+
+    return () => {
+      clearInterval(textInterval);
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      clearTimeout(t4);
+      clearTimeout(t5);
+    };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -433,7 +435,12 @@ export default function App() {
     minHeight: 40,
     maxHeight: 200,
   });
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+    if (typeof sessionStorage !== "undefined" && sessionStorage.getItem("clyra_intro_seen")) {
+      return true;
+    }
+    return false;
+  });
   const [isProjectsOpen, setIsProjectsOpen] = useState(false);
   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
@@ -2804,7 +2811,7 @@ Please analyze the code you just wrote and fix this error.`;
 	                        <motion.div
 	                          className="mb-2 flex w-full justify-center relative"
 	                          initial={isWorkspaceSwitching ? false : introState !== "complete" ? { y: 150 } : false}
-                          animate={introState === "progress_complete" || introState === "expanding_input" || introState === "complete" ? { y: 0 } : { y: 0 }}
+                          animate={introState === "progress_complete" || introState === "complete" ? { y: 0 } : { y: 150 }}
                           transition={{
                             duration: 0.8,
                             ease: [0.16, 1, 0.3, 1],
@@ -2812,23 +2819,30 @@ Please analyze the code you just wrote and fix this error.`;
                         >
                           <AiOrb colorTheme={orbColorTheme} />
                           <AnimatePresence>
-                            {(introState === "progress" || introState === "booting") && (
+                            {(introState === "progress" || introState === "input_circle" || introState === "input_expand") && (
                               <motion.div 
-                                className="absolute top-full left-1/2 -translate-x-1/2 mt-8 flex flex-col items-center gap-3 w-48"
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: introState === "progress" ? 1 : 0, y: 0 }}
-                                exit={{ opacity: 0, y: -10, scale: 0.95 }}
-                                transition={{ duration: 0.5 }}
+                                className="absolute top-full left-1/2 -translate-x-1/2 mt-10 flex flex-col items-center gap-4 w-56"
+                                initial={{ opacity: 0, y: 15, filter: "blur(4px)" }}
+                                animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                                exit={{ opacity: 0, y: -10, scale: 0.95, filter: "blur(4px)" }}
+                                transition={{ duration: 0.6 }}
                               >
-                                <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                                <div className="h-[3px] w-full bg-slate-200/60 rounded-full overflow-hidden shadow-inner">
                                   <motion.div 
-                                    className="h-full bg-slate-800 rounded-full"
+                                    className="h-full bg-slate-800 rounded-full shadow-[0_0_8px_rgba(30,41,59,0.5)]"
                                     initial={{ width: "0%" }}
                                     animate={{ width: "100%" }}
-                                    transition={{ duration: 2.2, ease: "easeInOut" }}
+                                    transition={{ duration: 3.2, ease: [0.25, 1, 0.5, 1] }}
                                   />
                                 </div>
-                                <span className="text-xs font-medium text-slate-400 tracking-wide">{introProgressText}</span>
+                                <motion.span 
+                                  key={introProgressText}
+                                  initial={{ opacity: 0, y: 4 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  className="text-[11px] font-medium text-slate-400 tracking-widest uppercase font-mono"
+                                >
+                                  {introProgressText}
+                                </motion.span>
                               </motion.div>
                             )}
                           </AnimatePresence>
@@ -3072,12 +3086,13 @@ Please analyze the code you just wrote and fix this error.`;
                           "input-wrapper relative backdrop-blur-xl border transition-[background-color,border-color,padding] duration-300 cursor-text overflow-hidden mx-auto z-[3]",
                           theme === "Dark" ? "bg-slate-200/90 border-slate-400/50" : "bg-white/80 border-slate-200/60",
                           isExpanded ? "p-2 sm:p-3" : "p-1.5 sm:p-2",
-                          (introState === "booting" || introState === "progress" || introState === "progress_complete") ? "opacity-0" : "opacity-100"
+                          (introState === "booting" || introState === "progress") ? "opacity-0" : "opacity-100"
                         )}
-                        initial={isWorkspaceSwitching ? false : introState !== "complete" ? { width: 48, borderRadius: 24 } : false}
+                        initial={isWorkspaceSwitching ? false : introState !== "complete" ? { width: 48, borderRadius: 24, y: 20 } : false}
                         animate={{ 
-                          width: introState === "expanding_input" || introState === "complete" ? "100%" : 48,
-                          borderRadius: introState === "expanding_input" || introState === "complete" ? (isExpanded ? 32 : 40) : 24,
+                          width: (introState === "booting" || introState === "progress" || introState === "input_circle") ? 48 : "100%",
+                          borderRadius: (introState === "booting" || introState === "progress" || introState === "input_circle") ? 24 : (isExpanded ? 32 : 40),
+                          y: (introState === "booting" || introState === "progress") ? 20 : 0
                         }}
                         transition={{ type: "spring", stiffness: 350, damping: 30, mass: 0.8 }}
                       >
