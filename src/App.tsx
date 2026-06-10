@@ -362,6 +362,51 @@ export default function App() {
       window.visualViewport?.removeEventListener("resize", updateViewportWidth);
     };
   }, []);
+  type IntroState = "booting" | "progress" | "progress_complete" | "expanding_input" | "complete";
+  const [introState, setIntroState] = useState<IntroState>(() => {
+    if (typeof sessionStorage !== "undefined" && sessionStorage.getItem("clyra_intro_seen")) {
+      return "complete";
+    }
+    return "booting";
+  });
+  const [introProgressText, setIntroProgressText] = useState("Preparing systems...");
+  
+  useEffect(() => {
+    if (introState === "complete") {
+      sessionStorage.setItem("clyra_intro_seen", "true");
+      return;
+    }
+
+    if (introState === "booting") {
+      const t = setTimeout(() => setIntroState("progress"), 600);
+      return () => clearTimeout(t);
+    } else if (introState === "progress") {
+      const texts = [
+        "Preparing everything...",
+        "Optimizing resources...",
+        "Initializing core systems...",
+        "Ready."
+      ];
+      let step = 0;
+      const textInterval = setInterval(() => {
+        step++;
+        if (step < texts.length) setIntroProgressText(texts[step]);
+      }, 500);
+      
+      const t = setTimeout(() => {
+        clearInterval(textInterval);
+        setIntroState("progress_complete");
+      }, 2200);
+      return () => { clearTimeout(t); clearInterval(textInterval); };
+    } else if (introState === "progress_complete") {
+      const t = setTimeout(() => setIntroState("expanding_input"), 800); 
+      return () => clearTimeout(t);
+    } else if (introState === "expanding_input") {
+      const t = setTimeout(() => setIntroState("complete"), 600);
+      return () => clearTimeout(t);
+    }
+  }, [introState]);
+
   useEffect(() => {
     return () => {
       if (workspaceSwitchTimeoutRef.current != null) {
@@ -2505,7 +2550,7 @@ Please analyze the code you just wrote and fix this error.`;
           <div className="relative z-[90] h-[52px] w-full shrink-0">
             <div className="absolute left-1/2 top-5 sm:top-6 -translate-x-1/2">
               <div
-              className={cn("clyra-workflow-tabs", theme === "Dark" && "dark-tabs")}
+              className={cn("clyra-workflow-tabs transition-opacity duration-700", introState === "complete" ? "opacity-100" : "opacity-0", theme === "Dark" && "dark-tabs")}
               role="tablist"
               aria-label="Clyra workspace"
               data-invert-ignore="true"
@@ -2582,13 +2627,7 @@ Please analyze the code you just wrote and fix this error.`;
                 <motion.button
                   type="button"
                   initial={{ opacity: 0, scale: 0.9, x: 10, y: -4 }}
-	                  animate={{
-	                    opacity: 1,
-	                    scale: 1,
-	                    x: 0,
-	                    y: 0,
-	                    top: 24,
-	                  }}
+                  animate={{ opacity: introState === "complete" ? 1 : 0, scale: 1, x: 0, y: 0 }}
                   exit={{ opacity: 0, scale: 0.9, x: 10, y: -4 }}
                   transition={{
                     type: "spring",
@@ -2763,44 +2802,47 @@ Please analyze the code you just wrote and fix this error.`;
                         className="text-center space-y-3 mb-7 flex flex-col items-center"
                       >
 	                        <motion.div
-	                          className="mb-2 flex w-full justify-center"
-	                          initial={isWorkspaceSwitching ? false : {
-	                            opacity: 0,
-	                            scale: 0.9,
-	                            y: 12,
-	                            filter: "blur(8px)",
-	                          }}
-                          animate={{
-                            opacity: 1,
-                            scale: 1,
-                            y: 0,
-                            filter: "blur(0px)",
-                          }}
+	                          className="mb-2 flex w-full justify-center relative"
+	                          initial={isWorkspaceSwitching ? false : introState !== "complete" ? { y: 150 } : false}
+                          animate={introState === "progress_complete" || introState === "expanding_input" || introState === "complete" ? { y: 0 } : { y: 0 }}
                           transition={{
-                            delay: 0.06,
-                            duration: 0.72,
+                            duration: 0.8,
                             ease: [0.16, 1, 0.3, 1],
                           }}
                         >
                           <AiOrb colorTheme={orbColorTheme} />
+                          <AnimatePresence>
+                            {(introState === "progress" || introState === "booting") && (
+                              <motion.div 
+                                className="absolute top-full left-1/2 -translate-x-1/2 mt-8 flex flex-col items-center gap-3 w-48"
+                                initial={{ opacity: 0, y: 10 }}
+                                animate={{ opacity: introState === "progress" ? 1 : 0, y: 0 }}
+                                exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                                transition={{ duration: 0.5 }}
+                              >
+                                <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                                  <motion.div 
+                                    className="h-full bg-slate-800 rounded-full"
+                                    initial={{ width: "0%" }}
+                                    animate={{ width: "100%" }}
+                                    transition={{ duration: 2.2, ease: "easeInOut" }}
+                                  />
+                                </div>
+                                <span className="text-xs font-medium text-slate-400 tracking-wide">{introProgressText}</span>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
                         </motion.div>
 	                        <motion.h1
 	                          className="text-3xl sm:text-4xl font-semibold tracking-tight text-slate-800"
-	                          initial={isWorkspaceSwitching ? false : {
-	                            opacity: 0,
-	                            y: 10,
-	                            scale: 0.96,
-	                            filter: "blur(6px)",
-	                          }}
                           animate={{
-                            opacity: 1,
-                            y: 0,
-                            scale: 1,
-                            filter: "blur(0px)",
+                            opacity: introState === "complete" ? 1 : 0,
+                            y: introState === "complete" ? 0 : 10,
+                            scale: introState === "complete" ? 1 : 0.96,
+                            filter: introState === "complete" ? "blur(0px)" : "blur(6px)",
                           }}
                           transition={{
-                            delay: 0.18,
-                            duration: 0.58,
+                            duration: 0.7,
                             ease: [0.22, 1, 0.36, 1],
                           }}
                         >
@@ -2811,11 +2853,13 @@ Please analyze the code you just wrote and fix this error.`;
 	                        >
 	                          <motion.p
 	                            className="text-slate-500 text-sm sm:text-base font-medium font-sans z-10 relative"
-	                            initial={isWorkspaceSwitching ? false : { opacity: 0, y: 8, filter: "blur(5px)" }}
-                            animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+                            animate={{ 
+                              opacity: introState === "complete" ? 1 : 0, 
+                              y: introState === "complete" ? 0 : 8, 
+                              filter: introState === "complete" ? "blur(0px)" : "blur(5px)" 
+                            }}
                             transition={{
-                              delay: 0.28,
-                              duration: 0.52,
+                              duration: 0.6,
                               ease: [0.22, 1, 0.36, 1],
                             }}
                           >
@@ -2845,7 +2889,7 @@ Please analyze the code you just wrote and fix this error.`;
                                     <motion.button
                                       variants={{
                                         hidden: { opacity: 0, y: 15, filter: "blur(4px)" },
-                                        visible: { opacity: 1, y: 0, filter: "blur(0px)", transition: { duration: 0.7, ease: [0.16, 1, 0.3, 1] } }
+                                        visible: { opacity: introState === "complete" ? 1 : 0, y: introState === "complete" ? 0 : 15, filter: introState === "complete" ? "blur(0px)" : "blur(4px)", transition: { duration: 0.7, ease: [0.16, 1, 0.3, 1] } }
                                       }}
                                       key={action.baseLabel}
                                       type="button"
@@ -2887,7 +2931,7 @@ Please analyze the code you just wrote and fix this error.`;
                     ) : (
                       <div className="relative flex flex-1 w-full overflow-hidden z-0">
                         <div
-                          className="flex flex-1 w-full flex-col space-y-6 overflow-y-auto pb-4 pt-0 scrollbar-none relative z-10"
+                          className={cn("flex flex-1 flex-col transition-opacity duration-700", introState === "complete" ? "opacity-100" : "opacity-0")}
                           id="chat-container"
                         >
                         {messages.map((message) => {
@@ -3023,12 +3067,19 @@ Please analyze the code you just wrote and fix this error.`;
                           : "pb-4 sm:pb-6 mb-3",
                       )}
                     >
-                      <div
+                      <motion.div
                         className={cn(
-                          "input-wrapper relative backdrop-blur-xl border transition-all duration-300 cursor-text rounded-[32px] sm:rounded-[40px] z-[3]",
+                          "input-wrapper relative backdrop-blur-xl border transition-[background-color,border-color,padding] duration-300 cursor-text overflow-hidden mx-auto z-[3]",
                           theme === "Dark" ? "bg-slate-200/90 border-slate-400/50" : "bg-white/80 border-slate-200/60",
                           isExpanded ? "p-2 sm:p-3" : "p-1.5 sm:p-2",
+                          (introState === "booting" || introState === "progress" || introState === "progress_complete") ? "opacity-0" : "opacity-100"
                         )}
+                        initial={isWorkspaceSwitching ? false : introState !== "complete" ? { width: 48, borderRadius: 24 } : false}
+                        animate={{ 
+                          width: introState === "expanding_input" || introState === "complete" ? "100%" : 48,
+                          borderRadius: introState === "expanding_input" || introState === "complete" ? (isExpanded ? 32 : 40) : 24,
+                        }}
+                        transition={{ type: "spring", stiffness: 350, damping: 30, mass: 0.8 }}
                       >
                         <div className="relative z-10 w-full h-full">
                           <AnimatePresence>
@@ -3366,8 +3417,8 @@ Please analyze the code you just wrote and fix this error.`;
                                 </div>
                     </div>
                           )}
-		                      </div>
-	                      </div>
+                          </div>
+                        </motion.div>
 		                    </motion.div>
 	                  )}
 	                </AnimatePresence>
