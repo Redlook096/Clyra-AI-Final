@@ -1853,10 +1853,10 @@ Please analyze the code you just wrote and fix this error.`;
       : Math.max(1040, window.innerWidth * 1.04);
   const workspacePanelVariants = {
     enter: (direction: number) => ({
-      opacity: 0,
-      x: direction > 0 ? 60 : -60,
-      scale: 0.96,
-      filter: "blur(8px)",
+      opacity: 1,
+      x: direction > 0 ? workspaceTravelPx : -workspaceTravelPx,
+      scale: 1,
+      filter: "blur(0px)",
     }),
     center: {
       opacity: 1,
@@ -1866,10 +1866,10 @@ Please analyze the code you just wrote and fix this error.`;
       filter: "blur(0px)",
     },
     exit: (direction: number) => ({
-      opacity: 0,
-      x: direction > 0 ? -60 : 60,
-      scale: 0.96,
-      filter: "blur(8px)",
+      opacity: 1,
+      x: direction > 0 ? -workspaceTravelPx : workspaceTravelPx,
+      scale: 1,
+      filter: "blur(0px)",
     }),
   };
 
@@ -2722,8 +2722,10 @@ Please analyze the code you just wrote and fix this error.`;
                   animate="center"
                   exit="exit"
                   transition={{
-                    duration: 0.5,
-                    ease: [0.22, 1, 0.36, 1]
+                    type: "spring",
+                    stiffness: 300,
+                    damping: 32,
+                    mass: 0.9,
                   }}
                     style={{
                       backfaceVisibility: "hidden",
