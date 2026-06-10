@@ -1854,24 +1854,21 @@ Please analyze the code you just wrote and fix this error.`;
   const workspacePanelVariants = {
     enter: (direction: number) => ({
       opacity: 0,
-      x: direction > 0 ? 30 : -30,
-      y: 0,
-      scale: 0.98,
-      filter: "blur(0px)",
+      y: 16,
+      scale: 0.985,
+      filter: "blur(8px)",
     }),
     center: {
       opacity: 1,
-      x: 0,
       y: 0,
       scale: 1,
       filter: "blur(0px)",
     },
     exit: (direction: number) => ({
       opacity: 0,
-      x: direction > 0 ? -30 : 30,
-      y: 0,
-      scale: 0.98,
-      filter: "blur(0px)",
+      y: -12,
+      scale: 0.985,
+      filter: "blur(8px)",
     }),
   };
 
@@ -1927,27 +1924,34 @@ Please analyze the code you just wrote and fix this error.`;
     },
   ];
 
-  const typingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const applyQuickPrompt = (prompt: string) => {
+  const [activeSkeletonText, setActiveSkeletonText] = useState<string | null>(null);
+  const [isFadingInText, setIsFadingInText] = useState(false);
+
+  const applyQuickPrompt = (prompt: string, skeleton?: string) => {
     setActiveWorkspaceTab("chat");
     setSelectedCommand(null);
     setIsInputExpanded(true);
-    if (typingIntervalRef.current) clearInterval(typingIntervalRef.current);
-    let i = 0;
-    setValue("");
+    
+    // Smooth fade in effect instead of typing
+    setIsFadingInText(true);
+    setValue(skeleton ? `${prompt} ${skeleton}` : prompt);
+    if (skeleton) {
+      setActiveSkeletonText(skeleton);
+    } else {
+      setActiveSkeletonText(null);
+    }
+    
     window.setTimeout(() => {
       textareaRef.current?.focus();
-      typingIntervalRef.current = setInterval(() => {
-        i++;
-        if (i <= prompt.length) {
-          setValue(prompt.slice(0, i));
-          adjustHeight();
-        } else {
-          if (typingIntervalRef.current) clearInterval(typingIntervalRef.current);
-          typingIntervalRef.current = null;
-        }
-      }, 18);
-    }, 30);
+      // Select the skeleton text so user can just type over it
+      if (skeleton && textareaRef.current) {
+        const start = prompt.length + 1;
+        const end = start + skeleton.length;
+        textareaRef.current.setSelectionRange(start, end);
+      }
+      adjustHeight();
+      setIsFadingInText(false);
+    }, 50); // slight delay to allow React to render the text
   };
 
   const applyVibePrompt = (prompt: string) => {
@@ -2508,7 +2512,16 @@ Please analyze the code you just wrote and fix this error.`;
           <div
             className="relative z-[90] h-[52px] w-full shrink-0"
           >
-            <div className="absolute left-1/2 top-5 sm:top-6 -translate-x-1/2">
+            <motion.div 
+              className="absolute left-1/2 top-5 sm:top-6"
+              animate={{ x: `calc(-50% - ${sidebarAvoidShift}px)` }}
+              transition={{
+                type: "spring",
+                stiffness: 220,
+                damping: 34,
+                mass: 0.9,
+              }}
+            >
               <div
               className={cn("clyra-workflow-tabs", theme === "Dark" && "dark-tabs")}
               role="tablist"
@@ -2563,7 +2576,7 @@ Please analyze the code you just wrote and fix this error.`;
                 );
 	              })}
 	            </div>
-              </div>
+            </motion.div>
 	          </div>
           <AnimatePresence>
             {(messages.length === 0 || isTemporaryChat) &&
@@ -2706,11 +2719,8 @@ Please analyze the code you just wrote and fix this error.`;
                   animate="center"
                   exit="exit"
                   transition={{
-                    type: "spring",
-                    stiffness: 280,
-                    damping: 28,
-                    mass: 0.8,
-                    opacity: { duration: 0.2 },
+                    duration: 0.65,
+                    ease: [0.16, 1, 0.3, 1]
                   }}
                     style={{
                       backfaceVisibility: "hidden",
@@ -2843,12 +2853,11 @@ Please analyze the code you just wrote and fix this error.`;
                                       type="button"
                                       className="clyra-chat-chip group"
                                       onClick={() =>
-                                        applyQuickPrompt(action.prompt)
+                                        applyQuickPrompt(action.prompt, action.skeletonLabel)
                                       }
                                     >
                                       <QuickIcon className="h-3.5 w-3.5" />
                                       <span>{action.baseLabel}</span>
-                                      <span className="opacity-60 font-normal animate-pulse ml-0.5 tracking-tight text-slate-500 group-hover:text-slate-700 transition-colors">{action.skeletonLabel}</span>
                                     </motion.button>
                                  );
                                })}
@@ -3167,6 +3176,7 @@ Please analyze the code you just wrote and fix this error.`;
                                   ? "min-h-[50px] max-h-[35vh] py-3 px-1"
                                   : "min-h-[40px] max-h-[35vh] py-2 px-1",
                                 "scrollbar-none transition-all duration-300",
+                                isFadingInText ? "opacity-0 translate-y-1 scale-95" : "opacity-100 translate-y-0 scale-100"
                               )}
                             />
                             {!isExpanded && (
