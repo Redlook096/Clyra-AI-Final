@@ -1983,7 +1983,7 @@ Please analyze the code you just wrote and fix this error.`;
     Math.max(360, viewportWidth - 16),
     Math.max(360, centeredContentWidth) + 8,
   );
-  const workspaceSwipeEase = [0.5, 0, 0.2, 1] as [
+  const workspaceSwipeEase = [0.42, 0, 0.18, 1] as [
     number,
     number,
     number,
@@ -1991,7 +1991,7 @@ Please analyze the code you just wrote and fix this error.`;
   ];
   const workspaceSwipeTransition = {
     type: "tween" as const,
-    duration: 0.72,
+    duration: 0.64,
     ease: workspaceSwipeEase,
   };
   const workspacePanelVariants = {
@@ -2123,7 +2123,7 @@ Please analyze the code you just wrote and fix this error.`;
     workspaceSwitchTimeoutRef.current = window.setTimeout(() => {
       setIsWorkspaceSwitching(false);
       workspaceSwitchTimeoutRef.current = null;
-    }, 760);
+    }, 680);
     setActiveWorkspaceTab(tabId);
     setSelectedCommand(null);
     setShowCommandPalette(false);
@@ -2792,7 +2792,7 @@ Please analyze the code you just wrote and fix this error.`;
                         }}
                         exit={{ opacity: 0 }}
                         transition={{
-                          duration: 0.72,
+                          duration: 0.64,
                           ease: workspaceSwipeEase,
                           times: [0, 0.52, 1],
                         }}
