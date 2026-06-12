@@ -775,7 +775,7 @@
 }
 
 .clyra-ai-orb-shell--intro .clyra-ai-orb-ball {
-    filter: blur(0.85px);
+    filter: none;
 }
 
 .clyra-ai-orb-shell--intro .clyra-ai-orb-lines,
@@ -786,7 +786,9 @@
 
 .clyra-ai-orb-shell:not(.clyra-ai-orb-shell--intro) .clyra-ai-orb-lines {
     opacity: 1;
-    transition: opacity 520ms cubic-bezier(0.2, 1, 0.3, 1);
+    transition:
+        opacity 680ms cubic-bezier(0.2, 1, 0.3, 1),
+        transform 680ms cubic-bezier(0.2, 1, 0.3, 1);
 }
 
 .clyra-ai-orb-shell:not(.clyra-ai-orb-shell--intro) .clyra-ai-orb-rings {
@@ -865,9 +867,38 @@
     transition: filter 520ms cubic-bezier(0.2, 1, 0.3, 1);
 }
 
+.clyra-ai-orb-ball::before {
+    position: absolute;
+    inset: -7%;
+    z-index: 1;
+    content: "";
+    border-radius: inherit;
+    background:
+        radial-gradient(circle at 31% 72%, rgb(var(--orb-intro-b) / 0.82) 0%, rgb(var(--orb-intro-b) / 0.58) 25%, transparent 58%),
+        radial-gradient(circle at 43% 35%, rgb(var(--orb-intro-c) / 0.72) 0%, rgb(var(--orb-intro-c) / 0.48) 26%, transparent 56%),
+        radial-gradient(circle at 76% 47%, rgb(var(--orb-intro-a) / 0.66) 0%, rgb(var(--orb-intro-a) / 0.42) 32%, transparent 64%),
+        radial-gradient(circle at 56% 86%, rgb(var(--orb-intro-d) / 0.34) 0%, transparent 58%),
+        linear-gradient(145deg, rgb(var(--orb-intro-b) / 0.54), rgb(var(--orb-intro-a) / 0.76) 48%, rgb(var(--orb-intro-c) / 0.62));
+    background-size: 118% 118%;
+    background-position: 47% 51%;
+    mix-blend-mode: normal;
+    opacity: 0;
+    transform: translateZ(0) scale(1.04) rotate(-10deg);
+    transform-origin: center;
+    pointer-events: none;
+    transition: opacity 520ms cubic-bezier(0.2, 1, 0.3, 1);
+    will-change: opacity, transform;
+}
+
+.clyra-ai-orb-shell--intro .clyra-ai-orb-ball::before {
+    opacity: 0.94;
+    animation: clyra-ai-orb-intro-palette 2.65s cubic-bezier(0.2, 1, 0.25, 1) both;
+}
+
 .clyra-ai-orb-lines {
     position: absolute;
     inset: -20px;
+    z-index: 2;
     background: repeating-conic-gradient(
         from 0deg,
         transparent 0deg,
@@ -881,6 +912,7 @@
 .clyra-ai-orb-rings {
     position: absolute;
     inset: 0;
+    z-index: 3;
     border-radius: 999px;
     pointer-events: none;
 }
@@ -912,6 +944,7 @@
 .clyra-ai-orb-glow {
     position: absolute;
     inset: 12px;
+    z-index: 4;
     border-radius: 999px;
     background: radial-gradient(circle, rgba(255, 255, 255, 0.66), transparent 68%);
     mix-blend-mode: screen;
@@ -964,6 +997,21 @@
     }
 }
 
+@keyframes clyra-ai-orb-intro-palette {
+    0% {
+        background-position: 53% 58%;
+        transform: translateZ(0) scale(0.94) rotate(-12deg);
+    }
+    52% {
+        background-position: 48% 51%;
+        transform: translateZ(0) scale(1.07) rotate(5deg);
+    }
+    100% {
+        background-position: 43% 45%;
+        transform: translateZ(0) scale(1.16) rotate(16deg);
+    }
+}
+
 @keyframes clyra-ai-orb-morph {
     0%,
     100% {
@@ -1007,11 +1055,9 @@
 @keyframes clyra-ai-orb-glow {
     0%,
     100% {
-        opacity: 0.38;
         transform: scale(0.92);
     }
     50% {
-        opacity: 0.66;
         transform: scale(1.08);
     }
 }
@@ -1019,11 +1065,9 @@
 @keyframes clyra-ai-orb-halo {
     0%,
     100% {
-        opacity: 0.68;
         transform: scale(0.96);
     }
     50% {
-        opacity: 0.96;
         transform: scale(1.06);
     }
 }

@@ -375,9 +375,12 @@ export default function App() {
 
   const springContainerX = useSpring(magneticTargetX, { stiffness: 500, damping: 32, mass: 0.3 });
   const containerVelocityX = useVelocity(springContainerX);
-  const hoverScaleX = useTransform(containerVelocityX, [-1500, 0, 1500], [1.25, 1, 1.25]);
+  const hoverScaleX = useTransform(containerVelocityX, [-1500, 0, 1500], [1.06, 1, 1.06]);
   const hoverOrigin = useTransform(containerVelocityX, [-1500, 0, 1500], ["right", "center", "left"]);
-  const hoverPillX = useTransform(() => springContainerX.get() - 52.5);
+  const hoverPillX = useTransform(() => {
+    const pillX = springContainerX.get() - 50.5;
+    return Math.min(225, Math.max(7, pillX));
+  });
   const [isWorkspaceSwitching, setIsWorkspaceSwitching] = useState(false);
   const workspaceSwitchTimeoutRef = useRef<number | null>(null);
   const [viewportWidth, setViewportWidth] = useState(() =>
@@ -2689,9 +2692,9 @@ Please analyze the code you just wrote and fix this error.`;
                     exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.15 } }}
                     style={{ 
                       x: hoverPillX,
-                      width: 105,
-                      top: 5,
-                      bottom: 5,
+                      width: 101,
+                      top: 6,
+                      bottom: 6,
                       height: "auto",
                       translate: "none",
                       scaleX: hoverScaleX, 
@@ -2860,30 +2863,28 @@ Please analyze the code you just wrote and fix this error.`;
 	                      <motion.div
 	                        initial={isWorkspaceSwitching ? false : {
 	                          opacity: 0,
-	                          y: 14,
-	                          scale: 0.985,
-	                          filter: "blur(8px)",
+	                          y: 32,
+	                          scale: 0.982,
 	                        }}
                         animate={{
                           opacity: 1,
                           y: 0,
                           scale: 1,
-                          filter: "blur(0px)",
                         }}
                         transition={{
-                          duration: 0.65,
-                          ease: [0.22, 1, 0.36, 1],
+                          duration: 0.82,
+                          ease: [0.18, 1, 0.25, 1],
                         }}
                         className={cn("text-center space-y-3 mb-7 flex flex-col items-center max-w-3xl mx-auto w-full", showWorkspaceLivePreview ? "px-3 sm:px-4" : "px-5 sm:px-8")}
                       >
 	                        <motion.div
 	                          className="mb-2 flex w-full justify-center relative transform-gpu"
-	                          initial={isWorkspaceSwitching ? false : introState !== "complete" ? { y: 24, opacity: 0, filter: "blur(2px)" } : false}
-                          animate={introState !== "booting" ? { y: 0, opacity: 1, filter: "blur(0px)" } : { y: 24, opacity: 0, filter: "blur(2px)" }}
+	                          initial={isWorkspaceSwitching ? false : introState !== "complete" ? { y: 44, opacity: 0 } : false}
+                          animate={introState !== "booting" ? { y: 0, opacity: 1 } : { y: 44, opacity: 0 }}
                           transition={{
                             type: "tween",
-                            ease: [0.18, 1, 0.25, 1],
-                            duration: 0.86,
+                            ease: [0.16, 1, 0.24, 1],
+                            duration: 1.02,
                           }}
                         >
                           <AiOrb
@@ -2895,13 +2896,12 @@ Please analyze the code you just wrote and fix this error.`;
 	                          className="text-3xl sm:text-4xl font-semibold tracking-tight text-slate-800"
                           animate={{
                             opacity: introState === "complete" ? 1 : 0,
-                            y: introState === "complete" ? 0 : 10,
+                            y: introState === "complete" ? 0 : 18,
                             scale: introState === "complete" ? 1 : 0.96,
-                            filter: introState === "complete" ? "blur(0px)" : "blur(5px)",
                           }}
                           transition={{
-                            duration: 0.62,
-                            ease: [0.2, 1, 0.3, 1],
+                            duration: 0.74,
+                            ease: [0.18, 1, 0.28, 1],
                           }}
                         >
                           {emptyStateTitle}
@@ -2913,12 +2913,11 @@ Please analyze the code you just wrote and fix this error.`;
 	                            className="text-slate-500 text-sm sm:text-base font-medium font-sans z-10 relative"
                             animate={{ 
                               opacity: introState === "complete" ? 1 : 0, 
-                              y: introState === "complete" ? 0 : 8, 
-                              filter: introState === "complete" ? "blur(0px)" : "blur(4px)",
+                              y: introState === "complete" ? 0 : 14, 
                             }}
                             transition={{
-                              duration: 0.58,
-                              ease: [0.2, 1, 0.3, 1],
+                              duration: 0.72,
+                              ease: [0.18, 1, 0.28, 1],
                             }}
                           >
                             {emptyStateSubtitle}
@@ -2946,8 +2945,8 @@ Please analyze the code you just wrote and fix this error.`;
                                  return (
                                     <motion.button
                                       variants={{
-                                        hidden: { opacity: 0, y: 14, filter: "blur(4px)" },
-                                        visible: { opacity: introState === "complete" ? 1 : 0, y: introState === "complete" ? 0 : 14, filter: introState === "complete" ? "blur(0px)" : "blur(4px)", transition: { duration: 0.58, ease: [0.16, 1, 0.3, 1] } }
+                                        hidden: { opacity: 0, y: 20 },
+                                        visible: { opacity: introState === "complete" ? 1 : 0, y: introState === "complete" ? 0 : 20, transition: { duration: 0.7, ease: [0.16, 1, 0.3, 1] } }
                                       }}
                                       key={action.baseLabel}
                                       type="button"
