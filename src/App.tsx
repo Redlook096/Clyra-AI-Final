@@ -11,7 +11,7 @@ import React, {
   useCallback,
   useState,
 } from "react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence, useMotionValue, useSpring, useVelocity, useTransform } from "motion/react";
 import {
   AppWindow,
   Scissors,
@@ -230,21 +230,49 @@ interface CommandSuggestion {
 
 interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
   containerClassName?: string;
+  highlightOverlay?: string | null;
 }
 
+const SkeletonHighlightText = ({ text, highlight }: { text: string; highlight: string; }) => {
+  if (!highlight || !highlight.trim()) return <span className="text-slate-800 dark:text-slate-200">{text}</span>;
+  const lower = highlight.toLowerCase();
+  const parts = text.split(new RegExp(`(${highlight.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi"));
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.toLowerCase() === lower ? (
+          <span key={i} className="relative inline-block overflow-hidden rounded-[4px] bg-slate-200/60 px-1 text-slate-500 font-medium transition-colors duration-300">
+            <span className="relative z-10">{part}</span>
+            <span className="absolute inset-0 -translate-x-full animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/50 to-transparent" />
+          </span>
+        ) : (
+          <span key={i}>{part}</span>
+        ),
+      )}
+    </>
+  );
+};
+
 const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
-  ({ className, containerClassName, ...props }, ref) => {
+  ({ className, containerClassName, highlightOverlay, value, ...props }, ref) => {
     return (
       <div className={cn("relative flex items-center", containerClassName)}>
+        {highlightOverlay && (
+          <div className={cn("absolute inset-0 pointer-events-none break-words whitespace-pre-wrap flex w-full bg-transparent px-4 text-base text-transparent transition-all duration-200 ease-in-out font-medium", className)} aria-hidden="true">
+            <SkeletonHighlightText text={String(value || "")} highlight={highlightOverlay} />
+          </div>
+        )}
         <textarea
           className={cn(
-            "flex w-full bg-transparent px-4 text-base text-slate-800",
+            "flex w-full bg-transparent px-4 text-base",
             "transition-all duration-200 ease-in-out",
             "placeholder:text-slate-400 font-medium",
             "disabled:cursor-not-allowed disabled:opacity-50",
             "focus-visible:outline-none focus:ring-0 focus-visible:ring-offset-0",
             className,
+            highlightOverlay ? "text-transparent caret-slate-800" : "text-slate-800"
           )}
+          value={value}
           ref={ref}
           {...props}
         />
@@ -318,7 +346,38 @@ export default function App() {
   const [activeWorkspaceTab, setActiveWorkspaceTab] =
     useState<WorkspaceTabId>("chat");
   const [workspaceTransitionDirection, setWorkspaceTransitionDirection] =
-    useState(1);
+    useState<number>(0);
+
+  const containerMouseX = useMotionValue(0);
+  const magneticTargetX = useTransform(containerMouseX, (mouseX) => {
+    // Determine closest button center (assuming 105px width, 4px gap, 5px padding)
+    const padding = 5;
+    const offsetStep = 109; // 105 + 4
+    const rawIndex = (mouseX - padding) / offsetStep;
+    const closestIndex = Math.max(0, Math.min(2, Math.round(rawIndex)));
+    const closestCenter = padding + closestIndex * offsetStep + 52.5;
+
+    const minDistance = Math.abs(mouseX - closestCenter);
+
+    // 3/4 snap zone: snap firmly when within 26px (approx 1/4 of width)
+    const snapZone = 26;
+    const releaseZone = 40;
+
+    if (minDistance < snapZone) {
+      return closestCenter;
+    } else if (minDistance < releaseZone) {
+      const t = (minDistance - snapZone) / (releaseZone - snapZone);
+      const smoothT = t * t * (3 - 2 * t);
+      return closestCenter * (1 - smoothT) + mouseX * smoothT;
+    }
+    return mouseX;
+  });
+
+  const springContainerX = useSpring(magneticTargetX, { stiffness: 500, damping: 32, mass: 0.3 });
+  const containerVelocityX = useVelocity(springContainerX);
+  const hoverScaleX = useTransform(containerVelocityX, [-1500, 0, 1500], [1.25, 1, 1.25]);
+  const hoverOrigin = useTransform(containerVelocityX, [-1500, 0, 1500], ["right", "center", "left"]);
+  const hoverPillX = useTransform(() => springContainerX.get() - 52.5);
   const [isWorkspaceSwitching, setIsWorkspaceSwitching] = useState(false);
   const workspaceSwitchTimeoutRef = useRef<number | null>(null);
   const [viewportWidth, setViewportWidth] = useState(() =>
@@ -362,7 +421,7 @@ export default function App() {
       window.visualViewport?.removeEventListener("resize", updateViewportWidth);
     };
   }, []);
-  type IntroState = "booting" | "progress" | "input_circle" | "input_expand" | "progress_complete" | "complete";
+  type IntroState = "booting" | "orb_up" | "progress" | "input_circle" | "input_expand" | "progress_complete" | "complete";
   const [introState, setIntroState] = useState<IntroState>("booting");
   const [introProgressText, setIntroProgressText] = useState("INITIALIZING");
   const [progressDuration] = useState(() => 3 + Math.random() * 3);
@@ -372,37 +431,26 @@ export default function App() {
       return;
     }
 
-    const pdMs = progressDuration * 1000;
-    const texts = [
-      "INITIALIZING",
-      "LOADING WORKSPACE",
-      "OPTIMIZING",
-      "READY"
-    ];
-    let step = 0;
-    const textInterval = setInterval(() => {
-      step++;
-      if (step < texts.length) setIntroProgressText(texts[step]);
-    }, pdMs / texts.length);
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+      setIntroState("complete");
+      return;
+    }
 
-    const t1 = setTimeout(() => setIntroState("progress"), 600); 
-    const t2 = setTimeout(() => setIntroState("progress_complete"), 600 + pdMs); 
-    const t3 = setTimeout(() => setIntroState("input_circle"), 600 + pdMs + 800); 
-    const t4 = setTimeout(() => setIntroState("input_expand"), 600 + pdMs + 800 + 400); 
-    const t5 = setTimeout(() => {
+    const t1 = setTimeout(() => setIntroState("orb_up"), 10); 
+    const t2 = setTimeout(() => setIntroState("input_circle"), 1800); 
+    const t3 = setTimeout(() => setIntroState("input_expand"), 2200); 
+    const t4 = setTimeout(() => {
       setIntroState("complete");
       setIsSidebarOpen(true);
-    }, 600 + pdMs + 800 + 400 + 1000);
+    }, 3200);
 
     return () => {
-      clearInterval(textInterval);
       clearTimeout(t1);
       clearTimeout(t2);
       clearTimeout(t3);
       clearTimeout(t4);
-      clearTimeout(t5);
     };
-  }, [progressDuration]);
+  }, []);
 
 
 
@@ -571,6 +619,29 @@ export default function App() {
     },
     [isVibeChat],
   );
+
+  const handleChatSelect = useCallback(
+    (id: string) => {
+      const chat = chats.find((item) => item.id === id);
+      if (chat) {
+        openChatSession(chat);
+      }
+    },
+    [chats, openChatSession],
+  );
+
+  const handleNewChat = useCallback(() => {
+    setMessages([]);
+    setCurrentChatId(null);
+    setSelectedCommand(null);
+    setActiveWorkspaceTab("chat");
+    setClipInitialUrl("");
+    setBrowserInitialQuery("");
+    setVibePreviewMessageId(null);
+    setVibePreviewFiles(null);
+    setIsSidebarOpen(false);
+    setSearchQuery("");
+  }, []);
 
   const showVibeLivePreview =
     !!vibePreviewFiles &&
@@ -1843,7 +1914,24 @@ Please analyze the code you just wrote and fix this error.`;
     activeWorkspaceTab === "browser" || selectedCommand?.id === "browse";
   const isVibeWorkspace =
     activeWorkspaceTab === "vibe" && !isBrowserWorkspace && !isClipWorkspace;
-  const showWorkspaceLivePreview = isVibeWorkspace && showVibeLivePreview;
+  const rawShowWorkspaceLivePreview = isVibeWorkspace && showVibeLivePreview;
+  const [workspacePreviewLayoutVisible, setWorkspacePreviewLayoutVisible] =
+    useState(rawShowWorkspaceLivePreview);
+  const showWorkspaceLivePreview = rawShowWorkspaceLivePreview;
+  const keepWorkspacePreviewLayout =
+    showWorkspaceLivePreview || workspacePreviewLayoutVisible;
+
+  useEffect(() => {
+    if (rawShowWorkspaceLivePreview) {
+      setWorkspacePreviewLayoutVisible(true);
+      return;
+    }
+
+    if (!isWorkspaceSwitching) {
+      setWorkspacePreviewLayoutVisible(false);
+    }
+  }, [isWorkspaceSwitching, rawShowWorkspaceLivePreview]);
+
   const workspaceViewKey = isClipWorkspace
     ? "clip"
     : isBrowserWorkspace
@@ -1891,30 +1979,31 @@ Please analyze the code you just wrote and fix this error.`;
           Math.max(0, naturalContentGap - 24),
         )
       : 0;
-  const workspaceTravelPx =
-    typeof window === "undefined"
-      ? 1180
-      : Math.max(1040, window.innerWidth * 1.04);
+  const workspaceSwipeTravelPx = Math.min(
+    Math.max(360, viewportWidth - 16),
+    Math.max(360, centeredContentWidth) + 10,
+  );
   const workspacePanelVariants = {
     enter: (direction: number) => ({
-      opacity: 1,
-      x: direction > 0 ? workspaceTravelPx : -workspaceTravelPx,
-      scale: 0.95,
-      filter: "blur(4px)",
+      opacity: 0.985,
+      x: direction > 0 ? workspaceSwipeTravelPx : -workspaceSwipeTravelPx,
+      scale: 0.998,
     }),
     center: {
       opacity: 1,
-      x: 0,
-      y: 0,
+      x: "0%",
       scale: 1,
-      filter: "blur(0px)",
     },
     exit: (direction: number) => ({
-      opacity: 1,
-      x: direction > 0 ? -workspaceTravelPx : workspaceTravelPx,
-      scale: 0.95,
-      filter: "blur(4px)",
+      opacity: 0.985,
+      x: direction > 0 ? -workspaceSwipeTravelPx : workspaceSwipeTravelPx,
+      scale: 0.998,
     }),
+  };
+  const workspaceSwipeTransition = {
+    type: "tween" as const,
+    duration: 0.72,
+    ease: [0.32, 0.72, 0, 1] as [number, number, number, number],
   };
 
   const chatQuickActions: Array<{
@@ -1988,7 +2077,6 @@ Please analyze the code you just wrote and fix this error.`;
     
     window.setTimeout(() => {
       textareaRef.current?.focus();
-      // Select the skeleton text so user can just type over it
       if (skeleton && textareaRef.current) {
         const start = prompt.length + 1;
         const end = start + skeleton.length;
@@ -1996,8 +2084,15 @@ Please analyze the code you just wrote and fix this error.`;
       }
       adjustHeight();
       setIsFadingInText(false);
-    }, 50); // slight delay to allow React to render the text
+    }, 150); // slight delay to allow smooth fade in
   };
+
+  useEffect(() => {
+    if (value.trim().length === 0 && !isVibeWorkspace) {
+      setIsInputExpanded(false);
+      setActiveSkeletonText(null);
+    }
+  }, [value, isVibeWorkspace]);
 
   const applyVibePrompt = (prompt: string) => {
     setActiveWorkspaceTab("vibe");
@@ -2025,7 +2120,7 @@ Please analyze the code you just wrote and fix this error.`;
     workspaceSwitchTimeoutRef.current = window.setTimeout(() => {
       setIsWorkspaceSwitching(false);
       workspaceSwitchTimeoutRef.current = null;
-    }, 620);
+    }, 760);
     setActiveWorkspaceTab(tabId);
     setSelectedCommand(null);
     setShowCommandPalette(false);
@@ -2532,10 +2627,10 @@ Please analyze the code you just wrote and fix this error.`;
                 aria-label="Open sidebar"
                 aria-expanded={false}
                 title="Open sidebar"
-                initial={{ opacity: 0, scale: 0.9, x: -8 }}
-                animate={{ opacity: 1, scale: 1, x: 0 }}
+                initial={introState !== "complete" ? { opacity: 0, scale: 0.95, x: -40 } : { opacity: 0, scale: 0.9, x: -8 }}
+                animate={{ opacity: introState === "complete" ? 1 : 0, scale: 1, x: introState === "complete" ? 0 : -40 }}
                 exit={{ opacity: 0, scale: 0.9, x: -8 }}
-                transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+                transition={introState !== "complete" ? { duration: 0.7, ease: [0.16, 1, 0.3, 1] } : { duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
                 className="clyra-sidebar-toggle group fixed left-4 top-4 z-[180] flex h-11 w-11 items-center justify-center rounded-full border border-transparent bg-transparent text-slate-600 shadow-none transition-[color,transform] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.05] hover:text-slate-900 active:scale-[0.94] sm:top-6 sm:left-6"
               >
                 <span className="pointer-events-none relative block h-[12px] w-[18px] opacity-95">
@@ -2554,10 +2649,14 @@ Please analyze the code you just wrote and fix this error.`;
               transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
             >
               <div
-              className={cn("clyra-workflow-tabs transition-opacity duration-700", introState === "complete" ? "opacity-100" : "opacity-0", theme === "Dark" && "dark-tabs")}
+              className={cn("clyra-workflow-tabs relative transition-opacity duration-700", introState === "complete" ? "opacity-100" : "opacity-0", theme === "Dark" && "dark-tabs")}
               role="tablist"
               aria-label="Clyra workspace"
               data-invert-ignore="true"
+              onPointerMove={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                containerMouseX.set(e.clientX - rect.left);
+              }}
               onMouseLeave={() => setHoveredWorkspaceTab(null)}
               onBlur={(event) => {
                 if (
@@ -2569,13 +2668,36 @@ Please analyze the code you just wrote and fix this error.`;
                 }
               }}
             >
+              <AnimatePresence>
+                {hoveredWorkspaceTab && (
+                  <motion.div
+                    className="clyra-workflow-tab__hover absolute pointer-events-none"
+                    initial={{ opacity: 0, scale: 0.85 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.15 } }}
+                    style={{ 
+                      x: hoverPillX,
+                      width: 105,
+                      top: 5,
+                      bottom: 5,
+                      height: "auto",
+                      translate: "none",
+                      scaleX: hoverScaleX, 
+                      transformOrigin: hoverOrigin as any 
+                    }}
+                    transition={{
+                      type: "spring",
+                      stiffness: 400,
+                      damping: 30,
+                    }}
+                  />
+                )}
+              </AnimatePresence>
               {workflowTabs.map((tabItem) => {
                 const Icon = tabItem.icon;
                 const isActive =
                   activeWorkspaceTab === tabItem.id && !isClipWorkspace;
-                const isHovered =
-                  hoveredWorkspaceTab === tabItem.id ||
-                  (hoveredWorkspaceTab === null && isActive);
+                const isHovered = hoveredWorkspaceTab === tabItem.id;
 
                 return (
                   <button
@@ -2591,18 +2713,7 @@ Please analyze the code you just wrote and fix this error.`;
                       isActive && "clyra-workflow-tab--active",
                     )}
                   >
-                    {isHovered && (
-                      <motion.span
-                        layoutId="hover-workflow-tab"
-                        className="clyra-workflow-tab__hover"
-                        transition={{
-                          type: "spring",
-                          stiffness: 380,
-                          damping: 34,
-                          mass: 0.62,
-                        }}
-                      />
-                    )}
+
                     <Icon className="relative h-4 w-4 shrink-0" />
                     <span className="relative truncate">{tabItem.label}</span>
                   </button>
@@ -2611,6 +2722,8 @@ Please analyze the code you just wrote and fix this error.`;
 	            </div>
             </motion.div>
 	        </div>
+          <AnimatePresence>
+          </AnimatePresence>
           <motion.div
             className="clyra-screen-stage relative flex min-h-0 min-w-0 flex-1 flex-col"
             animate={{ x: sidebarAvoidShift }}
@@ -2624,75 +2737,11 @@ Please analyze the code you just wrote and fix this error.`;
               willChange: "transform",
             }}
           >
-          <AnimatePresence>
-            {(messages.length === 0 || isTemporaryChat) &&
-              !isBrowserWorkspace &&
-              !isClipWorkspace && (
-                <motion.button
-                  type="button"
-                  initial={{ opacity: 0, scale: 0.9, x: 10, y: -4 }}
-                  animate={{ opacity: introState === "complete" ? 1 : 0, scale: 1, x: 0, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.9, x: 10, y: -4 }}
-                  transition={{
-                    type: "spring",
-                    stiffness: 360,
-                    damping: 30,
-                    mass: 0.72,
-	                  }}
-                  onClick={() => {
-                    if (messages.length > 0 && isTemporaryChat) {
-                      setIsTemporaryChat(false);
-                      setToastMessage("Chat saved to history");
-                    } else {
-                      setIsTemporaryChat(!isTemporaryChat);
-                    }
-                  }}
-                  className={cn(
-                    "clyra-temp-chat-toggle fixed right-5 z-[170] grid h-10 w-10 place-items-center rounded-full text-slate-500 transition-[color,transform] duration-300 hover:scale-[1.04] hover:text-slate-900 active:scale-[0.94] sm:right-7 lg:right-9",
-                    isTemporaryChat && "text-slate-900",
-                  )}
-                  title={
-                    isTemporaryChat
-                      ? "Turn off Temporary Chat"
-                      : "Temporary Chat"
-                  }
-                  aria-label={
-                    isTemporaryChat
-                      ? "Turn off Temporary Chat"
-                      : "Temporary Chat"
-                  }
-                >
-                  <MessageCircleDashed
-                    className={cn(
-                      "relative h-5 w-5 stroke-[1.6] transition-all duration-300",
-                      isTemporaryChat ? "opacity-100 scale-105" : "opacity-75",
-                    )}
-                  />
-                  <AnimatePresence>
-                    {isTemporaryChat && (
-                      <motion.div
-                        initial={{ scale: 0.5, opacity: 0 }}
-                        animate={{ scale: 1, opacity: 1 }}
-                        exit={{ scale: 0.5, opacity: 0 }}
-                        transition={{
-                          type: "spring",
-                          stiffness: 360,
-                          damping: 24,
-                          mass: 0.7,
-                        }}
-                        className="pointer-events-none absolute inset-0 flex items-center justify-center"
-                      >
-                        <Check className="h-3.5 w-3.5 stroke-[2.4] text-slate-900" />
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </motion.button>
-              )}
-          </AnimatePresence>
           <div
             className={cn(
-              "grid min-h-0 w-full flex-1 overflow-hidden transition-[grid-template-columns] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
-              showWorkspaceLivePreview
+              "grid min-h-0 w-full flex-1 overflow-hidden",
+              "transition-[grid-template-columns] duration-[720ms] ease-[cubic-bezier(0.32,0.72,0,1)]",
+              keepWorkspacePreviewLayout
                 ? "grid-cols-[minmax(260px,min(420px,34vw))_minmax(0,1fr)]"
                 : "grid-cols-[minmax(0,1fr)_0fr]",
             )}
@@ -2700,7 +2749,7 @@ Please analyze the code you just wrote and fix this error.`;
 	            <div
 	              className={cn(
 	                "clyra-workspace-scene relative z-10 flex min-h-0 min-w-0 flex-col overflow-hidden",
-	                showWorkspaceLivePreview && "border-r border-slate-200/70",
+	                keepWorkspacePreviewLayout && "border-r border-slate-200/70",
 	              )}
 	            >
                   {bgAnimEnabled && (
@@ -2721,22 +2770,7 @@ Please analyze the code you just wrote and fix this error.`;
                   )}
 	              <div
                 className={cn(
-                  "relative z-10 flex flex-col h-full min-h-0 w-full",
-                  showWorkspaceLivePreview
-                    ? "min-w-0 flex-1 px-3 sm:px-4"
-                    : isClipWorkspace || isBrowserWorkspace
-                      ? "max-w-none mx-0"
-                      : "max-w-3xl mx-auto",
-                  isClipWorkspace || isBrowserWorkspace
-                    ? "px-0 sm:px-0"
-                    : messages.length === 0
-                      ? "justify-center px-5 sm:px-8"
-                      : cn(
-                          "pt-3 sm:pt-4",
-                          showWorkspaceLivePreview
-                            ? "px-3 sm:px-4"
-                            : "px-5 sm:px-8",
-                        ),
+                  "relative z-10 flex flex-col h-full min-h-0 w-full"
                 )}
               >
                 <AnimatePresence
@@ -2747,6 +2781,7 @@ Please analyze the code you just wrote and fix this error.`;
                   key={workspaceViewKey}
                   custom={workspaceTransitionDirection}
                   variants={workspacePanelVariants}
+                  layout={false}
                   className={cn(
                     "clyra-workspace-card absolute inset-0 flex flex-col transform-gpu",
                     messages.length === 0 &&
@@ -2757,14 +2792,10 @@ Please analyze the code you just wrote and fix this error.`;
                   initial="enter"
                   animate="center"
                   exit="exit"
-                  transition={{
-                    type: "spring",
-                    stiffness: 350,
-                    damping: 34,
-                    mass: 0.8,
-                  }}
+                  transition={workspaceSwipeTransition}
                     style={{
                       backfaceVisibility: "hidden",
+                      willChange: "transform",
                     }}
                   >
                     {isClipWorkspace ? (
@@ -2803,46 +2834,19 @@ Please analyze the code you just wrote and fix this error.`;
                           duration: 0.65,
                           ease: [0.22, 1, 0.36, 1],
                         }}
-                        className="text-center space-y-3 mb-7 flex flex-col items-center"
+                        className={cn("text-center space-y-3 mb-7 flex flex-col items-center max-w-3xl mx-auto w-full", showWorkspaceLivePreview ? "px-3 sm:px-4" : "px-5 sm:px-8")}
                       >
 	                        <motion.div
 	                          className="mb-2 flex w-full justify-center relative"
-	                          initial={isWorkspaceSwitching ? false : introState !== "complete" ? { y: 150 } : false}
-                          animate={introState === "progress_complete" || introState === "input_circle" || introState === "input_expand" || introState === "complete" ? { y: 0 } : { y: 150 }}
+	                          initial={isWorkspaceSwitching ? false : introState !== "complete" ? { scale: 0.9, y: 120, opacity: 0 } : false}
+                          animate={introState !== "booting" ? { scale: 1, y: 0, opacity: 1 } : { scale: 0.9, y: 120, opacity: 0 }}
                           transition={{
-                            duration: 0.8,
+                            type: "tween",
                             ease: [0.16, 1, 0.3, 1],
+                            duration: 1.2,
                           }}
                         >
                           <AiOrb colorTheme={orbColorTheme} />
-                          <AnimatePresence>
-                            {(introState === "progress" || introState === "input_circle" || introState === "input_expand") && (
-                              <motion.div 
-                                className="absolute top-full left-1/2 -translate-x-1/2 mt-10 flex flex-col items-center gap-4 w-56"
-                                initial={{ opacity: 0, y: 15, filter: "blur(4px)" }}
-                                animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-                                exit={{ opacity: 0, y: -10, scale: 0.95, filter: "blur(4px)" }}
-                                transition={{ duration: 0.6 }}
-                              >
-                                <div className="h-[3px] w-full bg-slate-200/60 rounded-full overflow-hidden shadow-inner">
-                                  <motion.div 
-                                    className="h-full bg-slate-800 rounded-full shadow-[0_0_8px_rgba(30,41,59,0.5)]"
-                                    initial={{ width: "0%" }}
-                                    animate={{ width: "100%" }}
-                                    transition={{ duration: progressDuration, ease: [0.25, 1, 0.5, 1] }}
-                                  />
-                                </div>
-                                <motion.span 
-                                  key={introProgressText}
-                                  initial={{ opacity: 0, y: 4 }}
-                                  animate={{ opacity: 1, y: 0 }}
-                                  className="text-[11px] font-medium text-slate-400 tracking-widest uppercase font-mono"
-                                >
-                                  {introProgressText}
-                                </motion.span>
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
                         </motion.div>
 	                        <motion.h1
 	                          className="text-3xl sm:text-4xl font-semibold tracking-tight text-slate-800"
@@ -2916,31 +2920,11 @@ Please analyze the code you just wrote and fix this error.`;
                                })}
                              </motion.div>
                           )}
-                          <AnimatePresence>
-                            {isTemporaryChat && (
-                              <motion.div
-                                initial={{ opacity: 0, y: -20, height: 0 }}
-                                animate={{ opacity: 1, y: 0, height: "auto" }}
-                                exit={{ opacity: 0, y: -20, height: 0 }}
-                                transition={{
-                                  duration: 0.3,
-                                  ease: "easeInOut",
-                                }}
-                                className="overflow-hidden relative z-0"
-                              >
-                                <div className="pt-3 pb-1">
-                                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-200/50 text-slate-500 font-medium text-xs">
-                                    <MessageCircleDashed className="w-3.5 h-3.5" />
-                                    You are in temporary chat
-                                  </span>
-                                </div>
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
+
                         </motion.div>
                       </motion.div>
                     ) : (
-                      <div className="relative flex flex-1 w-full overflow-hidden z-0">
+                      <div className={cn("relative flex flex-1 w-full overflow-hidden z-0 max-w-3xl mx-auto", showWorkspaceLivePreview ? "px-3 sm:px-4 pt-3 sm:pt-4" : "px-5 sm:px-8 pt-3 sm:pt-4")}>
                         <div
                           className={cn("flex flex-1 flex-col transition-opacity duration-700", introState === "complete" ? "opacity-100" : "opacity-0")}
                           id="chat-container"
@@ -2959,7 +2943,11 @@ Please analyze the code you just wrote and fix this error.`;
                           return (
                             <motion.div
                               key={message.id}
-                              initial={{ opacity: 0, y: 15, scale: 0.98 }}
+                              initial={
+                                isWorkspaceSwitching
+                                  ? false
+                                  : { opacity: 0, y: 15, scale: 0.98 }
+                              }
                               animate={{ opacity: 1, y: 0, scale: 1 }}
                               transition={{
                                 type: "spring",
@@ -3072,28 +3060,53 @@ Please analyze the code you just wrote and fix this error.`;
                         backfaceVisibility: "hidden",
                       }}
                       className={cn(
-                        "clyra-composer-transition w-full shrink-0 relative z-20 transition-all duration-300",
+                        "clyra-composer-transition w-full shrink-0 relative z-20 transition-all duration-300 max-w-3xl mx-auto",
+                        showWorkspaceLivePreview ? "px-3 sm:px-4" : "px-5 sm:px-8",
                         messages.length === 0
-                          ? "max-w-2xl mx-auto pb-0 mb-8"
+                          ? "pb-0 mb-8"
                           : "pb-4 sm:pb-6 mb-3",
                       )}
                     >
+                      <AnimatePresence>
+                        {isTemporaryChat && (
+                          <motion.div
+                            initial={{ opacity: 0, scale: 0.9, y: 15, filter: "blur(4px)" }}
+                            animate={{ opacity: 1, scale: 1, y: 0, filter: "blur(0px)" }}
+                            exit={{ opacity: 0, scale: 0.9, y: 15, filter: "blur(4px)" }}
+                            transition={{
+                              type: "spring", stiffness: 220, damping: 20, mass: 1
+                            }}
+                            className="absolute bottom-[calc(100%+16px)] left-1/2 -translate-x-1/2 z-10 pointer-events-none"
+                          >
+                            <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-slate-100/90 text-slate-600 font-medium text-xs backdrop-blur-md border border-slate-200/60 shadow-sm">
+                              <MessageCircleDashed className="w-3.5 h-3.5 stroke-[2.2]" />
+                              Temporary Chat Enabled
+                            </span>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                       <motion.div
                         className={cn(
                           "input-wrapper relative backdrop-blur-xl border transition-[background-color,border-color,padding] duration-300 cursor-text overflow-hidden mx-auto z-[3]",
                           theme === "Dark" ? "bg-slate-200/90 border-slate-400/50" : "bg-white/80 border-slate-200/60",
-                          isExpanded ? "p-2 sm:p-3" : "p-1.5 sm:p-2",
-                          (introState === "booting" || introState === "progress" || introState === "progress_complete") ? "opacity-0" : "opacity-100"
+                          isExpanded ? "p-2 sm:p-3" : "p-1.5 sm:p-2"
                         )}
-                        initial={isWorkspaceSwitching ? false : introState !== "complete" ? { width: 48, height: 48, borderRadius: 24 } : false}
+                        initial={isWorkspaceSwitching ? false : introState !== "complete" ? { width: 48, height: 48, borderRadius: 24, opacity: 0, y: 20 } : false}
                         animate={{ 
-                          width: (introState === "booting" || introState === "progress" || introState === "input_circle") ? 48 : "100%",
-                          height: (introState === "booting" || introState === "progress" || introState === "input_circle") ? 48 : "auto",
-                          borderRadius: (introState === "booting" || introState === "progress" || introState === "input_circle") ? 24 : (isExpanded ? 32 : 40),
+                          width: (introState === "booting" || introState === "orb_up" || introState === "input_circle") ? 48 : "100%",
+                          height: (introState === "booting" || introState === "orb_up" || introState === "input_circle") ? 48 : "auto",
+                          borderRadius: (introState === "booting" || introState === "orb_up" || introState === "input_circle") ? 24 : (isExpanded ? 32 : 40),
+                          opacity: (introState === "booting" || introState === "orb_up") ? 0 : 1,
+                          y: (introState === "booting" || introState === "orb_up") ? 20 : 0
                         }}
-                        transition={{ type: "spring", stiffness: 120, damping: 20, mass: 1 }}
+                        transition={{ type: "tween", ease: [0.22, 1, 0.36, 1], duration: 0.8 }}
                       >
-                        <div className={cn("relative z-10 w-full h-full transition-opacity duration-700", (introState === "booting" || introState === "progress" || introState === "progress_complete" || introState === "input_circle") ? "opacity-0 pointer-events-none" : "opacity-100")}>
+                        <motion.div 
+                          className="relative z-10 w-full h-full"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: (introState === "booting" || introState === "orb_up" || introState === "input_circle") ? 0 : 1 }}
+                          transition={{ duration: 0.6, ease: "easeOut" }}
+                        >
                           <AnimatePresence>
                             {commandPaletteEnabled && showCommandPalette && (
                               <motion.div
@@ -3216,8 +3229,12 @@ Please analyze the code you just wrote and fix this error.`;
                               ref={textareaRef}
                               rows={1}
                               value={value}
+                              highlightOverlay={activeSkeletonText}
                               onChange={(e) => {
                                 setValue(e.target.value);
+                                if (activeSkeletonText && !e.target.value.includes(activeSkeletonText)) {
+                                  setActiveSkeletonText(null);
+                                }
                                 adjustHeight();
                               }}
                               onKeyDown={handleKeyDown}
@@ -3231,13 +3248,13 @@ Please analyze the code you just wrote and fix this error.`;
                               containerClassName="w-full"
                               className={cn(
                                 "resize-none overflow-y-auto overflow-x-hidden bg-transparent outline-none disabled:opacity-50",
-                                "text-[15px] leading-relaxed sm:text-lg font-medium transition-colors",
-                                theme === "Dark" ? "placeholder:text-slate-500 text-slate-900" : "placeholder:text-slate-400 text-slate-800",
+                                "text-[15px] leading-relaxed sm:text-lg",
+                                theme === "Dark" ? "placeholder:text-slate-500" : "placeholder:text-slate-400",
                                 isExpanded
                                   ? "min-h-[50px] max-h-[35vh] py-3 px-1"
                                   : "min-h-[40px] max-h-[35vh] py-2 px-1",
-                                "scrollbar-none transition-all duration-300",
-                                isFadingInText ? "opacity-0 translate-y-1 scale-95" : "opacity-100 translate-y-0 scale-100"
+                                "scrollbar-none transition-[min-height,max-height,padding,opacity,transform] duration-[400ms] ease-[cubic-bezier(0.16,1,0.3,1)]",
+                                isFadingInText ? "opacity-0 translate-y-1 scale-[0.99]" : (introState !== "complete" ? "opacity-0 translate-y-2 scale-[0.98]" : "opacity-100 translate-y-0 scale-100")
                               )}
                             />
                             {!isExpanded && (
@@ -3430,7 +3447,7 @@ Please analyze the code you just wrote and fix this error.`;
                                 </div>
                     </div>
                           )}
-                          </div>
+                          </motion.div>
                         </motion.div>
 		                    </motion.div>
 	                  )}

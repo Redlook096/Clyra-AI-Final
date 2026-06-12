@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { X, MessageCircle, Search } from "lucide-react";
+import { X, MessageCircle, Search, SquarePen } from "lucide-react";
 import { cn } from "../lib/utils";
 
 interface ChatSession {
@@ -16,6 +16,7 @@ interface ChatSearchModalProps {
   chats: ChatSession[];
   currentChatId: string | null;
   onSelectChat: (id: string) => void;
+  onNewChat?: () => void;
 }
 
 function escapeRegex(s: string) {
@@ -42,7 +43,7 @@ const HighlightMatch = React.memo(({ text, query }: { text: string; query: strin
 const ONE_DAY = 24 * 60 * 60 * 1000;
 
 // Buttery smooth Apple-like ease
-const MODAL_EASE = [0.23, 1, 0.32, 1];
+const MODAL_EASE = [0.23, 1, 0.32, 1] as [number, number, number, number];
 const ITEM_SPRING = { type: "spring" as const, damping: 24, stiffness: 300, mass: 0.4 };
 
 const listVariants = {
@@ -125,6 +126,7 @@ export function ChatSearchModal({
   chats,
   currentChatId,
   onSelectChat,
+  onNewChat,
 }: ChatSearchModalProps) {
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -239,6 +241,24 @@ export function ChatSearchModal({
             {/* Content Area */}
             <div className="overflow-hidden">
               <div className="overflow-y-auto px-2 py-3 max-h-[calc(80vh-65px)]">
+                    {onNewChat && (
+                      <motion.button
+                        type="button"
+                        variants={rowVariants}
+                        onClick={() => {
+                          onNewChat();
+                          initiateClose();
+                        }}
+                        className="mb-2 flex w-full items-center gap-4 rounded-xl px-4 py-3 text-left text-slate-900 transition-colors hover:bg-slate-100/80 focus-visible:bg-slate-100 focus-visible:outline-none"
+                      >
+                        <div className="flex h-6 w-6 shrink-0 items-center justify-center">
+                          <SquarePen className="h-5 w-5 stroke-[1.5]" />
+                        </div>
+                        <span className="text-[15px] font-medium leading-snug">
+                          New chat
+                        </span>
+                      </motion.button>
+                    )}
                     <AnimatePresence mode="wait">
                       <motion.div
                         key={query ? "search" : "browse"}

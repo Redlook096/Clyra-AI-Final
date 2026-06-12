@@ -10,8 +10,9 @@ import {
 } from './ui/dropdown-menu';
 
 // Exact easing curves requested for ultra-premium Apple-like feel
-const MODAL_TRANSITION = { duration: 0.4, ease: [0.23, 1, 0.32, 1] };
-const TAB_TRANSITION = { duration: 0.2, ease: [0.23, 1, 0.32, 1] };
+const MODAL_EASE = [0.23, 1, 0.32, 1] as [number, number, number, number];
+const MODAL_TRANSITION = { duration: 0.4, ease: MODAL_EASE };
+const TAB_TRANSITION = { duration: 0.2, ease: MODAL_EASE };
 
 export function SettingsModal({ 
     isOpen, onClose,
