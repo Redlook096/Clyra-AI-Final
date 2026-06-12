@@ -1981,29 +1981,32 @@ Please analyze the code you just wrote and fix this error.`;
       : 0;
   const workspaceSwipeTravelPx = Math.min(
     Math.max(360, viewportWidth - 16),
-    Math.max(360, centeredContentWidth) + 10,
+    Math.max(360, centeredContentWidth) + 8,
   );
+  const workspaceSwipeEase = [0.5, 0, 0.2, 1] as [
+    number,
+    number,
+    number,
+    number,
+  ];
+  const workspaceSwipeTransition = {
+    type: "tween" as const,
+    duration: 0.72,
+    ease: workspaceSwipeEase,
+  };
   const workspacePanelVariants = {
     enter: (direction: number) => ({
-      opacity: 0.985,
+      opacity: 0.995,
       x: direction > 0 ? workspaceSwipeTravelPx : -workspaceSwipeTravelPx,
-      scale: 0.998,
     }),
     center: {
       opacity: 1,
       x: "0%",
-      scale: 1,
     },
     exit: (direction: number) => ({
-      opacity: 0.985,
+      opacity: 0.12,
       x: direction > 0 ? -workspaceSwipeTravelPx : workspaceSwipeTravelPx,
-      scale: 0.998,
     }),
-  };
-  const workspaceSwipeTransition = {
-    type: "tween" as const,
-    duration: 0.72,
-    ease: [0.32, 0.72, 0, 1] as [number, number, number, number],
   };
 
   const chatQuickActions: Array<{
@@ -2768,6 +2771,34 @@ Please analyze the code you just wrote and fix this error.`;
                       />
                     </div>
                   )}
+                  <AnimatePresence>
+                    {isWorkspaceSwitching && (
+                      <motion.div
+                        aria-hidden="true"
+                        className="clyra-workspace-swipe-shadow"
+                        initial={{
+                          opacity: 0,
+                          x: workspaceTransitionDirection * 54,
+                          scaleX: 0.9,
+                        }}
+                        animate={{
+                          opacity: [0, 0.26, 0],
+                          x: [
+                            workspaceTransitionDirection * 36,
+                            0,
+                            workspaceTransitionDirection * -28,
+                          ],
+                          scaleX: [0.94, 1.02, 0.98],
+                        }}
+                        exit={{ opacity: 0 }}
+                        transition={{
+                          duration: 0.72,
+                          ease: workspaceSwipeEase,
+                          times: [0, 0.52, 1],
+                        }}
+                      />
+                    )}
+                  </AnimatePresence>
 	              <div
                 className={cn(
                   "relative z-10 flex flex-col h-full min-h-0 w-full"

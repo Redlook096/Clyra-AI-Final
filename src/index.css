@@ -263,6 +263,24 @@
     background: transparent;
 }
 
+.clyra-workspace-swipe-shadow {
+    pointer-events: none;
+    position: absolute;
+    left: 50%;
+    top: 53%;
+    z-index: 1;
+    width: min(620px, 46vw);
+    height: min(250px, 28vh);
+    border-radius: 999px;
+    background:
+        radial-gradient(ellipse at center,
+            rgba(15, 23, 42, 0.038) 0%,
+            rgba(15, 23, 42, 0.022) 34%,
+            rgba(15, 23, 42, 0) 72%);
+    transform: translate3d(-50%, -50%, 0);
+    will-change: transform, opacity;
+}
+
 .clyra-workspace-card {
     position: absolute;
     inset: 0;
