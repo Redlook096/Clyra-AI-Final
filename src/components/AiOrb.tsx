@@ -35,14 +35,15 @@ const ORB_THEMES: Record<OrbColorTheme, { gradient: string; halo: string; ring: 
 
 interface AiOrbProps {
   colorTheme?: OrbColorTheme;
+  introActive?: boolean;
 }
 
-export function AiOrb({ colorTheme = "default" }: AiOrbProps) {
+export function AiOrb({ colorTheme = "default", introActive = false }: AiOrbProps) {
   const theme = ORB_THEMES[colorTheme];
 
   return (
     <div 
-      className="clyra-ai-orb-shell" 
+      className={`clyra-ai-orb-shell${introActive ? " clyra-ai-orb-shell--intro" : ""}`}
       aria-hidden="true"
       style={{
         "--orb-halo-bg": theme.halo,

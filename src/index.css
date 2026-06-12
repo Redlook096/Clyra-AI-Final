@@ -755,6 +755,25 @@
     will-change: transform;
 }
 
+.clyra-ai-orb-shell--intro .clyra-ai-orb,
+.clyra-ai-orb-shell--intro .clyra-ai-orb::before,
+.clyra-ai-orb-shell--intro .clyra-ai-orb-ball,
+.clyra-ai-orb-shell--intro .clyra-ai-orb-lines,
+.clyra-ai-orb-shell--intro .clyra-ai-orb-rings::before,
+.clyra-ai-orb-shell--intro .clyra-ai-orb-rings::after,
+.clyra-ai-orb-shell--intro .clyra-ai-orb-glow {
+    animation-play-state: paused;
+}
+
+.clyra-ai-orb-shell--intro .clyra-ai-orb-rings {
+    opacity: 0;
+}
+
+.clyra-ai-orb-shell:not(.clyra-ai-orb-shell--intro) .clyra-ai-orb-rings {
+    opacity: 1;
+    transition: opacity 120ms ease-out;
+}
+
 .clyra-ai-orb::before {
     position: absolute;
     inset: -54px;
