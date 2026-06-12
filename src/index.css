@@ -757,6 +757,7 @@
 
 .clyra-ai-orb-shell--intro .clyra-ai-orb,
 .clyra-ai-orb-shell--intro .clyra-ai-orb::before,
+.clyra-ai-orb-shell--intro .clyra-ai-orb::after,
 .clyra-ai-orb-shell--intro .clyra-ai-orb-ball,
 .clyra-ai-orb-shell--intro .clyra-ai-orb-lines,
 .clyra-ai-orb-shell--intro .clyra-ai-orb-rings::before,
@@ -765,13 +766,37 @@
     animation-play-state: paused;
 }
 
+.clyra-ai-orb-shell--intro .clyra-ai-orb::before {
+    opacity: 0;
+}
+
+.clyra-ai-orb-shell--intro .clyra-ai-orb::after {
+    opacity: 0;
+}
+
+.clyra-ai-orb-shell--intro .clyra-ai-orb-ball {
+    filter: blur(0.85px);
+}
+
+.clyra-ai-orb-shell--intro .clyra-ai-orb-lines,
+.clyra-ai-orb-shell--intro .clyra-ai-orb-glow,
 .clyra-ai-orb-shell--intro .clyra-ai-orb-rings {
     opacity: 0;
 }
 
+.clyra-ai-orb-shell:not(.clyra-ai-orb-shell--intro) .clyra-ai-orb-lines {
+    opacity: 1;
+    transition: opacity 520ms cubic-bezier(0.2, 1, 0.3, 1);
+}
+
 .clyra-ai-orb-shell:not(.clyra-ai-orb-shell--intro) .clyra-ai-orb-rings {
     opacity: 1;
-    transition: opacity 120ms ease-out;
+    transition: opacity 560ms cubic-bezier(0.2, 1, 0.3, 1);
+}
+
+.clyra-ai-orb-shell:not(.clyra-ai-orb-shell--intro) .clyra-ai-orb-glow {
+    opacity: 0.52;
+    transition: opacity 620ms cubic-bezier(0.2, 1, 0.3, 1);
 }
 
 .clyra-ai-orb::before {
@@ -791,6 +816,7 @@
     opacity: 0.9;
     transform: translateZ(0);
     animation: clyra-ai-orb-halo 7.5s ease-in-out infinite;
+    transition: opacity 620ms cubic-bezier(0.2, 1, 0.3, 1);
 }
 
 .clyra-ai-orb::after {
@@ -802,6 +828,7 @@
     border-radius: 999px;
     background: radial-gradient(circle, rgba(255, 255, 255, 0.45), transparent 68%);
     opacity: 0.72;
+    transition: opacity 520ms cubic-bezier(0.2, 1, 0.3, 1);
 }
 
 .clyra-ai-orb-icons {
@@ -834,6 +861,8 @@
         0 4px 20px rgba(0, 0, 0, 0.1);
     filter: url("#clyra-ai-orb-gooey");
     animation: clyra-ai-orb-breathe 5.4s ease-in-out infinite;
+    transform: translateZ(0);
+    transition: filter 520ms cubic-bezier(0.2, 1, 0.3, 1);
 }
 
 .clyra-ai-orb-lines {
@@ -888,6 +917,21 @@
     mix-blend-mode: screen;
     opacity: 0.52;
     animation: clyra-ai-orb-glow 4.2s ease-in-out infinite;
+}
+
+.clyra-ai-orb-shell--intro .clyra-ai-orb::before,
+.clyra-ai-orb-shell--intro .clyra-ai-orb::after {
+    opacity: 0 !important;
+    animation: none !important;
+}
+
+.clyra-ai-orb-shell--intro .clyra-ai-orb-lines,
+.clyra-ai-orb-shell--intro .clyra-ai-orb-rings,
+.clyra-ai-orb-shell--intro .clyra-ai-orb-glow,
+.clyra-ai-orb-shell--intro .clyra-ai-orb-rings::before,
+.clyra-ai-orb-shell--intro .clyra-ai-orb-rings::after {
+    opacity: 0 !important;
+    animation: none !important;
 }
 
 .clyra-ai-orb-filter {

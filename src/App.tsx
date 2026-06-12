@@ -437,12 +437,12 @@ export default function App() {
     }
 
     const t1 = setTimeout(() => setIntroState("orb_up"), 10); 
-    const t2 = setTimeout(() => setIntroState("input_circle"), 1800); 
-    const t3 = setTimeout(() => setIntroState("input_expand"), 2200); 
+    const t2 = setTimeout(() => setIntroState("input_circle"), 1600); 
+    const t3 = setTimeout(() => setIntroState("input_expand"), 1980); 
     const t4 = setTimeout(() => {
       setIntroState("complete");
       setIsSidebarOpen(true);
-    }, 3200);
+    }, 2850);
 
     return () => {
       clearTimeout(t1);
@@ -2186,26 +2186,35 @@ Please analyze the code you just wrote and fix this error.`;
           aria-hidden={!isSidebarOpen}
           initial={false}
           animate={
-            isSidebarOpen
+            introState !== "complete"
               ? {
                   x: 0,
+                  y: 18,
+                  scale: 1,
+                  opacity: 0,
+                  filter: "blur(0px)",
+                }
+              : isSidebarOpen
+              ? {
+                  x: 0,
+                  y: 0,
                   scale: 1,
                   opacity: 1,
                   filter: "blur(0px)",
                 }
               : {
                   x: -292,
+                  y: 0,
                   scale: 1,
                   opacity: 1,
                   filter: "blur(0px)",
                 }
           }
           transition={{
-            type: "spring",
-            stiffness: 210,
-            damping: 31,
-            mass: 0.78,
-            opacity: { duration: 0 },
+            type: "tween",
+            duration: isSidebarOpen ? 0.58 : 0.34,
+            ease: isSidebarOpen ? [0.18, 1, 0.25, 1] : [0.22, 1, 0.36, 1],
+            opacity: { duration: isSidebarOpen ? 0.58 : 0 },
             filter: { duration: 0 },
             scale: { duration: 0 },
           }}
@@ -2630,9 +2639,9 @@ Please analyze the code you just wrote and fix this error.`;
                 aria-label="Open sidebar"
                 aria-expanded={false}
                 title="Open sidebar"
-                initial={introState !== "complete" ? { opacity: 0, scale: 0.95, x: -40 } : { opacity: 0, scale: 0.9, x: -8 }}
-                animate={{ opacity: introState === "complete" ? 1 : 0, scale: 1, x: introState === "complete" ? 0 : -40 }}
-                exit={{ opacity: 0, scale: 0.9, x: -8 }}
+                initial={introState !== "complete" ? { opacity: 0, scale: 0.96, y: 14 } : { opacity: 0, scale: 0.9, y: -8 }}
+                animate={{ opacity: introState === "complete" ? 1 : 0, scale: 1, y: introState === "complete" ? 0 : 14 }}
+                exit={{ opacity: 0, scale: 0.9, y: -8 }}
                 transition={introState !== "complete" ? { duration: 0.7, ease: [0.16, 1, 0.3, 1] } : { duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
                 className="clyra-sidebar-toggle group fixed left-4 top-4 z-[180] flex h-11 w-11 items-center justify-center rounded-full border border-transparent bg-transparent text-slate-600 shadow-none transition-[color,transform] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)] hover:scale-[1.05] hover:text-slate-900 active:scale-[0.94] sm:top-6 sm:left-6"
               >
@@ -2869,12 +2878,12 @@ Please analyze the code you just wrote and fix this error.`;
                       >
 	                        <motion.div
 	                          className="mb-2 flex w-full justify-center relative transform-gpu"
-	                          initial={isWorkspaceSwitching ? false : introState !== "complete" ? { scale: 0.94, y: 58, opacity: 0 } : false}
-                          animate={introState !== "booting" ? { scale: 1, y: 0, opacity: 1 } : { scale: 0.94, y: 58, opacity: 0 }}
+	                          initial={isWorkspaceSwitching ? false : introState !== "complete" ? { y: 24, opacity: 0, filter: "blur(2px)" } : false}
+                          animate={introState !== "booting" ? { y: 0, opacity: 1, filter: "blur(0px)" } : { y: 24, opacity: 0, filter: "blur(2px)" }}
                           transition={{
                             type: "tween",
-                            ease: [0.22, 1, 0.28, 1],
-                            duration: 1.05,
+                            ease: [0.18, 1, 0.25, 1],
+                            duration: 0.86,
                           }}
                         >
                           <AiOrb
@@ -2888,10 +2897,11 @@ Please analyze the code you just wrote and fix this error.`;
                             opacity: introState === "complete" ? 1 : 0,
                             y: introState === "complete" ? 0 : 10,
                             scale: introState === "complete" ? 1 : 0.96,
+                            filter: introState === "complete" ? "blur(0px)" : "blur(5px)",
                           }}
                           transition={{
-                            duration: 0.7,
-                            ease: [0.22, 1, 0.36, 1],
+                            duration: 0.62,
+                            ease: [0.2, 1, 0.3, 1],
                           }}
                         >
                           {emptyStateTitle}
@@ -2904,10 +2914,11 @@ Please analyze the code you just wrote and fix this error.`;
                             animate={{ 
                               opacity: introState === "complete" ? 1 : 0, 
                               y: introState === "complete" ? 0 : 8, 
+                              filter: introState === "complete" ? "blur(0px)" : "blur(4px)",
                             }}
                             transition={{
-                              duration: 0.6,
-                              ease: [0.22, 1, 0.36, 1],
+                              duration: 0.58,
+                              ease: [0.2, 1, 0.3, 1],
                             }}
                           >
                             {emptyStateSubtitle}
@@ -2935,8 +2946,8 @@ Please analyze the code you just wrote and fix this error.`;
                                  return (
                                     <motion.button
                                       variants={{
-                                        hidden: { opacity: 0, y: 15 },
-                                        visible: { opacity: introState === "complete" ? 1 : 0, y: introState === "complete" ? 0 : 15, transition: { duration: 0.64, ease: [0.16, 1, 0.3, 1] } }
+                                        hidden: { opacity: 0, y: 14, filter: "blur(4px)" },
+                                        visible: { opacity: introState === "complete" ? 1 : 0, y: introState === "complete" ? 0 : 14, filter: introState === "complete" ? "blur(0px)" : "blur(4px)", transition: { duration: 0.58, ease: [0.16, 1, 0.3, 1] } }
                                       }}
                                       key={action.baseLabel}
                                       type="button"
