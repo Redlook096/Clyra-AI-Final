@@ -41,7 +41,7 @@ import { MarkdownMessageContent } from "./components/MarkdownMessageContent";
 import { GradientWaveText } from "./components/GradientWaveText";
 import AIClipper from "./components/AIClipper";
 import AgenticBrowser from "./components/AgenticBrowser";
-import { AiOrb } from "./components/AiOrb";
+import { AiOrb, type OrbColorTheme } from "./components/AiOrb";
 import { VibeAgentMessageBody } from "./components/vibe/VibeAgentMessageBody";
 import { VibeLivePreviewPanel } from "./components/vibe/VibeLivePreviewPanel";
 import { buildLocalVibeFallbackResponse } from "./lib/buildLocalVibeFallback";
@@ -50,6 +50,26 @@ import { extractVibeFilesFromContent } from "./lib/parseVibeAgentContent";
 
 type WorkspaceTabId = "chat" | "vibe" | "browser";
 const WORKSPACE_TAB_ORDER: WorkspaceTabId[] = ["chat", "vibe", "browser"];
+const ORB_COLOR_THEMES: OrbColorTheme[] = [
+  "default",
+  "ocean",
+  "sunset",
+  "forest",
+  "mono",
+  "noir",
+];
+
+function readStoredOrbColorTheme(): OrbColorTheme {
+  if (typeof window === "undefined") return "default";
+  try {
+    const storedTheme = window.localStorage.getItem("clyra-orb-color-theme");
+    return ORB_COLOR_THEMES.includes(storedTheme as OrbColorTheme)
+      ? (storedTheme as OrbColorTheme)
+      : "default";
+  } catch {
+    return "default";
+  }
+}
 
 /** Standard chat: shimmer until the model emits answer text (`content`), then hide so stagger can print it. */
 function ChatThinkingLabel({
@@ -233,22 +253,18 @@ interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement
   highlightOverlay?: string | null;
 }
 
-const SkeletonHighlightText = ({ text, highlight }: { text: string; highlight: string; }) => {
-  if (!highlight || !highlight.trim()) return <span className="text-slate-800 dark:text-slate-200">{text}</span>;
-  const lower = highlight.toLowerCase();
-  const parts = text.split(new RegExp(`(${highlight.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi"));
+const PromptGhostText = ({ text, ghost }: { text: string; ghost: string }) => {
+  if (!ghost || !ghost.trim()) {
+    return <span className="text-slate-800 dark:text-slate-200">{text}</span>;
+  }
+
   return (
     <>
-      {parts.map((part, i) =>
-        part.toLowerCase() === lower ? (
-          <span key={i} className="relative inline-block overflow-hidden rounded-[4px] bg-slate-200/60 px-1 text-slate-500 font-medium transition-colors duration-300">
-            <span className="relative z-10">{part}</span>
-            <span className="absolute inset-0 -translate-x-full animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/50 to-transparent" />
-          </span>
-        ) : (
-          <span key={i}>{part}</span>
-        ),
-      )}
+      <span className="text-slate-800 dark:text-slate-200">{text}</span>
+      <span className="clyra-prompt-ghost" aria-hidden="true">
+        {" "}
+        {ghost}
+      </span>
     </>
   );
 };
@@ -258,8 +274,8 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
     return (
       <div className={cn("relative flex items-center", containerClassName)}>
         {highlightOverlay && (
-          <div className={cn("absolute inset-0 pointer-events-none break-words whitespace-pre-wrap flex w-full bg-transparent px-4 text-base text-transparent transition-all duration-200 ease-in-out font-medium", className)} aria-hidden="true">
-            <SkeletonHighlightText text={String(value || "")} highlight={highlightOverlay} />
+          <div className={cn("clyra-prompt-ghost-layer absolute inset-0 pointer-events-none break-words whitespace-pre-wrap flex w-full bg-transparent px-4 text-base transition-all duration-200 ease-in-out font-medium", className)} aria-hidden="true">
+            <PromptGhostText text={String(value || "")} ghost={highlightOverlay} />
           </div>
         )}
         <textarea
@@ -509,7 +525,8 @@ export default function App() {
   const [systemPrompt, setSystemPrompt] = useState("");
   const [temperature, setTemperature] = useState(0.7);
   const [userBubbleColor, setUserBubbleColor] = useState("#f8fafc");
-  const [orbColorTheme, setOrbColorTheme] = useState<import("./components/AiOrb").OrbColorTheme>("default");
+  const [orbColorTheme, setOrbColorTheme] =
+    useState<OrbColorTheme>(readStoredOrbColorTheme);
   const [bgAnimEnabled, setBgAnimEnabled] = useState(false);
   const [bgAnimColor, setBgAnimColor] = useState("#8b5cf6");
   const commandPaletteRef = useRef<HTMLDivElement>(null);
@@ -520,6 +537,14 @@ export default function App() {
   useEffect(() => {
     setIsSearching(searchQuery.length > 0);
   }, [searchQuery]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("clyra-orb-color-theme", orbColorTheme);
+    } catch (error) {
+      console.error("Failed to save orb color theme:", error);
+    }
+  }, [orbColorTheme]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -2072,9 +2097,8 @@ Please analyze the code you just wrote and fix this error.`;
     setSelectedCommand(null);
     setIsInputExpanded(true);
     
-    // Smooth fade in effect instead of typing
     setIsFadingInText(true);
-    setValue(skeleton ? `${prompt} ${skeleton}` : prompt);
+    setValue(prompt);
     if (skeleton) {
       setActiveSkeletonText(skeleton);
     } else {
@@ -2083,14 +2107,10 @@ Please analyze the code you just wrote and fix this error.`;
     
     window.setTimeout(() => {
       textareaRef.current?.focus();
-      if (skeleton && textareaRef.current) {
-        const start = prompt.length + 1;
-        const end = start + skeleton.length;
-        textareaRef.current.setSelectionRange(start, end);
-      }
+      textareaRef.current?.setSelectionRange(prompt.length, prompt.length);
       adjustHeight();
       setIsFadingInText(false);
-    }, 150); // slight delay to allow smooth fade in
+    }, 150);
   };
 
   useEffect(() => {

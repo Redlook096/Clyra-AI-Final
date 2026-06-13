@@ -275,7 +275,7 @@ export function SettingsModal({
                                             <SettingBlock label="AI Orb Theme" description="Color gradient for the AI indicator">
                                                 <div className="flex gap-3 flex-wrap">
                                                     {([
-                                                        { id: 'default', label: 'Default', gradient: 'conic-gradient(from 45deg, #0f172a, #2563eb, #22d3ee, #8b5cf6, #0f172a)' },
+                                                        { id: 'default', label: 'Default', gradient: 'conic-gradient(from 45deg, #3b82f6, #2563eb, #22d3ee, #8b5cf6, #3b82f6)' },
                                                         { id: 'ocean', label: 'Ocean', gradient: 'conic-gradient(from 45deg, #0c4a6e, #0284c7, #06b6d4, #0ea5e9, #0c4a6e)' },
                                                         { id: 'sunset', label: 'Sunset', gradient: 'conic-gradient(from 45deg, #7c2d12, #ea580c, #f472b6, #a855f7, #7c2d12)' },
                                                         { id: 'forest', label: 'Forest', gradient: 'conic-gradient(from 45deg, #14532d, #16a34a, #2dd4bf, #059669, #14532d)' },

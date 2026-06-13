@@ -787,18 +787,18 @@
 .clyra-ai-orb-shell:not(.clyra-ai-orb-shell--intro) .clyra-ai-orb-lines {
     opacity: 1;
     transition:
-        opacity 680ms cubic-bezier(0.2, 1, 0.3, 1),
-        transform 680ms cubic-bezier(0.2, 1, 0.3, 1);
+        opacity 880ms cubic-bezier(0.16, 1, 0.28, 1) 70ms,
+        transform 880ms cubic-bezier(0.16, 1, 0.28, 1) 70ms;
 }
 
 .clyra-ai-orb-shell:not(.clyra-ai-orb-shell--intro) .clyra-ai-orb-rings {
     opacity: 1;
-    transition: opacity 560ms cubic-bezier(0.2, 1, 0.3, 1);
+    transition: opacity 980ms cubic-bezier(0.16, 1, 0.28, 1) 90ms;
 }
 
 .clyra-ai-orb-shell:not(.clyra-ai-orb-shell--intro) .clyra-ai-orb-glow {
     opacity: 0.52;
-    transition: opacity 620ms cubic-bezier(0.2, 1, 0.3, 1);
+    transition: opacity 1040ms cubic-bezier(0.16, 1, 0.28, 1) 40ms;
 }
 
 .clyra-ai-orb::before {
@@ -818,7 +818,7 @@
     opacity: 0.9;
     transform: translateZ(0);
     animation: clyra-ai-orb-halo 7.5s ease-in-out infinite;
-    transition: opacity 620ms cubic-bezier(0.2, 1, 0.3, 1);
+    transition: opacity 1080ms cubic-bezier(0.16, 1, 0.28, 1) 40ms;
 }
 
 .clyra-ai-orb::after {
@@ -830,7 +830,7 @@
     border-radius: 999px;
     background: radial-gradient(circle, rgba(255, 255, 255, 0.45), transparent 68%);
     opacity: 0.72;
-    transition: opacity 520ms cubic-bezier(0.2, 1, 0.3, 1);
+    transition: opacity 860ms cubic-bezier(0.16, 1, 0.28, 1) 20ms;
 }
 
 .clyra-ai-orb-icons {
@@ -864,7 +864,9 @@
     filter: url("#clyra-ai-orb-gooey");
     animation: clyra-ai-orb-breathe 5.4s ease-in-out infinite;
     transform: translateZ(0);
-    transition: filter 520ms cubic-bezier(0.2, 1, 0.3, 1);
+    transition:
+        filter 780ms cubic-bezier(0.16, 1, 0.28, 1),
+        box-shadow 960ms cubic-bezier(0.16, 1, 0.28, 1);
 }
 
 .clyra-ai-orb-ball::before {
@@ -886,13 +888,34 @@
     transform: translateZ(0) scale(1.04) rotate(-10deg);
     transform-origin: center;
     pointer-events: none;
-    transition: opacity 520ms cubic-bezier(0.2, 1, 0.3, 1);
+    transition:
+        opacity 880ms cubic-bezier(0.16, 1, 0.28, 1),
+        transform 880ms cubic-bezier(0.16, 1, 0.28, 1);
     will-change: opacity, transform;
+}
+
+.clyra-ai-orb-ball::after {
+    position: absolute;
+    inset: -30%;
+    z-index: 5;
+    content: "";
+    border-radius: inherit;
+    background:
+        radial-gradient(circle, rgba(255, 255, 255, 0.62) 0%, rgb(var(--orb-intro-d) / 0.28) 28%, rgb(var(--orb-intro-b) / 0.18) 48%, transparent 70%);
+    mix-blend-mode: screen;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateZ(0) scale(0.62);
+    transform-origin: center;
 }
 
 .clyra-ai-orb-shell--intro .clyra-ai-orb-ball::before {
     opacity: 0.94;
     animation: clyra-ai-orb-intro-palette 2.65s cubic-bezier(0.2, 1, 0.25, 1) both;
+}
+
+.clyra-ai-orb-shell:not(.clyra-ai-orb-shell--intro) .clyra-ai-orb-ball::after {
+    animation: clyra-ai-orb-reveal-bloom 1.18s cubic-bezier(0.16, 1, 0.28, 1) both;
 }
 
 .clyra-ai-orb-lines {
@@ -1009,6 +1032,25 @@
     100% {
         background-position: 43% 45%;
         transform: translateZ(0) scale(1.16) rotate(16deg);
+    }
+}
+
+@keyframes clyra-ai-orb-reveal-bloom {
+    0% {
+        opacity: 0;
+        transform: translateZ(0) scale(0.62);
+    }
+    32% {
+        opacity: 0.82;
+        transform: translateZ(0) scale(1.04);
+    }
+    66% {
+        opacity: 0.32;
+        transform: translateZ(0) scale(1.28);
+    }
+    100% {
+        opacity: 0;
+        transform: translateZ(0) scale(1.5);
     }
 }
 
@@ -1366,6 +1408,48 @@
         inset 0 -1px 0 rgba(148, 163, 184, 0.1) !important;
     backdrop-filter: blur(12px) saturate(1.06);
     -webkit-backdrop-filter: blur(12px) saturate(1.06);
+}
+
+.clyra-prompt-ghost-layer {
+    color: transparent;
+    text-shadow: none;
+    animation: clyra-prompt-layer-enter 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.clyra-prompt-ghost {
+    display: inline;
+    background:
+        linear-gradient(100deg, rgba(100, 116, 139, 0.54), rgba(148, 163, 184, 0.78), rgba(100, 116, 139, 0.54));
+    background-size: 220% 100%;
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    font-weight: 650;
+    animation: clyra-prompt-ghost-shimmer 1.9s ease-in-out infinite;
+}
+
+@keyframes clyra-prompt-layer-enter {
+    0% {
+        opacity: 0;
+        filter: blur(5px);
+        transform: translateY(5px) scale(0.992);
+    }
+    100% {
+        opacity: 1;
+        filter: blur(0);
+        transform: translateY(0) scale(1);
+    }
+}
+
+@keyframes clyra-prompt-ghost-shimmer {
+    0% {
+        background-position: 110% 50%;
+    }
+    55%,
+    100% {
+        background-position: -70% 50%;
+    }
 }
 
 /* Shimmer Loading */
