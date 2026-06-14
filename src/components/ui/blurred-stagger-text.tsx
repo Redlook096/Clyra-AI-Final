@@ -1,10 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { motion } from "motion/react";
+import gsap from "gsap";
 import { cn } from "@/lib/utils";
 
-/** Smooth character-by-character reveal. Prints one char at a time with fade-in. */
+/** Smooth character-by-character reveal using GSAP. */
 export function BlurredStaggerStream({
   text,
   isStreaming,
@@ -14,41 +14,61 @@ export function BlurredStaggerStream({
   isStreaming?: boolean;
   className?: string;
 }) {
-  const [visible, setVisible] = React.useState(0);
+  const containerRef = React.useRef<HTMLDivElement>(null);
+  const tl = React.useRef(gsap.timeline());
 
-  React.useEffect(() => {
-    if (!isStreaming) { setVisible(text.length); return; }
-    if (visible >= text.length) return;
-    const charsPerTick = Math.max(1, Math.ceil((text.length - visible) / 20));
-    const id = setTimeout(() => setVisible(v => Math.min(v + charsPerTick, text.length)), 25);
-    return () => clearTimeout(id);
-  }, [text, visible, isStreaming]);
+  React.useLayoutEffect(() => {
+    if (!containerRef.current) return;
 
+    if (!isStreaming) {
+      const chars = containerRef.current.querySelectorAll("span.char");
+      gsap.set(chars, { opacity: 1, y: 0, filter: "blur(0px)" });
+      return;
+    }
+
+    const chars = containerRef.current.querySelectorAll("span.char:not(.animated)");
+    if (chars.length === 0) return;
+
+    chars.forEach((char) => char.classList.add("animated"));
+    gsap.set(chars, { opacity: 0, y: 10, filter: "blur(8px)" });
+
+    tl.current.to(
+      chars,
+      {
+        opacity: 1,
+        y: 0,
+        filter: "blur(0px)",
+        duration: 0.25,
+        ease: "power2.out",
+        stagger: 0.015,
+        onComplete: () => {
+          gsap.set(chars, { clearProps: "filter" });
+        },
+      },
+      ">"
+    );
+  }, [text, isStreaming]);
 
   if (!text) return null;
 
-  if (!isStreaming) {
-    return (
-      <div className={cn("whitespace-pre-wrap font-medium leading-relaxed", className)}>
-        {text}
-      </div>
-    );
-  }
-
   return (
-
-    <div className={cn("whitespace-pre-wrap font-medium leading-relaxed", className)}>
-      {text.split("").map((char, i) => (
-        <motion.span
-          key={i}
-          initial={{ opacity: 0, filter: "blur(4px)" }}
-          animate={i < visible ? { opacity: 1, filter: "blur(0px)" } : { opacity: 0, filter: "blur(4px)" }}
-          transition={{ duration: 0.2 }}
-          className="inline"
-        >
-          {char === " " ? "\u00A0" : char === "\n" ? "\n" : char}
-        </motion.span>
-      ))}
+    <div
+      className={cn("whitespace-pre-wrap font-medium leading-relaxed inline-block", className)}
+      ref={containerRef}
+    >
+      {text.split("").map((char, i) =>
+        char === "\n" ? (
+          <br key={`line-${i}`} />
+        ) : (
+          <span
+            key={i}
+            className={`char inline-block ${!isStreaming ? "animated" : ""}`}
+            style={{ whiteSpace: "pre" }}
+          >
+            {char === " " ? "\u00A0" : char}
+          </span>
+        ),
+      )}
     </div>
   );
 }

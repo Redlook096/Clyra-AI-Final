@@ -1658,6 +1658,10 @@ body,
 #chat-container {
     will-change: scroll-position;
     -webkit-overflow-scrolling: touch;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scroll-behavior: smooth;
 }
 .scrollbar-none {
     -ms-overflow-style: none;
@@ -1779,4 +1783,266 @@ body,
     0% { transform: translate(0, 0) scale(1); }
     50% { transform: translate(15vw, -20vw) scale(0.9); }
     100% { transform: translate(30vw, -10vw) scale(1.1); }
+}
+
+.clyra-document-card {
+    color: #1e293b;
+}
+
+.clyra-doc-action,
+.clyra-doc-icon-button,
+.clyra-doc-provider-button,
+.clyra-doc-tool-button,
+.clyra-doc-select,
+.clyra-doc-number,
+.clyra-doc-colour {
+    border: 1px solid rgba(226, 232, 240, 0.95);
+    background: rgba(255, 255, 255, 0.86);
+    color: #475569;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8);
+    transition:
+        transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+        background-color 180ms ease,
+        border-color 180ms ease,
+        color 180ms ease,
+        box-shadow 180ms ease;
+}
+
+.clyra-doc-action {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 38px;
+    border-radius: 999px;
+    padding: 0 14px;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.clyra-doc-action:hover,
+.clyra-doc-icon-button:hover,
+.clyra-doc-provider-button:hover,
+.clyra-doc-tool-button:hover,
+.clyra-doc-select:hover,
+.clyra-doc-number:hover,
+.clyra-doc-colour:hover {
+    transform: translateY(-1px);
+    border-color: rgba(148, 163, 184, 0.42);
+    background: #fff;
+    color: #0f172a;
+    box-shadow: 0 10px 26px rgba(15, 23, 42, 0.055);
+}
+
+.clyra-doc-action:active,
+.clyra-doc-icon-button:active,
+.clyra-doc-provider-button:active,
+.clyra-doc-tool-button:active {
+    transform: translateY(0) scale(0.98);
+}
+
+.clyra-doc-action:disabled,
+.clyra-doc-icon-button:disabled,
+.clyra-doc-tool-button:disabled {
+    cursor: default;
+    opacity: 0.42;
+    transform: none;
+    box-shadow: none;
+}
+
+.clyra-doc-action--active {
+    color: #0f172a;
+    border-color: rgba(148, 163, 184, 0.5);
+}
+
+.clyra-doc-icon-button,
+.clyra-doc-tool-button {
+    display: inline-grid;
+    height: 36px;
+    width: 36px;
+    place-items: center;
+    border-radius: 999px;
+}
+
+.clyra-doc-provider-button {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    gap: 10px;
+    border-radius: 14px;
+    padding: 8px 9px;
+    text-align: left;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.clyra-doc-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1px solid rgba(241, 245, 249, 0.95);
+    background:
+        linear-gradient(180deg, rgba(248, 250, 252, 0.9), rgba(255, 255, 255, 0.9)),
+        #fff;
+    overflow: hidden;
+    padding: 10px 18px;
+}
+
+.clyra-doc-tool-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border-radius: 999px;
+    background: rgba(248, 250, 252, 0.72);
+    padding: 4px;
+}
+
+.clyra-doc-tool-group--typography {
+    flex-wrap: wrap;
+    border-radius: 18px;
+}
+
+.clyra-doc-select,
+.clyra-doc-number,
+.clyra-doc-colour {
+    display: inline-flex;
+    height: 36px;
+    align-items: center;
+    gap: 7px;
+    border-radius: 999px;
+    padding: 0 10px;
+}
+
+.clyra-doc-select select {
+    min-width: 106px;
+    appearance: none;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font-size: 12px;
+    font-weight: 650;
+    outline: none;
+}
+
+.clyra-doc-select--small select {
+    min-width: 72px;
+}
+
+.clyra-doc-select--block select {
+    min-width: 94px;
+}
+
+.clyra-doc-number {
+    gap: 6px;
+    padding: 0 8px 0 10px;
+}
+
+.clyra-doc-number span {
+    font-size: 11px;
+    font-weight: 700;
+    color: #94a3b8;
+}
+
+.clyra-doc-number input {
+    width: 42px;
+    border: 0;
+    background: transparent;
+    color: #334155;
+    font-size: 12px;
+    font-weight: 700;
+    outline: none;
+}
+
+.clyra-doc-colour input {
+    height: 20px;
+    width: 24px;
+    cursor: pointer;
+    border: 0;
+    background: transparent;
+    padding: 0;
+}
+
+.clyra-doc-editor {
+    min-height: 220px;
+    overflow: visible;
+    white-space: pre-wrap;
+    color: #1e293b;
+    font-size: 15px;
+    font-weight: 400;
+    line-height: 1.72;
+    outline: none;
+}
+
+.clyra-doc-body::-webkit-scrollbar {
+    display: none;
+}
+
+.clyra-doc-body {
+    max-height: 306px;
+    min-height: 142px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    scrollbar-width: none;
+}
+
+.clyra-doc-display {
+    white-space: pre-wrap;
+    color: #1e293b;
+    font-size: 15px;
+    font-weight: 400;
+    line-height: 1.72;
+}
+
+.clyra-doc-preparing {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 118px;
+    color: #475569;
+}
+
+.clyra-doc-preparing-icon {
+    display: inline-grid;
+    height: 34px;
+    width: 34px;
+    place-items: center;
+    border-radius: 999px;
+    border: 1px solid rgba(226, 232, 240, 0.95);
+    background: rgba(248, 250, 252, 0.82);
+    color: #64748b;
+}
+
+.clyra-doc-editor:focus {
+    outline: none;
+}
+
+.clyra-doc-editor div {
+    min-height: 1.72em;
+}
+
+.clyra-doc-editor h2 {
+    margin: 0.5rem 0 0.25rem;
+    font-size: 1.35rem;
+    font-weight: 650;
+    line-height: 1.35;
+}
+
+.clyra-doc-editor h3 {
+    margin: 0.45rem 0 0.2rem;
+    font-size: 1.08rem;
+    font-weight: 650;
+    line-height: 1.45;
+}
+
+.clyra-doc-editor blockquote {
+    margin: 0.65rem 0;
+    border-left: 2px solid rgba(148, 163, 184, 0.48);
+    padding-left: 0.85rem;
+    color: #475569;
+}
+
+.clyra-doc-editor ul,
+.clyra-doc-editor ol {
+    margin: 0.65rem 0;
+    padding-left: 1.35rem;
 }

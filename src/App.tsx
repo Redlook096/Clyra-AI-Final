@@ -38,6 +38,7 @@ import { ChatSearchModal } from "./components/ChatSearchModal";
 import { ShiningText } from "./components/ShiningText";
 import { BlurredStaggerStream } from "@/components/ui/blurred-stagger-text";
 import { MarkdownMessageContent } from "./components/MarkdownMessageContent";
+import { DocumentCardUI } from "./components/ui/document-card";
 import { GradientWaveText } from "./components/GradientWaveText";
 import AIClipper from "./components/AIClipper";
 import AgenticBrowser from "./components/AgenticBrowser";
@@ -144,8 +145,14 @@ const AnimatedMessage = ({
   const suppressVibeAnswerBody = isVibe && !!isThinking && content.length === 0;
   const hasMarkdownStructure =
     /```|^\s{0,3}#{1,6}\s|^\s*[-*]\s|\n\s*\d+\.\s|\|.+\||\*\*[^*]+\*\*/m.test(content);
+  
+  // Robust heuristics to detect if the response is an email or structured notes, ignoring preamble.
+  const isEmail = /Subject:\s*.+/i.test(content) || /draft email/i.test(content) || /(?:Hi|Dear|Hello)\s+[\w\s]+,/i.test(content);
+  const isNote = /(?:Meeting Notes?|Summary|Here are.*notes|#+\s*Notes?)/i.test(content);
+  const useDocumentUI = (isEmail || isNote) && content.length > 5;
+
   const shouldRenderMarkdown =
-    markdownSupport && hasMarkdownStructure;
+    markdownSupport && hasMarkdownStructure && !useDocumentUI;
   return (
     <div
       className={cn(
@@ -168,6 +175,13 @@ const AnimatedMessage = ({
               fontSizeClass={fontSizeClass}
               isLastAssistant={!!isLastAssistant}
               onVibePreviewReady={onVibePreviewReady}
+            />
+          ) : useDocumentUI ? (
+            <DocumentCardUI
+              content={content}
+              isStreaming={!!isStreaming}
+              isEmail={isEmail}
+              className={cn("mt-4", fontSizeClass)}
             />
           ) : shouldRenderMarkdown ? (
             <MarkdownMessageContent
@@ -497,7 +511,7 @@ export default function App() {
 
   const { textareaRef, adjustHeight } = useAutoResizeTextarea({
     minHeight: 40,
-    maxHeight: 200,
+    maxHeight: 292,
   });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isProjectsOpen, setIsProjectsOpen] = useState(false);
@@ -524,7 +538,7 @@ export default function App() {
   const [markdownSupport, setMarkdownSupport] = useState(true);
   const [systemPrompt, setSystemPrompt] = useState("");
   const [temperature, setTemperature] = useState(0.7);
-  const [userBubbleColor, setUserBubbleColor] = useState("#f8fafc");
+  const [userBubbleColor, setUserBubbleColor] = useState("#F4F4F4");
   const [orbColorTheme, setOrbColorTheme] =
     useState<OrbColorTheme>(readStoredOrbColorTheme);
   const [bgAnimEnabled, setBgAnimEnabled] = useState(false);
@@ -2986,9 +3000,9 @@ Please analyze the code you just wrote and fix this error.`;
                         </motion.div>
                       </motion.div>
                     ) : (
-                      <div className={cn("relative flex flex-1 w-full overflow-hidden z-0 max-w-3xl mx-auto", showWorkspaceLivePreview ? "px-3 sm:px-4 pt-3 sm:pt-4" : "px-5 sm:px-8 pt-3 sm:pt-4")}>
+                      <div className={cn("relative flex min-h-0 flex-1 w-full overflow-hidden z-0 max-w-3xl mx-auto", showWorkspaceLivePreview ? "px-3 sm:px-4 pt-3 sm:pt-4" : "px-5 sm:px-8 pt-3 sm:pt-4")}>
                         <div
-                          className={cn("flex flex-1 flex-col transition-opacity duration-700", introState === "complete" ? "opacity-100" : "opacity-0")}
+                          className={cn("flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden scrollbar-none transition-opacity duration-700", introState === "complete" ? "opacity-100" : "opacity-0")}
                           id="chat-container"
                         >
                         {messages.map((message) => {
@@ -3012,10 +3026,9 @@ Please analyze the code you just wrote and fix this error.`;
                               }
                               animate={{ opacity: 1, y: 0, scale: 1 }}
                               transition={{
-                                type: "spring",
-                                stiffness: 220,
-                                damping: 34,
-                                mass: 0.9,
+                                type: "tween",
+                                ease: [0.22, 1, 0.36, 1],
+                                duration: 0.6,
                               }}
                               className={cn(
                                 "flex w-full",
@@ -3318,6 +3331,7 @@ Please analyze the code you just wrote and fix this error.`;
                                 "scrollbar-none transition-[min-height,max-height,padding,opacity,transform] duration-[400ms] ease-[cubic-bezier(0.16,1,0.3,1)]",
                                 isFadingInText ? "opacity-0 translate-y-1 scale-[0.99]" : (introState !== "complete" ? "opacity-0 translate-y-2 scale-[0.98]" : "opacity-100 translate-y-0 scale-100")
                               )}
+                              style={{ maxHeight: "16.25em" }}
                             />
                             {!isExpanded && (
                               <motion.button
