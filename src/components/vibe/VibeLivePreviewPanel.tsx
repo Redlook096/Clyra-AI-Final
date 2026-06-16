@@ -36,6 +36,7 @@ import {
 } from "@/lib/buildVibePreviewSrcDoc";
 import { sandboxVibePath } from "@/lib/parseVibeAgentContent";
 import { cn } from "@/lib/utils";
+import { motion, AnimatePresence } from "framer-motion";
 
 const STORAGE_KEY = "clyra_vibe_preview_files";
 
@@ -54,6 +55,40 @@ type Props = {
 };
 
 type WorkspaceMode = "preview" | "code";
+
+const CODE_COMPLETIONS = [
+  "function",
+  "const",
+  "return",
+  "className",
+  "children",
+  "component",
+  "interface",
+  "useState",
+  "useEffect",
+  "useMemo",
+  "useCallback",
+  "import",
+  "export",
+  "async",
+  "await",
+  "background",
+  "transition",
+  "transform",
+  "borderRadius",
+  "document",
+  "window",
+  "response",
+  "request",
+  "Promise",
+];
+
+function getCodeCompletion(prefix: string) {
+  const lower = prefix.toLowerCase();
+  return CODE_COMPLETIONS.find(
+    (item) => item.toLowerCase().startsWith(lower) && item.length > prefix.length,
+  );
+}
 
 type AgentCursorState = {
   visible: boolean;
@@ -344,6 +379,12 @@ export function VibeLivePreviewPanel({
   });
   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("preview");
   const [editorScroll, setEditorScroll] = useState({ top: 0, left: 0 });
+  const [codeCompletion, setCodeCompletion] = useState<{
+    suggestion: string;
+    prefix: string;
+    x: number;
+    y: number;
+  } | null>(null);
   const [addressInput, setAddressInput] = useState("");
   const [lastError, setLastError] = useState<{
     message: string;
@@ -368,6 +409,7 @@ export function VibeLivePreviewPanel({
     clicking: false,
   });
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
+  const codeTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const lastSessionSignatureRef = useRef<string | null>(null);
   const cursorTimeoutsRef = useRef<number[]>([]);
 
@@ -605,6 +647,50 @@ export function VibeLivePreviewPanel({
   }, [activePath, mergedFiles, parentDir, ensureExpandedPath]);
 
   const editorValue = mergedFiles[activePath] ?? "";
+
+  const updateCodeCompletion = useCallback((textarea: HTMLTextAreaElement) => {
+    const beforeCursor = textarea.value.slice(0, textarea.selectionStart);
+    const match = beforeCursor.match(/([A-Za-z_$][\w$]*)$/);
+    if (!match || match[1].length < 2) {
+      setCodeCompletion(null);
+      return;
+    }
+
+    const suggestion = getCodeCompletion(match[1]);
+    if (!suggestion) {
+      setCodeCompletion(null);
+      return;
+    }
+
+    const lines = beforeCursor.split("\n");
+    const lineIndex = lines.length - 1;
+    const column = lines[lineIndex]?.length ?? 0;
+    const lineHeight = 20;
+    const charWidth = 7.2;
+    setCodeCompletion({
+      suggestion,
+      prefix: match[1],
+      x: Math.min(520, 64 + column * charWidth - textarea.scrollLeft),
+      y: Math.max(10, 12 + lineIndex * lineHeight - textarea.scrollTop - 36),
+    });
+  }, []);
+
+  const acceptCodeCompletion = useCallback(() => {
+    const textarea = codeTextareaRef.current;
+    if (!textarea || !codeCompletion || !activePath) return false;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const remainder = codeCompletion.suggestion.slice(codeCompletion.prefix.length);
+    const next = `${editorValue.slice(0, start)}${remainder}${editorValue.slice(end)}`;
+    setMergedFiles((m) => ({ ...m, [activePath]: next }));
+    setCodeCompletion(null);
+    window.requestAnimationFrame(() => {
+      const nextPosition = start + remainder.length;
+      textarea.focus();
+      textarea.setSelectionRange(nextPosition, nextPosition);
+    });
+    return true;
+  }, [activePath, codeCompletion, editorValue]);
 
   const runAgentCursorReplay = useCallback(() => {
     for (const id of cursorTimeoutsRef.current) window.clearTimeout(id);
@@ -1028,6 +1114,7 @@ export function VibeLivePreviewPanel({
                   </code>
                 </pre>
                 <textarea
+                  ref={codeTextareaRef}
                   key={activePath}
                   value={editorValue}
                   onChange={(event) => {
@@ -1036,17 +1123,44 @@ export function VibeLivePreviewPanel({
                       if (!activePath) return m;
                       return { ...m, [activePath]: next };
                     });
+                    updateCodeCompletion(event.currentTarget);
                   }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Tab" && codeCompletion) {
+                      event.preventDefault();
+                      acceptCodeCompletion();
+                    }
+                  }}
+                  onKeyUp={(event) => {
+                    if (event.key !== "Tab") updateCodeCompletion(event.currentTarget);
+                  }}
+                  onBlur={() => setCodeCompletion(null)}
                   onScroll={(event) => {
                     setEditorScroll({
                       top: event.currentTarget.scrollTop,
                       left: event.currentTarget.scrollLeft,
                     });
+                    updateCodeCompletion(event.currentTarget);
                   }}
                   spellCheck={false}
                   className="relative z-10 h-full min-h-0 w-full resize-none overflow-auto bg-transparent py-3 pl-16 pr-6 font-mono text-[12px] leading-5 text-transparent caret-white outline-none scrollbar-none selection:bg-blue-400/30"
                   aria-label="Code editor"
                 />
+                <AnimatePresence>
+                  {codeCompletion && (
+                    <motion.div
+                      className="clyra-code-autocomplete"
+                      style={{ left: codeCompletion.x, top: codeCompletion.y }}
+                      initial={{ opacity: 0, y: 8, scale: 0.96, filter: "blur(5px)" }}
+                      animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
+                      exit={{ opacity: 0, y: 6, scale: 0.96, filter: "blur(4px)" }}
+                      transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                    >
+                      <span>{codeCompletion.suggestion}</span>
+                      <kbd>Tab</kbd>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
           ) : null}

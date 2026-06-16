@@ -1,0 +1,522 @@
+diff --git a/src/App.tsx b/src/App.tsx
+index bc08b98..eabef9b 100644
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -31,6 +31,7 @@ import {
+   Trash2,
+   X,
+   XIcon,
++  Edit2,
+ } from "lucide-react";
+ import { cn } from "./lib/utils";
+ import { SettingsModal } from "./components/SettingsModal";
+@@ -38,7 +39,10 @@ import { ChatSearchModal } from "./components/ChatSearchModal";
+ import { ShiningText } from "./components/ShiningText";
+ import { BlurredStaggerStream } from "@/components/ui/blurred-stagger-text";
+ import { MarkdownMessageContent } from "./components/MarkdownMessageContent";
+-import { DocumentCardUI } from "./components/ui/document-card";
++import {
++  DocumentCardUI,
++  type DocumentRewriteRequest,
++} from "./components/ui/document-card";
+ import { GradientWaveText } from "./components/GradientWaveText";
+ import AIClipper from "./components/AIClipper";
+ import AgenticBrowser from "./components/AgenticBrowser";
+@@ -60,6 +64,27 @@ const ORB_COLOR_THEMES: OrbColorTheme[] = [
+   "noir",
+ ];
+ 
++const TYPING_CORRECTIONS: Record<string, string> = {
++  adress: "address",
++  becuase: "because",
++  definately: "definitely",
++  recieve: "receive",
++  seperate: "separate",
++  teh: "the",
++  thier: "their",
++  wierd: "weird",
++  yourt: "your",
++};
++
++function getTypingCorrection(value: string) {
++  const match = value.match(/(^|\s)([A-Za-z']{2,})$/);
++  if (!match) return null;
++  const word = match[2];
++  const correction = TYPING_CORRECTIONS[word.toLowerCase()];
++  if (!correction || correction === word) return null;
++  return { word, correction };
++}
++
+ function readStoredOrbColorTheme(): OrbColorTheme {
+   if (typeof window === "undefined") return "default";
+   try {
+@@ -122,6 +147,7 @@ const AnimatedMessage = ({
+   assistantKind = "chat",
+   isLastAssistant,
+   onVibePreviewReady,
++  onDocumentRewriteRequest,
+ }: {
+   messageId?: string;
+   content: string;
+@@ -138,6 +164,7 @@ const AnimatedMessage = ({
+     messageId: string,
+     filesByPath: Record<string, string>,
+   ) => void;
++  onDocumentRewriteRequest?: (request: DocumentRewriteRequest) => void;
+ }) => {
+   const isVibe = assistantKind === "vibe";
+   /** Vibe agent now drives its own thought UI from the model's <<<VIBE_THINKING>>> blocks. While we have no
+@@ -145,7 +172,7 @@ const AnimatedMessage = ({
+   const suppressVibeAnswerBody = isVibe && !!isThinking && content.length === 0;
+   const hasMarkdownStructure =
+     /```|^\s{0,3}#{1,6}\s|^\s*[-*]\s|\n\s*\d+\.\s|\|.+\||\*\*[^*]+\*\*/m.test(content);
+-  
++
+   // Robust heuristics to detect if the response is an email or structured notes, ignoring preamble.
+   const isEmail = /Subject:\s*.+/i.test(content) || /draft email/i.test(content) || /(?:Hi|Dear|Hello)\s+[\w\s]+,/i.test(content);
+   const isNote = /(?:Meeting Notes?|Summary|Here are.*notes|#+\s*Notes?)/i.test(content);
+@@ -181,6 +208,7 @@ const AnimatedMessage = ({
+               content={content}
+               isStreaming={!!isStreaming}
+               isEmail={isEmail}
++              onRewriteRequest={onDocumentRewriteRequest}
+               className={cn("mt-4", fontSizeClass)}
+             />
+           ) : shouldRenderMarkdown ? (
+@@ -269,12 +297,12 @@ interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement
+ 
+ const PromptGhostText = ({ text, ghost }: { text: string; ghost: string }) => {
+   if (!ghost || !ghost.trim()) {
+-    return <span className="text-slate-800 dark:text-slate-200">{text}</span>;
++    return null;
+   }
+ 
+   return (
+     <>
+-      <span className="text-slate-800 dark:text-slate-200">{text}</span>
++      <span className="opacity-0">{text}</span>
+       <span className="clyra-prompt-ghost" aria-hidden="true">
+         {" "}
+         {ghost}
+@@ -300,7 +328,7 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
+             "disabled:cursor-not-allowed disabled:opacity-50",
+             "focus-visible:outline-none focus:ring-0 focus-visible:ring-offset-0",
+             className,
+-            highlightOverlay ? "text-transparent caret-slate-800" : "text-slate-800"
++            "text-slate-800"
+           )}
+           value={value}
+           ref={ref}
+@@ -458,7 +486,7 @@ export default function App() {
+   const [introState, setIntroState] = useState<IntroState>("booting");
+   const [introProgressText, setIntroProgressText] = useState("INITIALIZING");
+   const [progressDuration] = useState(() => 3 + Math.random() * 3);
+-  
++
+   useEffect(() => {
+     if (introState === "complete") {
+       return;
+@@ -469,9 +497,9 @@ export default function App() {
+       return;
+     }
+ 
+-    const t1 = setTimeout(() => setIntroState("orb_up"), 10); 
+-    const t2 = setTimeout(() => setIntroState("input_circle"), 1600); 
+-    const t3 = setTimeout(() => setIntroState("input_expand"), 1980); 
++    const t1 = setTimeout(() => setIntroState("orb_up"), 10);
++    const t2 = setTimeout(() => setIntroState("input_circle"), 1600);
++    const t3 = setTimeout(() => setIntroState("input_expand"), 1980);
+     const t4 = setTimeout(() => {
+       setIntroState("complete");
+       setIsSidebarOpen(true);
+@@ -513,7 +541,10 @@ export default function App() {
+     minHeight: 40,
+     maxHeight: 292,
+   });
++  const pendingDocumentRewriteRef = useRef<DocumentRewriteRequest | null>(null);
+   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
++  const [isRephrasingMode, setIsRephrasingMode] = useState(false);
++  const [rewritePhase, setRewritePhase] = useState<"ready" | "applying">("ready");
+   const [isProjectsOpen, setIsProjectsOpen] = useState(false);
+   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+   const [isSearching, setIsSearching] = useState(false);
+@@ -1673,7 +1704,63 @@ Please analyze the code you just wrote and fix this error.`;
+   );
+ 
+   const handleSendMessage = async () => {
++    if (!value.trim() && attachments.length === 0) return;
++
+     if (value.trim() || selectedCommand) {
++      const pendingRewrite = pendingDocumentRewriteRef.current;
++      if (pendingRewrite && value.trim()) {
++        const instruction = value.trim();
++        pendingDocumentRewriteRef.current = null;
++        setRewritePhase("applying");
++        setSelectedCommand(null);
++        setActiveSkeletonText(null);
++        setValue("");
++        adjustHeight(true);
++        setToastMessage(
++          pendingRewrite.mode === "fix"
++            ? "Fixing selected text..."
++            : "Rephrasing selected text...",
++        );
++
++        try {
++          let replacement = "";
++          await streamOpenAI(
++            pendingRewrite.mode === "fix"
++              ? "Fix spelling, grammar, punctuation, and clarity. Preserve the meaning and formatting intent. Return only the corrected replacement text."
++              : "Rewrite the selected text according to the user's instruction. Preserve meaning unless the instruction asks otherwise. Return only the replacement text.",
++            [
++              {
++                role: "user",
++                content: `Selected text:\n${pendingRewrite.selectedText}\n\nInstruction:\n${instruction}`,
++              },
++            ],
++            (chunkText, isReasoning) => {
++              if (!isReasoning) replacement += chunkText;
++            },
++            0.35,
++            700,
++            "deepseek-chat",
++          );
++
++          const cleanedReplacement = replacement
++            .trim()
++            .replace(/^["'`]+|["'`]+$/g, "");
++          pendingRewrite.applyReplacement(
++            cleanedReplacement || pendingRewrite.selectedText,
++          );
++          setIsRephrasingMode(false);
++          setRewritePhase("ready");
++          setToastMessage("Selected text updated");
++        } catch (error) {
++          console.warn("Document rewrite failed:", error);
++          pendingRewrite.applyReplacement(pendingRewrite.selectedText);
++          setIsRephrasingMode(false);
++          setRewritePhase("ready");
++          setToastMessage("Rewrite unavailable, kept original text");
++        }
++        return;
++      }
++
+       setVibePreviewMessageId(null);
+       setVibePreviewFiles(null);
+       const userCommandLabel =
+@@ -2105,12 +2192,55 @@ Please analyze the code you just wrote and fix this error.`;
+ 
+   const [activeSkeletonText, setActiveSkeletonText] = useState<string | null>(null);
+   const [isFadingInText, setIsFadingInText] = useState(false);
++  const typingCorrection = useMemo(() => getTypingCorrection(value), [value]);
++
++  const applyTypingCorrection = useCallback(() => {
++    if (!typingCorrection) return;
++    setValue((current) => {
++      const match = current.match(/([\s\S]*?)([A-Za-z']{2,})$/);
++      if (!match) return current;
++      return `${match[1]}${typingCorrection.correction}`;
++    });
++    window.requestAnimationFrame(() => {
++      textareaRef.current?.focus();
++      adjustHeight();
++    });
++  }, [adjustHeight, textareaRef, typingCorrection]);
++
++  const handleDocumentRewriteRequest = useCallback(
++    (request: DocumentRewriteRequest) => {
++      pendingDocumentRewriteRef.current = request;
++      setIsRephrasingMode(true);
++      setRewritePhase("ready");
++      setActiveWorkspaceTab("chat");
++      setSelectedCommand(null);
++      setShowCommandPalette(false);
++      setIsInputExpanded(true);
++      setIsFadingInText(true);
++      setValue("");
++      setActiveSkeletonText(
++        request.mode === "fix"
++          ? "[keep the same meaning, make it clean]"
++          : "[make it clearer, shorter, warmer...]",
++      );
++      window.setTimeout(() => {
++        textareaRef.current?.focus();
++        textareaRef.current?.setSelectionRange(
++          textareaRef.current.value.length,
++          textareaRef.current.value.length,
++        );
++        adjustHeight();
++        setIsFadingInText(false);
++      }, 140);
++    },
++    [adjustHeight, textareaRef],
++  );
+ 
+   const applyQuickPrompt = (prompt: string, skeleton?: string) => {
+     setActiveWorkspaceTab("chat");
+     setSelectedCommand(null);
+     setIsInputExpanded(true);
+-    
++
+     setIsFadingInText(true);
+     setValue(prompt);
+     if (skeleton) {
+@@ -2118,7 +2248,7 @@ Please analyze the code you just wrote and fix this error.`;
+     } else {
+       setActiveSkeletonText(null);
+     }
+-    
++
+     window.setTimeout(() => {
+       textareaRef.current?.focus();
+       textareaRef.current?.setSelectionRange(prompt.length, prompt.length);
+@@ -2213,7 +2343,7 @@ Please analyze the code you just wrote and fix this error.`;
+           }}
+         />
+       )}
+-      <motion.div 
++      <motion.div
+         className="clyra-app-shell h-dvh flex min-w-0 bg-white text-slate-900 font-sans selection:bg-slate-200 overflow-hidden scalable-container relative"
+         initial={{ opacity: 0, scale: 0.97, filter: "blur(12px)", y: 12 }}
+         animate={{ opacity: 1, scale: 1, filter: "blur(0px)", y: 0 }}
+@@ -2691,7 +2821,7 @@ Please analyze the code you just wrote and fix this error.`;
+             )}
+           </AnimatePresence>
+           <div className="relative z-[90] h-[52px] w-full shrink-0">
+-            <motion.div 
++            <motion.div
+               className="absolute left-1/2 top-5 sm:top-6 -translate-x-1/2 z-50"
+               initial={introState !== "complete" ? { y: -50 } : false}
+               animate={{ y: introState === "complete" ? 0 : -50 }}
+@@ -2724,15 +2854,15 @@ Please analyze the code you just wrote and fix this error.`;
+                     initial={{ opacity: 0, scale: 0.85 }}
+                     animate={{ opacity: 1, scale: 1 }}
+                     exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.15 } }}
+-                    style={{ 
++                    style={{
+                       x: hoverPillX,
+                       width: 101,
+                       top: 6,
+                       bottom: 6,
+                       height: "auto",
+                       translate: "none",
+-                      scaleX: hoverScaleX, 
+-                      transformOrigin: hoverOrigin as any 
++                      scaleX: hoverScaleX,
++                      transformOrigin: hoverOrigin as any
+                     }}
+                     transition={{
+                       type: "spring",
+@@ -2803,15 +2933,15 @@ Please analyze the code you just wrote and fix this error.`;
+ 	            >
+                   {bgAnimEnabled && (
+                     <div className="pointer-events-none absolute inset-[-20%] z-0 overflow-hidden clyra-fluid-bg-container">
+-                      <div 
++                      <div
+                         className="clyra-fluid-blob clyra-fluid-blob-1"
+                         style={{ backgroundColor: bgAnimColor }}
+                       />
+-                      <div 
++                      <div
+                         className="clyra-fluid-blob clyra-fluid-blob-2"
+                         style={{ backgroundColor: bgAnimColor }}
+                       />
+-                      <div 
++                      <div
+                         className="clyra-fluid-blob clyra-fluid-blob-3"
+                         style={{ backgroundColor: bgAnimColor }}
+                       />
+@@ -2917,8 +3047,8 @@ Please analyze the code you just wrote and fix this error.`;
+                           animate={introState !== "booting" ? { y: 0, opacity: 1 } : { y: 44, opacity: 0 }}
+                           transition={{
+                             type: "tween",
+-                            ease: [0.16, 1, 0.24, 1],
+-                            duration: 1.02,
++                            ease: [0.12, 0.78, 0.18, 1],
++                            duration: 1.26,
+                           }}
+                         >
+                           <AiOrb
+@@ -2945,9 +3075,9 @@ Please analyze the code you just wrote and fix this error.`;
+ 	                        >
+ 	                          <motion.p
+ 	                            className="text-slate-500 text-sm sm:text-base font-medium font-sans z-10 relative"
+-                            animate={{ 
+-                              opacity: introState === "complete" ? 1 : 0, 
+-                              y: introState === "complete" ? 0 : 14, 
++                            animate={{
++                              opacity: introState === "complete" ? 1 : 0,
++                              y: introState === "complete" ? 0 : 14,
+                             }}
+                             transition={{
+                               duration: 0.72,
+@@ -2956,7 +3086,7 @@ Please analyze the code you just wrote and fix this error.`;
+                           >
+                             {emptyStateSubtitle}
+                           </motion.p>
+-                          
++
+                           {!isVibeWorkspace && (
+ 	                            <motion.div
+ 	                              className="clyra-chat-quick-actions mt-4"
+@@ -3002,7 +3132,7 @@ Please analyze the code you just wrote and fix this error.`;
+                     ) : (
+                       <div className={cn("relative flex min-h-0 flex-1 w-full overflow-hidden z-0 max-w-3xl mx-auto", showWorkspaceLivePreview ? "px-3 sm:px-4 pt-3 sm:pt-4" : "px-5 sm:px-8 pt-3 sm:pt-4")}>
+                         <div
+-                          className={cn("flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden scrollbar-none transition-opacity duration-700", introState === "complete" ? "opacity-100" : "opacity-0")}
++                          className={cn("clyra-visible-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden transition-opacity duration-700", introState === "complete" ? "opacity-100" : "opacity-0")}
+                           id="chat-container"
+                         >
+                         {messages.map((message) => {
+@@ -3092,6 +3222,9 @@ Please analyze the code you just wrote and fix this error.`;
+                                       onVibePreviewReady={
+                                         handleVibePreviewReady
+                                       }
++                                      onDocumentRewriteRequest={
++                                        handleDocumentRewriteRequest
++                                      }
+                                     />
+                                   </div>
+                                 </div>
+@@ -3162,12 +3295,12 @@ Please analyze the code you just wrote and fix this error.`;
+                       </AnimatePresence>
+                       <motion.div
+                         className={cn(
+-                          "input-wrapper relative backdrop-blur-xl border transition-[background-color,border-color,padding] duration-300 cursor-text overflow-hidden mx-auto z-[3]",
++                          "input-wrapper relative backdrop-blur-xl border transition-[background-color,border-color,padding,box-shadow] duration-300 cursor-text overflow-visible mx-auto z-[3]",
+                           theme === "Dark" ? "bg-slate-200/90 border-slate-400/50" : "bg-white/80 border-slate-200/60",
+                           isExpanded ? "p-2 sm:p-3" : "p-1.5 sm:p-2"
+                         )}
+                         initial={isWorkspaceSwitching ? false : introState !== "complete" ? { width: 48, height: 48, borderRadius: 24, opacity: 0, y: 20 } : false}
+-                        animate={{ 
++                        animate={{
+                           width: (introState === "booting" || introState === "orb_up" || introState === "input_circle") ? 48 : "100%",
+                           height: (introState === "booting" || introState === "orb_up" || introState === "input_circle") ? 48 : "auto",
+                           borderRadius: (introState === "booting" || introState === "orb_up" || introState === "input_circle") ? 24 : (isExpanded ? 32 : 40),
+@@ -3176,12 +3309,40 @@ Please analyze the code you just wrote and fix this error.`;
+                         }}
+                         transition={{ type: "tween", ease: [0.22, 1, 0.36, 1], duration: 0.8 }}
+                       >
+-                        <motion.div 
++                        <motion.div
+                           className="relative z-10 w-full h-full"
+                           initial={{ opacity: 0 }}
+                           animate={{ opacity: (introState === "booting" || introState === "orb_up" || introState === "input_circle") ? 0 : 1 }}
+                           transition={{ duration: 0.6, ease: "easeOut" }}
+                         >
++                          <AnimatePresence>
++                            {isRephrasingMode && (
++                              <motion.div
++                                initial={{ opacity: 0, y: 10, scale: 0.96, filter: "blur(6px)" }}
++                                animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
++                                exit={{ opacity: 0, y: 8, scale: 0.96, filter: "blur(5px)" }}
++                                transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
++                                className="clyra-rewrite-chip absolute bottom-[calc(100%+10px)] left-4 z-20 flex items-center gap-2 rounded-full border border-slate-200/80 bg-white/95 px-3 py-1.5 text-[12px] font-semibold text-slate-600 shadow-[0_10px_26px_rgba(15,23,42,0.08)] pointer-events-auto"
++                              >
++                                <span className="clyra-rewrite-chip-dot h-1.5 w-1.5 rounded-full bg-slate-900 shadow-[0_0_0_4px_rgba(15,23,42,0.08)]" />
++                                {rewritePhase === "applying" ? "Rephrasing text" : "Rephrase highlighted text"}
++                                <button
++                                  onClick={(e) => {
++                                    e.stopPropagation();
++                                    pendingDocumentRewriteRef.current = null;
++                                    setIsRephrasingMode(false);
++                                    setRewritePhase("ready");
++                                    setValue("");
++                                  }}
++                                  className="ml-0.5 rounded-full p-0.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
++                                  aria-label="Cancel rephrasing"
++                                >
++                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
++                                </button>
++                              </motion.div>
++                            )}
++                          </AnimatePresence>
++
+                           <AnimatePresence>
+                             {commandPaletteEnabled && showCommandPalette && (
+                               <motion.div
+@@ -3277,6 +3438,34 @@ Please analyze the code you just wrote and fix this error.`;
+                             )}
+                           </AnimatePresence>
+ 
++                          <AnimatePresence>
++                            {typingCorrection && (
++                              <motion.div
++                                className="clyra-writing-suggestions"
++                                initial={{ opacity: 0, y: 10, scale: 0.98 }}
++                                animate={{ opacity: 1, y: 0, scale: 1 }}
++                                exit={{ opacity: 0, y: 10, scale: 0.98 }}
++                                transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
++                              >
++                                <span>Suggestion</span>
++                                <button
++                                  type="button"
++                                  onPointerDown={(event) => {
++                                    event.preventDefault();
++                                    applyTypingCorrection();
++                                  }}
++                                  onMouseDown={(event) => {
++                                    event.preventDefault();
++                                    applyTypingCorrection();
++                                  }}
++                                  onClick={applyTypingCorrection}
++                                >
++                                  {typingCorrection.correction}
++                                </button>
++                              </motion.div>
++                            )}
++                          </AnimatePresence>
++
+                           <div className={cn(
+                             isExpanded ? "px-3 py-1" : "flex items-center gap-1 px-2 py-0.5"
+                           )}>
+@@ -3304,7 +3493,7 @@ Please analyze the code you just wrote and fix this error.`;
+                               ref={textareaRef}
+                               rows={1}
+                               value={value}
+-                              highlightOverlay={activeSkeletonText}
++                              highlightOverlay={isRephrasingMode ? "" : activeSkeletonText}
+                               onChange={(e) => {
+                                 setValue(e.target.value);
+                                 if (activeSkeletonText && !e.target.value.includes(activeSkeletonText)) {
+@@ -3319,7 +3508,12 @@ Please analyze the code you just wrote and fix this error.`;
+                                 }
+                                 adjustHeight();
+                               }}
+-                              placeholder={inputPlaceholder}
++                              spellCheck
++                              placeholder={
++                                isRephrasingMode
++                                  ? "Tell Clyra how to change the highlighted text..."
++                                  : inputPlaceholder
++                              }
+                               containerClassName="w-full"
+                               className={cn(
+                                 "resize-none overflow-y-auto overflow-x-hidden bg-transparent outline-none disabled:opacity-50",
+@@ -3328,7 +3522,7 @@ Please analyze the code you just wrote and fix this error.`;
+                                 isExpanded
+                                   ? "min-h-[50px] max-h-[35vh] py-3 px-1"
+                                   : "min-h-[40px] max-h-[35vh] py-2 px-1",
+-                                "scrollbar-none transition-[min-height,max-height,padding,opacity,transform] duration-[400ms] ease-[cubic-bezier(0.16,1,0.3,1)]",
++                                "clyra-visible-scrollbar transition-[min-height,max-height,padding,opacity,transform] duration-[400ms] ease-[cubic-bezier(0.16,1,0.3,1)]",
+                                 isFadingInText ? "opacity-0 translate-y-1 scale-[0.99]" : (introState !== "complete" ? "opacity-0 translate-y-2 scale-[0.98]" : "opacity-100 translate-y-0 scale-100")
+                               )}
+                               style={{ maxHeight: "16.25em" }}
+@@ -3392,7 +3586,7 @@ Please analyze the code you just wrote and fix this error.`;
+                           <div
+                                 className={cn(
+                                   "flex items-center justify-between p-2 pt-0",
+-                                  
++
+                                 )}
+                               >
+                                 <div className="flex items-center gap-1 sm:gap-2">
+@@ -3592,7 +3786,7 @@ Please analyze the code you just wrote and fix this error.`;
+           </AnimatePresence>
+         </div>
+       </motion.div>
+-      
++
+       <ChatSearchModal
+         isOpen={isSearchModalOpen}
+         onClose={() => setIsSearchModalOpen(false)}

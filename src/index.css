@@ -743,6 +743,11 @@
     contain: layout;
 }
 
+.clyra-ai-orb-shell--intro {
+    animation: clyra-ai-orb-intro-rise 1.35s cubic-bezier(0.12, 0.78, 0.18, 1) both;
+    will-change: transform, opacity;
+}
+
 .clyra-ai-orb {
     position: relative;
     display: flex;
@@ -911,7 +916,7 @@
 
 .clyra-ai-orb-shell--intro .clyra-ai-orb-ball::before {
     opacity: 0.94;
-    animation: clyra-ai-orb-intro-palette 2.65s cubic-bezier(0.2, 1, 0.25, 1) both;
+    animation: clyra-ai-orb-intro-palette 2.9s cubic-bezier(0.16, 1, 0.24, 1) both;
 }
 
 .clyra-ai-orb-shell:not(.clyra-ai-orb-shell--intro) .clyra-ai-orb-ball::after {
@@ -1020,18 +1025,33 @@
     }
 }
 
+@keyframes clyra-ai-orb-intro-rise {
+    0% {
+        opacity: 0;
+        transform: translate3d(0, 32px, 0) scale(0.94);
+    }
+    54% {
+        opacity: 1;
+        transform: translate3d(0, 4px, 0) scale(1.012);
+    }
+    100% {
+        opacity: 1;
+        transform: translate3d(0, 0, 0) scale(1);
+    }
+}
+
 @keyframes clyra-ai-orb-intro-palette {
     0% {
-        background-position: 53% 58%;
-        transform: translateZ(0) scale(0.94) rotate(-12deg);
+        background-position: 54% 60%;
+        transform: translateZ(0) scale(0.98) rotate(-8deg);
     }
     52% {
         background-position: 48% 51%;
-        transform: translateZ(0) scale(1.07) rotate(5deg);
+        transform: translateZ(0) scale(1.055) rotate(3deg);
     }
     100% {
         background-position: 43% 45%;
-        transform: translateZ(0) scale(1.16) rotate(16deg);
+        transform: translateZ(0) scale(1.12) rotate(9deg);
     }
 }
 
@@ -1670,11 +1690,10 @@ body,
 
 /* First message premium entry */
 .clyra-chat-user-bubble--first {
-    animation: clyra-first-message-up 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+    animation: clyra-first-message-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 @keyframes clyra-first-message-up {
-    0% { opacity: 0; transform: translateY(24px) scale(0.95); }
-    60% { opacity: 1; transform: translateY(-4px) scale(1.01); }
+    0% { opacity: 0; transform: translateY(16px) scale(0.98); }
     100% { opacity: 1; transform: translateY(0) scale(1); }
 }
 
@@ -1787,6 +1806,7 @@ body,
 
 .clyra-document-card {
     color: #1e293b;
+    position: relative;
 }
 
 .clyra-doc-action,
@@ -1794,7 +1814,6 @@ body,
 .clyra-doc-provider-button,
 .clyra-doc-tool-button,
 .clyra-doc-select,
-.clyra-doc-number,
 .clyra-doc-colour {
     border: 1px solid rgba(226, 232, 240, 0.95);
     background: rgba(255, 255, 255, 0.86);
@@ -1824,7 +1843,6 @@ body,
 .clyra-doc-provider-button:hover,
 .clyra-doc-tool-button:hover,
 .clyra-doc-select:hover,
-.clyra-doc-number:hover,
 .clyra-doc-colour:hover {
     transform: translateY(-1px);
     border-color: rgba(148, 163, 184, 0.42);
@@ -1863,6 +1881,101 @@ body,
     border-radius: 999px;
 }
 
+.clyra-doc-size-options {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
+    border-radius: 999px;
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.4), rgba(248, 250, 252, 0.1));
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.02);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    padding: 2px;
+}
+
+.clyra-doc-size-button {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    height: 28px;
+    min-width: 32px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    color: rgba(71, 85, 105, 0.82);
+    font-size: 13px;
+    font-weight: 650;
+    transition:
+        color 260ms ease,
+        text-shadow 320ms ease,
+        transform 420ms cubic-bezier(0.18, 1, 0.32, 1);
+    transform-style: preserve-3d;
+    will-change: transform;
+}
+
+.clyra-doc-size-button:hover {
+    color: #0f172a;
+    transform: translateY(1px) rotateX(2deg) rotateY(-1deg) translateZ(4px);
+    transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), color 0.3s ease;
+}
+
+.clyra-doc-size-button--active {
+    color: #0f172a;
+    text-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+    transform: translateY(1px) rotateX(1deg) translateZ(3px);
+    transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), color 0.3s ease;
+}
+
+.clyra-doc-hover-glass {
+    position: absolute;
+    left: 2px;
+    right: 2px;
+    top: calc(50% + 1px);
+    height: calc(100% - 4px);
+    translate: 0 -50%;
+    z-index: -1;
+    border: 1px solid rgba(15, 23, 42, 0.07);
+    border-radius: inherit;
+    background:
+        radial-gradient(circle at 24% 12%, rgba(255, 255, 255, 0.94), transparent 34%),
+        linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(226, 232, 240, 0.52));
+    box-shadow:
+        0 8px 22px rgba(15, 23, 42, 0.075),
+        inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.clyra-doc-swatch-button {
+    display: inline-flex;
+    height: 24px;
+    width: 24px;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid rgba(255, 255, 255, 0.95);
+    border-radius: 999px;
+    box-shadow:
+        0 0 0 1px rgba(148, 163, 184, 0.28),
+        0 6px 14px rgba(15, 23, 42, 0.06);
+    transition:
+        transform 160ms cubic-bezier(0.22, 1, 0.36, 1),
+        box-shadow 160ms ease;
+}
+
+.clyra-doc-swatch-button:hover {
+    transform: translateY(-1px) scale(1.04);
+    box-shadow:
+        0 0 0 1px rgba(100, 116, 139, 0.36),
+        0 9px 20px rgba(15, 23, 42, 0.1);
+}
+
+.clyra-doc-swatch-button--highlight {
+    box-shadow:
+        inset 0 0 0 1px rgba(15, 23, 42, 0.05),
+        0 0 0 1px rgba(148, 163, 184, 0.2),
+        0 6px 14px rgba(15, 23, 42, 0.05);
+}
+
 .clyra-doc-provider-button {
     display: flex;
     width: 100%;
@@ -1876,16 +1989,88 @@ body,
 }
 
 .clyra-doc-toolbar {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
-    gap: 8px;
+    gap: 12px;
     border-bottom: 1px solid rgba(241, 245, 249, 0.95);
     background:
         linear-gradient(180deg, rgba(248, 250, 252, 0.9), rgba(255, 255, 255, 0.9)),
         #fff;
     overflow: hidden;
     padding: 10px 18px;
+}
+
+.clyra-doc-tabbar {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    border-radius: 999px;
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    background: rgba(255, 255, 255, 0.72);
+    padding: 3px;
+}
+
+.clyra-doc-tab {
+    position: relative;
+    isolation: isolate;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 64px;
+    height: 30px;
+    border-radius: 999px;
+    color: rgba(71, 85, 105, 0.82);
+    font-size: 13px;
+    font-weight: 650;
+    transition:
+        color 260ms ease,
+        text-shadow 320ms ease,
+        transform 420ms cubic-bezier(0.18, 1, 0.32, 1);
+    transform-style: preserve-3d;
+    will-change: transform;
+}
+
+.clyra-doc-tab:hover {
+    color: #0f172a;
+    transform: translateY(1px) rotateX(2deg) rotateY(-1deg) translateZ(4px);
+    transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), color 0.3s ease;
+}
+
+.clyra-doc-tab--active {
+    color: #0f172a;
+    text-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+    transform: translateY(1px) rotateX(1deg) translateZ(3px);
+    transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), color 0.3s ease;
+}
+
+.clyra-doc-tool-panel {
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+}
+
+.clyra-doc-tool-cluster {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    border-radius: 999px;
+    border: 1px solid rgba(226, 232, 240, 0.72);
+    background: rgba(255, 255, 255, 0.78);
+    min-height: 44px;
+    padding: 4px 5px 4px 10px;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.86);
+}
+
+.clyra-doc-tool-cluster-label {
+    color: #94a3b8;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
 }
 
 .clyra-doc-tool-group {
@@ -1903,7 +2088,6 @@ body,
 }
 
 .clyra-doc-select,
-.clyra-doc-number,
 .clyra-doc-colour {
     display: inline-flex;
     height: 36px;
@@ -1911,6 +2095,21 @@ body,
     gap: 7px;
     border-radius: 999px;
     padding: 0 10px;
+}
+
+.clyra-doc-colour--compact {
+    height: 28px;
+    padding: 0 6px;
+    gap: 4px;
+    border-radius: 8px;
+    background: rgba(248, 250, 252, 0.6);
+    border: 1px solid rgba(226, 232, 240, 0.5);
+    transition: background 150ms ease, border-color 150ms ease;
+}
+.clyra-doc-colour--compact:hover {
+    background: #fff;
+    border-color: rgba(203, 213, 225, 0.8);
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
 }
 
 .clyra-doc-select select {
@@ -1932,27 +2131,6 @@ body,
     min-width: 94px;
 }
 
-.clyra-doc-number {
-    gap: 6px;
-    padding: 0 8px 0 10px;
-}
-
-.clyra-doc-number span {
-    font-size: 11px;
-    font-weight: 700;
-    color: #94a3b8;
-}
-
-.clyra-doc-number input {
-    width: 42px;
-    border: 0;
-    background: transparent;
-    color: #334155;
-    font-size: 12px;
-    font-weight: 700;
-    outline: none;
-}
-
 .clyra-doc-colour input {
     height: 20px;
     width: 24px;
@@ -1960,6 +2138,86 @@ body,
     border: 0;
     background: transparent;
     padding: 0;
+}
+
+.clyra-doc-colour-stack {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px;
+}
+
+.clyra-doc-colour-row {
+    display: inline-flex;
+    min-height: 34px;
+    align-items: center;
+    gap: 5px;
+    border-radius: 999px;
+    background: rgba(248, 250, 252, 0.68);
+    padding: 2px 3px 2px 9px;
+}
+
+.clyra-doc-colour-row > span:first-child {
+    min-width: 0;
+    color: #64748b;
+    font-size: 10.5px;
+    font-weight: 760;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+}
+
+.clyra-doc-attachment-cluster {
+    max-width: min(100%, 330px);
+}
+
+.clyra-doc-attach-button {
+    display: inline-flex;
+    height: 34px;
+    align-items: center;
+    gap: 7px;
+    border-radius: 999px;
+    border: 1px solid rgba(226, 232, 240, 0.95);
+    background: rgba(248, 250, 252, 0.92);
+    padding: 0 11px;
+    color: #475569;
+    font-size: 12px;
+    font-weight: 720;
+    transition:
+        transform 170ms cubic-bezier(0.22, 1, 0.36, 1),
+        background-color 170ms ease,
+        border-color 170ms ease,
+        color 170ms ease,
+        box-shadow 170ms ease;
+}
+
+.clyra-doc-attach-button:hover {
+    transform: translateY(-1px);
+    border-color: rgba(148, 163, 184, 0.46);
+    background: #fff;
+    color: #0f172a;
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.065);
+}
+
+.clyra-doc-attachment-list {
+    display: inline-flex;
+    min-width: 0;
+    align-items: center;
+    gap: 5px;
+    overflow: hidden;
+}
+
+.clyra-doc-attachment-list span {
+    max-width: 92px;
+    overflow: hidden;
+    border-radius: 999px;
+    background: rgba(241, 245, 249, 0.9);
+    padding: 5px 8px;
+    color: #64748b;
+    font-size: 10.5px;
+    font-weight: 720;
+    line-height: 1;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .clyra-doc-editor {
@@ -1973,16 +2231,42 @@ body,
     outline: none;
 }
 
-.clyra-doc-body::-webkit-scrollbar {
-    display: none;
-}
-
 .clyra-doc-body {
     max-height: 306px;
     min-height: 142px;
     overflow-y: auto;
     overflow-x: hidden;
-    scrollbar-width: none;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+}
+
+.clyra-visible-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.34) transparent;
+}
+
+.clyra-doc-body::-webkit-scrollbar,
+.clyra-visible-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+.clyra-doc-body::-webkit-scrollbar-track,
+.clyra-visible-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.clyra-doc-body::-webkit-scrollbar-thumb,
+.clyra-visible-scrollbar::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background-clip: content-box;
+    background-color: rgba(148, 163, 184, 0.34);
+}
+
+.clyra-doc-body::-webkit-scrollbar-thumb:hover,
+.clyra-visible-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: rgba(100, 116, 139, 0.44);
 }
 
 .clyra-doc-display {
@@ -2001,6 +2285,31 @@ body,
     color: #475569;
 }
 
+.clyra-doc-shimmer-text {
+    display: inline-block;
+    background-image: linear-gradient(
+        100deg,
+        #64748b 0%,
+        #64748b 28%,
+        #0f172a 42%,
+        #94a3b8 52%,
+        #475569 64%,
+        #64748b 100%
+    );
+    background-size: 240% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    font-size: 13.5px;
+    font-weight: 650;
+    animation: clyra-doc-shimmer 1.35s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes clyra-doc-shimmer {
+    0% { background-position: 140% 0; }
+    100% { background-position: -120% 0; }
+}
+
 .clyra-doc-preparing-icon {
     display: inline-grid;
     height: 34px;
@@ -2014,6 +2323,256 @@ body,
 
 .clyra-doc-editor:focus {
     outline: none;
+}
+
+.clyra-doc-body-label,
+.clyra-doc-field > span {
+    display: block;
+    margin-bottom: 8px;
+    color: #94a3b8;
+    font-size: 11px;
+    font-weight: 750;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.clyra-doc-context-menu {
+    position: absolute;
+    z-index: 80;
+    display: grid;
+    gap: 4px;
+    min-width: 206px;
+    border: 1px solid rgba(226, 232, 240, 0.92);
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.98);
+    padding: 6px;
+    box-shadow: 0 18px 48px rgba(15, 23, 42, 0.12);
+}
+
+.clyra-doc-context-menu button {
+    border-radius: 13px;
+    padding: 9px 11px;
+    color: #334155;
+    text-align: left;
+    font-size: 13px;
+    font-weight: 650;
+    transition:
+        background-color 160ms ease,
+        color 160ms ease,
+        transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.clyra-doc-context-menu button:hover {
+    background: rgba(241, 245, 249, 0.86);
+    color: #0f172a;
+    transform: translateX(1px);
+}
+
+.clyra-doc-autocomplete {
+    position: absolute;
+    z-index: 90;
+    pointer-events: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(226, 232, 240, 0.98);
+    background: rgba(255, 255, 255, 0.98);
+    color: #0f172a;
+    box-shadow:
+        0 14px 32px rgba(15, 23, 42, 0.095),
+        inset 0 1px 0 rgba(255, 255, 255, 0.92);
+    padding: 6px 7px 6px 12px;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+    will-change: transform, opacity;
+}
+
+.clyra-code-autocomplete {
+    position: absolute;
+    z-index: 90;
+    pointer-events: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border-radius: 999px;
+    border-color: rgba(148, 163, 184, 0.24);
+    background: rgba(2, 6, 23, 0.96);
+    color: #fff;
+    box-shadow: 0 14px 38px rgba(15, 23, 42, 0.18);
+    padding: 6px 7px 6px 12px;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    will-change: transform, opacity;
+}
+
+.clyra-doc-autocomplete kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    border: 1px solid rgba(226, 232, 240, 0.95);
+    background: #f8fafc;
+    padding: 3px 6px;
+    color: #64748b;
+    font-size: 9px;
+    font-weight: 850;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.clyra-code-autocomplete kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.16);
+    padding: 3px 6px;
+    color: rgba(255, 255, 255, 0.78);
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.clyra-rephrase-mark {
+    position: relative;
+    border-radius: 6px;
+    background: linear-gradient(90deg, rgba(226, 232, 240, 0.4), rgba(241, 245, 249, 0.8), rgba(226, 232, 240, 0.4));
+    background-size: 200% 100%;
+    color: inherit;
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+    padding: 0 2px;
+    animation:
+        clyra-rephrase-mark-pulse 1.8s ease-in-out infinite,
+        clyra-rephrase-thinking-sweep 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.1);
+}
+
+.clyra-rephrase-mark--block {
+    display: block;
+    margin: -2px;
+    padding: 2px;
+}
+
+.clyra-rephrase-result {
+    position: relative;
+    border-radius: 6px;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(248, 250, 252, 0.8));
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+    padding: 0 2px;
+    box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.15), 0 8px 24px rgba(15, 23, 42, 0.06);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    transition:
+        background-color 980ms cubic-bezier(0.16, 1, 0.3, 1),
+        box-shadow 980ms cubic-bezier(0.16, 1, 0.3, 1),
+        filter 980ms cubic-bezier(0.16, 1, 0.3, 1);
+    animation: clyra-rephrase-result-arrive 800ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.clyra-rephrase-result--settled {
+    background: rgba(255, 255, 255, 0);
+    box-shadow: 0 0 0 0 rgba(148, 163, 184, 0);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    filter: saturate(1);
+}
+
+@keyframes clyra-rephrase-result-arrive {
+    0% {
+        opacity: 0;
+        transform: translateY(8px) scale(0.99);
+        filter: blur(6px);
+    }
+    60% {
+        opacity: 1;
+        transform: translateY(-1px) scale(1.005);
+        filter: blur(0);
+    }
+    100% {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        filter: blur(0);
+    }
+}
+
+@keyframes clyra-rephrase-thinking-sweep {
+    0% {
+        background-position: 150% 0;
+    }
+    100% {
+        background-position: -150% 0;
+    }
+}
+
+.clyra-rewrite-chip {
+    overflow: hidden;
+    color: #475569;
+    backdrop-filter: blur(14px) saturate(1.08);
+    -webkit-backdrop-filter: blur(14px) saturate(1.08);
+    background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.94)),
+        #fff;
+}
+
+.clyra-rewrite-chip-dot {
+    opacity: 0.68;
+}
+
+@keyframes clyra-rephrase-mark-pulse {
+    0%,
+    100% {
+        background-color: rgba(241, 245, 249, 0.6);
+        box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.05);
+    }
+    50% {
+        background-color: rgba(255, 255, 255, 0.9);
+        box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.15), 0 4px 12px rgba(15, 23, 42, 0.03);
+    }
+}
+
+.clyra-doc-editor span.bg-transparent {
+    transition: background-color 700ms ease;
+}
+
+.clyra-writing-suggestions {
+    position: absolute;
+    left: 18px;
+    bottom: calc(100% + 8px);
+    z-index: 45;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid rgba(226, 232, 240, 0.88);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.96);
+    padding: 5px 6px 5px 12px;
+    color: #94a3b8;
+    font-size: 12px;
+    font-weight: 650;
+    box-shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
+}
+
+.clyra-writing-suggestions button {
+    border-radius: 999px;
+    background: #f8fafc;
+    padding: 5px 10px;
+    color: #1e293b;
+    font-weight: 750;
+    transition:
+        background-color 160ms ease,
+        transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.clyra-writing-suggestions button:hover {
+    background: #eef2f7;
+    transform: translateY(-1px);
 }
 
 .clyra-doc-editor div {
@@ -2045,4 +2604,47 @@ body,
 .clyra-doc-editor ol {
     margin: 0.65rem 0;
     padding-left: 1.35rem;
+}
+
+.clyra-doc-editor table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1.5em;
+    margin-bottom: 1.5em;
+    font-size: 0.9em;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.08);
+}
+
+.clyra-doc-editor th,
+.clyra-doc-editor td {
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    padding: 10px 14px;
+    text-align: left;
+}
+
+.clyra-doc-editor th {
+    background-color: #f8fafc;
+    font-weight: 600;
+    color: #0f172a;
+}
+
+.clyra-doc-editor tr:nth-child(even) {
+    background-color: #fcfcfd;
+}
+
+.clyra-doc-editor tr:hover {
+    background-color: #f1f5f9;
+}
+
+@media (max-width: 760px) {
+    .clyra-doc-toolbar {
+        grid-template-columns: 1fr;
+    }
+
+    .clyra-doc-tabbar,
+    .clyra-doc-tool-panel {
+        justify-content: flex-start;
+    }
 }

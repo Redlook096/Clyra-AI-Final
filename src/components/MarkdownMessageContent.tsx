@@ -3,6 +3,7 @@ import Markdown, { type Components } from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import oneLight from "react-syntax-highlighter/dist/esm/styles/prism/one-light.js";
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
+import remarkGfm from "remark-gfm";
 import { cn } from "../lib/utils";
 
 type CodeProps = ComponentPropsWithoutRef<"code"> & {
@@ -126,7 +127,7 @@ export function MarkdownMessageContent({
   }
 
   return (
-    <Markdown components={components}>
+    <Markdown remarkPlugins={[remarkGfm]} components={components}>
       {content}
     </Markdown>
   );

@@ -55,21 +55,21 @@ export function ShiningText({
 
   if (preset === "thinkingChat") {
     return (
-      <motion.span
+      <motion.h1
         className={cn(
-          "inline-block bg-[linear-gradient(110deg,#404040,35%,#fff,50%,#404040,75%,#404040)] bg-[length:200%_100%] bg-clip-text text-base font-normal text-transparent",
+          "bg-[linear-gradient(110deg,#404040,35%,#fff,50%,#404040,75%,#404040)] bg-[length:200%_100%] bg-clip-text text-base font-regular text-transparent inline-block",
           className,
         )}
         initial={{ backgroundPosition: "200% 0" }}
         animate={{ backgroundPosition: "-200% 0" }}
         transition={{
           repeat: Infinity,
-          duration: 2,
+          duration: 2.5,
           ease: "linear",
         }}
       >
         {text}
-      </motion.span>
+      </motion.h1>
     );
   }
 

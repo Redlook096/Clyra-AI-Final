@@ -1,0 +1,2747 @@
+diff --git a/src/App.tsx b/src/App.tsx
+index bc08b98..eabef9b 100644
+--- a/src/App.tsx
++++ b/src/App.tsx
+@@ -31,6 +31,7 @@ import {
+   Trash2,
+   X,
+   XIcon,
++  Edit2,
+ } from "lucide-react";
+ import { cn } from "./lib/utils";
+ import { SettingsModal } from "./components/SettingsModal";
+@@ -38,7 +39,10 @@ import { ChatSearchModal } from "./components/ChatSearchModal";
+ import { ShiningText } from "./components/ShiningText";
+ import { BlurredStaggerStream } from "@/components/ui/blurred-stagger-text";
+ import { MarkdownMessageContent } from "./components/MarkdownMessageContent";
+-import { DocumentCardUI } from "./components/ui/document-card";
++import {
++  DocumentCardUI,
++  type DocumentRewriteRequest,
++} from "./components/ui/document-card";
+ import { GradientWaveText } from "./components/GradientWaveText";
+ import AIClipper from "./components/AIClipper";
+ import AgenticBrowser from "./components/AgenticBrowser";
+@@ -60,6 +64,27 @@ const ORB_COLOR_THEMES: OrbColorTheme[] = [
+   "noir",
+ ];
+ 
++const TYPING_CORRECTIONS: Record<string, string> = {
++  adress: "address",
++  becuase: "because",
++  definately: "definitely",
++  recieve: "receive",
++  seperate: "separate",
++  teh: "the",
++  thier: "their",
++  wierd: "weird",
++  yourt: "your",
++};
++
++function getTypingCorrection(value: string) {
++  const match = value.match(/(^|\s)([A-Za-z']{2,})$/);
++  if (!match) return null;
++  const word = match[2];
++  const correction = TYPING_CORRECTIONS[word.toLowerCase()];
++  if (!correction || correction === word) return null;
++  return { word, correction };
++}
++
+ function readStoredOrbColorTheme(): OrbColorTheme {
+   if (typeof window === "undefined") return "default";
+   try {
+@@ -122,6 +147,7 @@ const AnimatedMessage = ({
+   assistantKind = "chat",
+   isLastAssistant,
+   onVibePreviewReady,
++  onDocumentRewriteRequest,
+ }: {
+   messageId?: string;
+   content: string;
+@@ -138,6 +164,7 @@ const AnimatedMessage = ({
+     messageId: string,
+     filesByPath: Record<string, string>,
+   ) => void;
++  onDocumentRewriteRequest?: (request: DocumentRewriteRequest) => void;
+ }) => {
+   const isVibe = assistantKind === "vibe";
+   /** Vibe agent now drives its own thought UI from the model's <<<VIBE_THINKING>>> blocks. While we have no
+@@ -145,7 +172,7 @@ const AnimatedMessage = ({
+   const suppressVibeAnswerBody = isVibe && !!isThinking && content.length === 0;
+   const hasMarkdownStructure =
+     /```|^\s{0,3}#{1,6}\s|^\s*[-*]\s|\n\s*\d+\.\s|\|.+\||\*\*[^*]+\*\*/m.test(content);
+-  
++
+   // Robust heuristics to detect if the response is an email or structured notes, ignoring preamble.
+   const isEmail = /Subject:\s*.+/i.test(content) || /draft email/i.test(content) || /(?:Hi|Dear|Hello)\s+[\w\s]+,/i.test(content);
+   const isNote = /(?:Meeting Notes?|Summary|Here are.*notes|#+\s*Notes?)/i.test(content);
+@@ -181,6 +208,7 @@ const AnimatedMessage = ({
+               content={content}
+               isStreaming={!!isStreaming}
+               isEmail={isEmail}
++              onRewriteRequest={onDocumentRewriteRequest}
+               className={cn("mt-4", fontSizeClass)}
+             />
+           ) : shouldRenderMarkdown ? (
+@@ -269,12 +297,12 @@ interface TextareaProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement
+ 
+ const PromptGhostText = ({ text, ghost }: { text: string; ghost: string }) => {
+   if (!ghost || !ghost.trim()) {
+-    return <span className="text-slate-800 dark:text-slate-200">{text}</span>;
++    return null;
+   }
+ 
+   return (
+     <>
+-      <span className="text-slate-800 dark:text-slate-200">{text}</span>
++      <span className="opacity-0">{text}</span>
+       <span className="clyra-prompt-ghost" aria-hidden="true">
+         {" "}
+         {ghost}
+@@ -300,7 +328,7 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, TextareaProps>(
+             "disabled:cursor-not-allowed disabled:opacity-50",
+             "focus-visible:outline-none focus:ring-0 focus-visible:ring-offset-0",
+             className,
+-            highlightOverlay ? "text-transparent caret-slate-800" : "text-slate-800"
++            "text-slate-800"
+           )}
+           value={value}
+           ref={ref}
+@@ -458,7 +486,7 @@ export default function App() {
+   const [introState, setIntroState] = useState<IntroState>("booting");
+   const [introProgressText, setIntroProgressText] = useState("INITIALIZING");
+   const [progressDuration] = useState(() => 3 + Math.random() * 3);
+-  
++
+   useEffect(() => {
+     if (introState === "complete") {
+       return;
+@@ -469,9 +497,9 @@ export default function App() {
+       return;
+     }
+ 
+-    const t1 = setTimeout(() => setIntroState("orb_up"), 10); 
+-    const t2 = setTimeout(() => setIntroState("input_circle"), 1600); 
+-    const t3 = setTimeout(() => setIntroState("input_expand"), 1980); 
++    const t1 = setTimeout(() => setIntroState("orb_up"), 10);
++    const t2 = setTimeout(() => setIntroState("input_circle"), 1600);
++    const t3 = setTimeout(() => setIntroState("input_expand"), 1980);
+     const t4 = setTimeout(() => {
+       setIntroState("complete");
+       setIsSidebarOpen(true);
+@@ -513,7 +541,10 @@ export default function App() {
+     minHeight: 40,
+     maxHeight: 292,
+   });
++  const pendingDocumentRewriteRef = useRef<DocumentRewriteRequest | null>(null);
+   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
++  const [isRephrasingMode, setIsRephrasingMode] = useState(false);
++  const [rewritePhase, setRewritePhase] = useState<"ready" | "applying">("ready");
+   const [isProjectsOpen, setIsProjectsOpen] = useState(false);
+   const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+   const [isSearching, setIsSearching] = useState(false);
+@@ -1673,7 +1704,63 @@ Please analyze the code you just wrote and fix this error.`;
+   );
+ 
+   const handleSendMessage = async () => {
++    if (!value.trim() && attachments.length === 0) return;
++
+     if (value.trim() || selectedCommand) {
++      const pendingRewrite = pendingDocumentRewriteRef.current;
++      if (pendingRewrite && value.trim()) {
++        const instruction = value.trim();
++        pendingDocumentRewriteRef.current = null;
++        setRewritePhase("applying");
++        setSelectedCommand(null);
++        setActiveSkeletonText(null);
++        setValue("");
++        adjustHeight(true);
++        setToastMessage(
++          pendingRewrite.mode === "fix"
++            ? "Fixing selected text..."
++            : "Rephrasing selected text...",
++        );
++
++        try {
++          let replacement = "";
++          await streamOpenAI(
++            pendingRewrite.mode === "fix"
++              ? "Fix spelling, grammar, punctuation, and clarity. Preserve the meaning and formatting intent. Return only the corrected replacement text."
++              : "Rewrite the selected text according to the user's instruction. Preserve meaning unless the instruction asks otherwise. Return only the replacement text.",
++            [
++              {
++                role: "user",
++                content: `Selected text:\n${pendingRewrite.selectedText}\n\nInstruction:\n${instruction}`,
++              },
++            ],
++            (chunkText, isReasoning) => {
++              if (!isReasoning) replacement += chunkText;
++            },
++            0.35,
++            700,
++            "deepseek-chat",
++          );
++
++          const cleanedReplacement = replacement
++            .trim()
++            .replace(/^["'`]+|["'`]+$/g, "");
++          pendingRewrite.applyReplacement(
++            cleanedReplacement || pendingRewrite.selectedText,
++          );
++          setIsRephrasingMode(false);
++          setRewritePhase("ready");
++          setToastMessage("Selected text updated");
++        } catch (error) {
++          console.warn("Document rewrite failed:", error);
++          pendingRewrite.applyReplacement(pendingRewrite.selectedText);
++          setIsRephrasingMode(false);
++          setRewritePhase("ready");
++          setToastMessage("Rewrite unavailable, kept original text");
++        }
++        return;
++      }
++
+       setVibePreviewMessageId(null);
+       setVibePreviewFiles(null);
+       const userCommandLabel =
+@@ -2105,12 +2192,55 @@ Please analyze the code you just wrote and fix this error.`;
+ 
+   const [activeSkeletonText, setActiveSkeletonText] = useState<string | null>(null);
+   const [isFadingInText, setIsFadingInText] = useState(false);
++  const typingCorrection = useMemo(() => getTypingCorrection(value), [value]);
++
++  const applyTypingCorrection = useCallback(() => {
++    if (!typingCorrection) return;
++    setValue((current) => {
++      const match = current.match(/([\s\S]*?)([A-Za-z']{2,})$/);
++      if (!match) return current;
++      return `${match[1]}${typingCorrection.correction}`;
++    });
++    window.requestAnimationFrame(() => {
++      textareaRef.current?.focus();
++      adjustHeight();
++    });
++  }, [adjustHeight, textareaRef, typingCorrection]);
++
++  const handleDocumentRewriteRequest = useCallback(
++    (request: DocumentRewriteRequest) => {
++      pendingDocumentRewriteRef.current = request;
++      setIsRephrasingMode(true);
++      setRewritePhase("ready");
++      setActiveWorkspaceTab("chat");
++      setSelectedCommand(null);
++      setShowCommandPalette(false);
++      setIsInputExpanded(true);
++      setIsFadingInText(true);
++      setValue("");
++      setActiveSkeletonText(
++        request.mode === "fix"
++          ? "[keep the same meaning, make it clean]"
++          : "[make it clearer, shorter, warmer...]",
++      );
++      window.setTimeout(() => {
++        textareaRef.current?.focus();
++        textareaRef.current?.setSelectionRange(
++          textareaRef.current.value.length,
++          textareaRef.current.value.length,
++        );
++        adjustHeight();
++        setIsFadingInText(false);
++      }, 140);
++    },
++    [adjustHeight, textareaRef],
++  );
+ 
+   const applyQuickPrompt = (prompt: string, skeleton?: string) => {
+     setActiveWorkspaceTab("chat");
+     setSelectedCommand(null);
+     setIsInputExpanded(true);
+-    
++
+     setIsFadingInText(true);
+     setValue(prompt);
+     if (skeleton) {
+@@ -2118,7 +2248,7 @@ Please analyze the code you just wrote and fix this error.`;
+     } else {
+       setActiveSkeletonText(null);
+     }
+-    
++
+     window.setTimeout(() => {
+       textareaRef.current?.focus();
+       textareaRef.current?.setSelectionRange(prompt.length, prompt.length);
+@@ -2213,7 +2343,7 @@ Please analyze the code you just wrote and fix this error.`;
+           }}
+         />
+       )}
+-      <motion.div 
++      <motion.div
+         className="clyra-app-shell h-dvh flex min-w-0 bg-white text-slate-900 font-sans selection:bg-slate-200 overflow-hidden scalable-container relative"
+         initial={{ opacity: 0, scale: 0.97, filter: "blur(12px)", y: 12 }}
+         animate={{ opacity: 1, scale: 1, filter: "blur(0px)", y: 0 }}
+@@ -2691,7 +2821,7 @@ Please analyze the code you just wrote and fix this error.`;
+             )}
+           </AnimatePresence>
+           <div className="relative z-[90] h-[52px] w-full shrink-0">
+-            <motion.div 
++            <motion.div
+               className="absolute left-1/2 top-5 sm:top-6 -translate-x-1/2 z-50"
+               initial={introState !== "complete" ? { y: -50 } : false}
+               animate={{ y: introState === "complete" ? 0 : -50 }}
+@@ -2724,15 +2854,15 @@ Please analyze the code you just wrote and fix this error.`;
+                     initial={{ opacity: 0, scale: 0.85 }}
+                     animate={{ opacity: 1, scale: 1 }}
+                     exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.15 } }}
+-                    style={{ 
++                    style={{
+                       x: hoverPillX,
+                       width: 101,
+                       top: 6,
+                       bottom: 6,
+                       height: "auto",
+                       translate: "none",
+-                      scaleX: hoverScaleX, 
+-                      transformOrigin: hoverOrigin as any 
++                      scaleX: hoverScaleX,
++                      transformOrigin: hoverOrigin as any
+                     }}
+                     transition={{
+                       type: "spring",
+@@ -2803,15 +2933,15 @@ Please analyze the code you just wrote and fix this error.`;
+ 	            >
+                   {bgAnimEnabled && (
+                     <div className="pointer-events-none absolute inset-[-20%] z-0 overflow-hidden clyra-fluid-bg-container">
+-                      <div 
++                      <div
+                         className="clyra-fluid-blob clyra-fluid-blob-1"
+                         style={{ backgroundColor: bgAnimColor }}
+                       />
+-                      <div 
++                      <div
+                         className="clyra-fluid-blob clyra-fluid-blob-2"
+                         style={{ backgroundColor: bgAnimColor }}
+                       />
+-                      <div 
++                      <div
+                         className="clyra-fluid-blob clyra-fluid-blob-3"
+                         style={{ backgroundColor: bgAnimColor }}
+                       />
+@@ -2917,8 +3047,8 @@ Please analyze the code you just wrote and fix this error.`;
+                           animate={introState !== "booting" ? { y: 0, opacity: 1 } : { y: 44, opacity: 0 }}
+                           transition={{
+                             type: "tween",
+-                            ease: [0.16, 1, 0.24, 1],
+-                            duration: 1.02,
++                            ease: [0.12, 0.78, 0.18, 1],
++                            duration: 1.26,
+                           }}
+                         >
+                           <AiOrb
+@@ -2945,9 +3075,9 @@ Please analyze the code you just wrote and fix this error.`;
+ 	                        >
+ 	                          <motion.p
+ 	                            className="text-slate-500 text-sm sm:text-base font-medium font-sans z-10 relative"
+-                            animate={{ 
+-                              opacity: introState === "complete" ? 1 : 0, 
+-                              y: introState === "complete" ? 0 : 14, 
++                            animate={{
++                              opacity: introState === "complete" ? 1 : 0,
++                              y: introState === "complete" ? 0 : 14,
+                             }}
+                             transition={{
+                               duration: 0.72,
+@@ -2956,7 +3086,7 @@ Please analyze the code you just wrote and fix this error.`;
+                           >
+                             {emptyStateSubtitle}
+                           </motion.p>
+-                          
++
+                           {!isVibeWorkspace && (
+ 	                            <motion.div
+ 	                              className="clyra-chat-quick-actions mt-4"
+@@ -3002,7 +3132,7 @@ Please analyze the code you just wrote and fix this error.`;
+                     ) : (
+                       <div className={cn("relative flex min-h-0 flex-1 w-full overflow-hidden z-0 max-w-3xl mx-auto", showWorkspaceLivePreview ? "px-3 sm:px-4 pt-3 sm:pt-4" : "px-5 sm:px-8 pt-3 sm:pt-4")}>
+                         <div
+-                          className={cn("flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden scrollbar-none transition-opacity duration-700", introState === "complete" ? "opacity-100" : "opacity-0")}
++                          className={cn("clyra-visible-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto overflow-x-hidden transition-opacity duration-700", introState === "complete" ? "opacity-100" : "opacity-0")}
+                           id="chat-container"
+                         >
+                         {messages.map((message) => {
+@@ -3092,6 +3222,9 @@ Please analyze the code you just wrote and fix this error.`;
+                                       onVibePreviewReady={
+                                         handleVibePreviewReady
+                                       }
++                                      onDocumentRewriteRequest={
++                                        handleDocumentRewriteRequest
++                                      }
+                                     />
+                                   </div>
+                                 </div>
+@@ -3162,12 +3295,12 @@ Please analyze the code you just wrote and fix this error.`;
+                       </AnimatePresence>
+                       <motion.div
+                         className={cn(
+-                          "input-wrapper relative backdrop-blur-xl border transition-[background-color,border-color,padding] duration-300 cursor-text overflow-hidden mx-auto z-[3]",
++                          "input-wrapper relative backdrop-blur-xl border transition-[background-color,border-color,padding,box-shadow] duration-300 cursor-text overflow-visible mx-auto z-[3]",
+                           theme === "Dark" ? "bg-slate-200/90 border-slate-400/50" : "bg-white/80 border-slate-200/60",
+                           isExpanded ? "p-2 sm:p-3" : "p-1.5 sm:p-2"
+                         )}
+                         initial={isWorkspaceSwitching ? false : introState !== "complete" ? { width: 48, height: 48, borderRadius: 24, opacity: 0, y: 20 } : false}
+-                        animate={{ 
++                        animate={{
+                           width: (introState === "booting" || introState === "orb_up" || introState === "input_circle") ? 48 : "100%",
+                           height: (introState === "booting" || introState === "orb_up" || introState === "input_circle") ? 48 : "auto",
+                           borderRadius: (introState === "booting" || introState === "orb_up" || introState === "input_circle") ? 24 : (isExpanded ? 32 : 40),
+@@ -3176,12 +3309,40 @@ Please analyze the code you just wrote and fix this error.`;
+                         }}
+                         transition={{ type: "tween", ease: [0.22, 1, 0.36, 1], duration: 0.8 }}
+                       >
+-                        <motion.div 
++                        <motion.div
+                           className="relative z-10 w-full h-full"
+                           initial={{ opacity: 0 }}
+                           animate={{ opacity: (introState === "booting" || introState === "orb_up" || introState === "input_circle") ? 0 : 1 }}
+                           transition={{ duration: 0.6, ease: "easeOut" }}
+                         >
++                          <AnimatePresence>
++                            {isRephrasingMode && (
++                              <motion.div
++                                initial={{ opacity: 0, y: 10, scale: 0.96, filter: "blur(6px)" }}
++                                animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
++                                exit={{ opacity: 0, y: 8, scale: 0.96, filter: "blur(5px)" }}
++                                transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
++                                className="clyra-rewrite-chip absolute bottom-[calc(100%+10px)] left-4 z-20 flex items-center gap-2 rounded-full border border-slate-200/80 bg-white/95 px-3 py-1.5 text-[12px] font-semibold text-slate-600 shadow-[0_10px_26px_rgba(15,23,42,0.08)] pointer-events-auto"
++                              >
++                                <span className="clyra-rewrite-chip-dot h-1.5 w-1.5 rounded-full bg-slate-900 shadow-[0_0_0_4px_rgba(15,23,42,0.08)]" />
++                                {rewritePhase === "applying" ? "Rephrasing text" : "Rephrase highlighted text"}
++                                <button
++                                  onClick={(e) => {
++                                    e.stopPropagation();
++                                    pendingDocumentRewriteRef.current = null;
++                                    setIsRephrasingMode(false);
++                                    setRewritePhase("ready");
++                                    setValue("");
++                                  }}
++                                  className="ml-0.5 rounded-full p-0.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
++                                  aria-label="Cancel rephrasing"
++                                >
++                                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
++                                </button>
++                              </motion.div>
++                            )}
++                          </AnimatePresence>
++
+                           <AnimatePresence>
+                             {commandPaletteEnabled && showCommandPalette && (
+                               <motion.div
+@@ -3277,6 +3438,34 @@ Please analyze the code you just wrote and fix this error.`;
+                             )}
+                           </AnimatePresence>
+ 
++                          <AnimatePresence>
++                            {typingCorrection && (
++                              <motion.div
++                                className="clyra-writing-suggestions"
++                                initial={{ opacity: 0, y: 10, scale: 0.98 }}
++                                animate={{ opacity: 1, y: 0, scale: 1 }}
++                                exit={{ opacity: 0, y: 10, scale: 0.98 }}
++                                transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
++                              >
++                                <span>Suggestion</span>
++                                <button
++                                  type="button"
++                                  onPointerDown={(event) => {
++                                    event.preventDefault();
++                                    applyTypingCorrection();
++                                  }}
++                                  onMouseDown={(event) => {
++                                    event.preventDefault();
++                                    applyTypingCorrection();
++                                  }}
++                                  onClick={applyTypingCorrection}
++                                >
++                                  {typingCorrection.correction}
++                                </button>
++                              </motion.div>
++                            )}
++                          </AnimatePresence>
++
+                           <div className={cn(
+                             isExpanded ? "px-3 py-1" : "flex items-center gap-1 px-2 py-0.5"
+                           )}>
+@@ -3304,7 +3493,7 @@ Please analyze the code you just wrote and fix this error.`;
+                               ref={textareaRef}
+                               rows={1}
+                               value={value}
+-                              highlightOverlay={activeSkeletonText}
++                              highlightOverlay={isRephrasingMode ? "" : activeSkeletonText}
+                               onChange={(e) => {
+                                 setValue(e.target.value);
+                                 if (activeSkeletonText && !e.target.value.includes(activeSkeletonText)) {
+@@ -3319,7 +3508,12 @@ Please analyze the code you just wrote and fix this error.`;
+                                 }
+                                 adjustHeight();
+                               }}
+-                              placeholder={inputPlaceholder}
++                              spellCheck
++                              placeholder={
++                                isRephrasingMode
++                                  ? "Tell Clyra how to change the highlighted text..."
++                                  : inputPlaceholder
++                              }
+                               containerClassName="w-full"
+                               className={cn(
+                                 "resize-none overflow-y-auto overflow-x-hidden bg-transparent outline-none disabled:opacity-50",
+@@ -3328,7 +3522,7 @@ Please analyze the code you just wrote and fix this error.`;
+                                 isExpanded
+                                   ? "min-h-[50px] max-h-[35vh] py-3 px-1"
+                                   : "min-h-[40px] max-h-[35vh] py-2 px-1",
+-                                "scrollbar-none transition-[min-height,max-height,padding,opacity,transform] duration-[400ms] ease-[cubic-bezier(0.16,1,0.3,1)]",
++                                "clyra-visible-scrollbar transition-[min-height,max-height,padding,opacity,transform] duration-[400ms] ease-[cubic-bezier(0.16,1,0.3,1)]",
+                                 isFadingInText ? "opacity-0 translate-y-1 scale-[0.99]" : (introState !== "complete" ? "opacity-0 translate-y-2 scale-[0.98]" : "opacity-100 translate-y-0 scale-100")
+                               )}
+                               style={{ maxHeight: "16.25em" }}
+@@ -3392,7 +3586,7 @@ Please analyze the code you just wrote and fix this error.`;
+                           <div
+                                 className={cn(
+                                   "flex items-center justify-between p-2 pt-0",
+-                                  
++
+                                 )}
+                               >
+                                 <div className="flex items-center gap-1 sm:gap-2">
+@@ -3592,7 +3786,7 @@ Please analyze the code you just wrote and fix this error.`;
+           </AnimatePresence>
+         </div>
+       </motion.div>
+-      
++
+       <ChatSearchModal
+         isOpen={isSearchModalOpen}
+         onClose={() => setIsSearchModalOpen(false)}
+diff --git a/src/components/ui/document-card.tsx b/src/components/ui/document-card.tsx
+index d1035a4..d661d76 100644
+--- a/src/components/ui/document-card.tsx
++++ b/src/components/ui/document-card.tsx
+@@ -17,6 +17,7 @@ import {
+   ListOrdered,
+   Mail,
+   Palette,
++  Paperclip,
+   Redo2,
+   Send,
+   Strikethrough,
+@@ -25,7 +26,26 @@ import {
+   Undo2,
+ } from "lucide-react";
+ import { cn } from "@/lib/utils";
+-import { ShiningText } from "../ShiningText";
++
++// Fast local dictionary for autocomplete suggestions
++const DICTIONARY = [
++  "communication", "communicate", "community", "professional", "proposal",
++  "project", "product", "priority", "development", "design", "deadline",
++  "experience", "management", "meeting", "marketing", "milestone",
++  "opportunity", "outcome", "information", "important", "implementation",
++  "understanding", "performance", "significant", "organization",
++  "technology", "environment", "application", "requirements", "successful",
++  "appreciate", "attached", "available", "review", "strategy", "schedule",
++  "sincerely", "regards", "thanks", "follow", "feedback",
++];
++
++export type DocumentRewriteMode = "rephrase" | "fix";
++
++export interface DocumentRewriteRequest {
++  mode: DocumentRewriteMode;
++  selectedText: string;
++  applyReplacement: (replacement: string) => void;
++}
+ 
+ type EditorCommand =
+   | "bold"
+@@ -48,8 +68,11 @@ interface DocumentCardUIProps {
+   isStreaming?: boolean;
+   className?: string;
+   isEmail?: boolean;
++  onRewriteRequest?: (request: DocumentRewriteRequest) => void;
+ }
+ 
++type ToolTab = "write" | "style" | "layout";
++
+ function cleanDocumentText(text: string): string {
+   return text
+     .replace(/\r\n/g, "\n")
+@@ -104,6 +127,54 @@ function normaliseEditorText(text: string): string {
+   );
+ }
+ 
++function getEditableTextTarget(editor: HTMLElement, node: Node | null, offset: number) {
++  if (node?.nodeType === Node.TEXT_NODE) {
++    return { node: node as Text, offset };
++  }
++
++  const searchRoot =
++    node && editor.contains(node) && node.nodeType === Node.ELEMENT_NODE
++      ? ((node as Element).childNodes[Math.max(0, offset - 1)] as Node | undefined) ||
++        node
++      : editor;
++  if (searchRoot.nodeType === Node.TEXT_NODE) {
++    const textNode = searchRoot as Text;
++    return {
++      node: textNode,
++      offset: textNode.textContent?.length ?? 0,
++    };
++  }
++  const walker = document.createTreeWalker(searchRoot, NodeFilter.SHOW_TEXT);
++  let current: Text | null = null;
++  let lastText: Text | null = null;
++  while ((current = walker.nextNode() as Text | null)) {
++    if ((current.textContent ?? "").length > 0) lastText = current;
++  }
++  if (!lastText) return null;
++  return {
++    node: lastText,
++    offset: lastText.textContent?.length ?? 0,
++  };
++}
++
++function getCaretRect(range: Range) {
++  const directRect = range.getBoundingClientRect();
++  if (directRect.width || directRect.height) return directRect;
++
++  const marker = document.createElement("span");
++  marker.textContent = "\u200b";
++  marker.style.display = "inline-block";
++  marker.style.width = "1px";
++  marker.style.height = "1em";
++
++  const probeRange = range.cloneRange();
++  probeRange.collapse(true);
++  probeRange.insertNode(marker);
++  const markerRect = marker.getBoundingClientRect();
++  marker.remove();
++  return markerRect;
++}
++
+ function parseDocumentContent(content: string, isEmail?: boolean) {
+   let subject = "";
+   let bodyContent = content;
+@@ -150,20 +221,18 @@ function DocumentPreparingState({ isEmail }: { isEmail?: boolean }) {
+   return (
+     <motion.div
+       key="preparing"
+-      initial={{ opacity: 0, y: 10, scale: 0.985 }}
+-      animate={{ opacity: 1, y: 0, scale: 1 }}
+-      exit={{ opacity: 0, y: -6, scale: 0.99 }}
+-      transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+-      className="clyra-doc-preparing"
++      initial={{ opacity: 0, y: 15, filter: "blur(4px)" }}
++      animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
++      exit={{ opacity: 0, y: -10, filter: "blur(2px)" }}
++      transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
++      className="clyra-doc-preparing flex items-center gap-2.5"
+     >
+-      <span className="clyra-doc-preparing-icon">
++      <span className="clyra-doc-preparing-icon bg-slate-100 text-slate-500 rounded-lg p-1.5 shadow-sm border border-slate-200">
+         <Icon className="h-4 w-4" />
+       </span>
+-      <ShiningText
+-        text={isEmail ? "Preparing email" : "Preparing notes"}
+-        preset="thinkingChat"
+-        className="text-[13.5px] font-medium"
+-      />
++      <span className="clyra-doc-shimmer-text">
++        {isEmail ? "Preparing email" : "Preparing notes"}
++      </span>
+     </motion.div>
+   );
+ }
+@@ -173,9 +242,15 @@ export function DocumentCardUI({
+   isStreaming,
+   className,
+   isEmail,
++  onRewriteRequest,
+ }: DocumentCardUIProps) {
+   const dropdownRef = React.useRef<HTMLDivElement>(null);
+   const editorRef = React.useRef<HTMLDivElement>(null);
++  const cardRef = React.useRef<HTMLDivElement>(null);
++  const savedRangeRef = React.useRef<Range | null>(null);
++  const lastNonCollapsedRangeRef = React.useRef<Range | null>(null);
++  const lastSelectedTextRef = React.useRef("");
++  const rewriteMarkerIdRef = React.useRef<string | null>(null);
+   const parsed = React.useMemo(
+     () => parseDocumentContent(content, isEmail),
+     [content, isEmail],
+@@ -185,21 +260,89 @@ export function DocumentCardUI({
+   const [isEditing, setIsEditing] = React.useState(!isEmail && !isStreaming);
+   const [subject, setSubject] = React.useState(parsed.subject);
+   const [documentText, setDocumentText] = React.useState(parsed.body);
+-  const [editorHtml, setEditorHtml] = React.useState(() =>
+-    textToEditorHtml(parsed.body),
+-  );
++  const initialHtmlRef = React.useRef(textToEditorHtml(parsed.body));
+   const [fontFamily, setFontFamily] = React.useState("Inter");
+   const [fontSize, setFontSize] = React.useState("3");
+-  const [fontSizePx, setFontSizePx] = React.useState(16);
+   const [blockStyle, setBlockStyle] = React.useState("P");
+   const [textColour, setTextColour] = React.useState("#1e293b");
+   const [highlightColour, setHighlightColour] = React.useState("#ffffff");
++  const attachmentInputRef = React.useRef<HTMLInputElement>(null);
++  const [documentAttachments, setDocumentAttachments] = React.useState<string[]>([]);
++  const [activeToolTab, setActiveToolTab] = React.useState<ToolTab>("write");
++  const [contextMenu, setContextMenu] = React.useState<{
++    x: number;
++    y: number;
++    text: string;
++  } | null>(null);
++
++  const [autocomplete, setAutocomplete] = React.useState<{
++    suggestion: string;
++    prefix: string;
++    x: number;
++    y: number;
++  } | null>(null);
++
++  const setEditorElement = React.useCallback((node: HTMLDivElement | null) => {
++    editorRef.current = node;
++    if (node && node.innerHTML !== initialHtmlRef.current) {
++      node.innerHTML = initialHtmlRef.current;
++    }
++  }, []);
++
++  // Autocomplete Engine
++  const handleAutocompleteCheck = React.useCallback(() => {
++    const selection = window.getSelection();
++    if (!selection || selection.rangeCount === 0) return;
++
++    const editor = editorRef.current;
++    const target = editor
++      ? getEditableTextTarget(editor, selection.focusNode, selection.focusOffset)
++      : null;
++    if (!target) {
++      setAutocomplete(null);
++      return;
++    }
++
++    const text = target.node.textContent || "";
++    const offset = target.offset;
++
++    // Grab the last word typed before cursor
++    const textBeforeCursor = text.slice(0, offset);
++    const match = textBeforeCursor.match(/([a-zA-Z]+)$/);
++
++    if (match) {
++      const prefix = match[1];
++      if (prefix.length >= 1) {
++        const suggestion = DICTIONARY.find(word => word.toLowerCase().startsWith(prefix.toLowerCase()) && word.length > prefix.length);
++        if (suggestion) {
++          // Calculate caret coordinates
++          const range = selection.getRangeAt(0).cloneRange();
++          range.collapse(true);
++          const rect = getCaretRect(range);
++          const cardRect = cardRef.current?.getBoundingClientRect();
++
++          if (cardRect) {
++            setAutocomplete({
++              suggestion,
++              prefix,
++              x: rect.left - cardRect.left,
++              y: Math.max(8, rect.top - cardRect.top - 42), // float above cursor
++            });
++            return;
++          }
++        }
++      }
++    }
++    setAutocomplete(null);
++  }, []);
++
++
+ 
+   React.useEffect(() => {
+     if (isEditing) return;
+     setSubject(parsed.subject);
+     setDocumentText(parsed.body);
+-    setEditorHtml(textToEditorHtml(parsed.body));
++    initialHtmlRef.current = textToEditorHtml(parsed.body);
+   }, [isEditing, parsed.body, parsed.subject]);
+ 
+   React.useEffect(() => {
+@@ -216,11 +359,96 @@ export function DocumentCardUI({
+       ) {
+         setShowDropdown(false);
+       }
++      if (
++        contextMenu &&
++        cardRef.current &&
++        !cardRef.current.contains(event.target as Node)
++      ) {
++        setContextMenu(null);
++      }
+     }
+     document.addEventListener("mousedown", handleClickOutside);
+     return () => document.removeEventListener("mousedown", handleClickOutside);
++  }, [contextMenu]);
++
++  const saveSelection = React.useCallback(() => {
++    const editor = editorRef.current;
++    const selection = window.getSelection();
++    if (!editor || !selection || selection.rangeCount === 0) return;
++
++    const range = selection.getRangeAt(0);
++    if (editor.contains(range.commonAncestorContainer)) {
++      savedRangeRef.current = range.cloneRange();
++      if (!range.collapsed) {
++        lastNonCollapsedRangeRef.current = range.cloneRange();
++        lastSelectedTextRef.current = selection.toString();
++      }
++    }
+   }, []);
+ 
++  React.useEffect(() => {
++    if (!isEditing) return;
++
++    const handleSelectionChange = () => {
++      saveSelection();
++    };
++
++    document.addEventListener("selectionchange", handleSelectionChange);
++    return () => document.removeEventListener("selectionchange", handleSelectionChange);
++  }, [isEditing, saveSelection]);
++
++  const restoreSelection = React.useCallback(() => {
++    const editor = editorRef.current;
++    const selection = window.getSelection();
++    const savedRange = savedRangeRef.current;
++    if (!editor || !selection || !savedRange) return false;
++
++    selection.removeAllRanges();
++    selection.addRange(savedRange);
++    editor.focus({ preventScroll: true });
++    return true;
++  }, []);
++
++  const syncEditorState = React.useCallback(() => {
++    const editor = editorRef.current;
++    if (!editor) return;
++    initialHtmlRef.current = editor.innerHTML;
++    saveSelection();
++  }, [saveSelection]);
++
++  const acceptAutocomplete = React.useCallback((e: React.KeyboardEvent) => {
++    if (autocomplete && e.key === "Tab") {
++      e.preventDefault();
++      const editor = editorRef.current;
++      const selection = window.getSelection();
++      if (!editor || !selection || selection.rangeCount === 0) return;
++
++      const target = getEditableTextTarget(editor, selection.focusNode, selection.focusOffset);
++      if (!target) return;
++
++      const node = target.node;
++      const text = node.textContent || "";
++      const offset = target.offset;
++
++      // Calculate what to inject
++      const remainder = autocomplete.suggestion.slice(autocomplete.prefix.length);
++
++      // Update the text node directly
++      const newText = text.slice(0, offset) + remainder + " " + text.slice(offset);
++      node.textContent = newText;
++
++      // Move cursor to after injected word
++      const newRange = document.createRange();
++      newRange.setStart(node, offset + remainder.length + 1);
++      newRange.collapse(true);
++      selection.removeAllRanges();
++      selection.addRange(newRange);
++
++      setAutocomplete(null);
++      syncEditorState();
++    }
++  }, [autocomplete, syncEditorState]);
++
+   const readPlainText = React.useCallback(() => {
+     if (editorRef.current) {
+       return normaliseEditorText(editorRef.current.innerText);
+@@ -228,16 +456,20 @@ export function DocumentCardUI({
+     return documentText;
+   }, [documentText]);
+ 
++  const readHtml = React.useCallback(() => {
++    return editorRef.current?.innerHTML ?? initialHtmlRef.current;
++  }, []);
++
+   const handleToggleEditing = React.useCallback(() => {
+     if (isEditing) {
+       const nextText = readPlainText();
+       setDocumentText(nextText);
+-      setEditorHtml(editorRef.current?.innerHTML ?? textToEditorHtml(nextText));
++      initialHtmlRef.current = editorRef.current?.innerHTML ?? textToEditorHtml(nextText);
+       setIsEditing(false);
+       return;
+     }
+ 
+-    setEditorHtml(textToEditorHtml(documentText));
++    initialHtmlRef.current = textToEditorHtml(documentText);
+     setIsEditing(true);
+   }, [documentText, isEditing, readPlainText]);
+ 
+@@ -245,12 +477,105 @@ export function DocumentCardUI({
+     (command: EditorCommand, value?: string) => {
+       setIsEditing(true);
+       window.requestAnimationFrame(() => {
+-        editorRef.current?.focus();
++        const restored = restoreSelection();
++        if (!restored && editorRef.current) {
++          const range = document.createRange();
++          range.selectNodeContents(editorRef.current);
++          const selection = window.getSelection();
++          selection?.removeAllRanges();
++          selection?.addRange(range);
++          savedRangeRef.current = range.cloneRange();
++          lastNonCollapsedRangeRef.current = range.cloneRange();
++          lastSelectedTextRef.current = editorRef.current.innerText;
++        }
+         document.execCommand(command, false, value);
+-        setEditorHtml(editorRef.current?.innerHTML ?? editorHtml);
++        syncEditorState();
+       });
+     },
+-    [editorHtml],
++    [restoreSelection, syncEditorState],
++  );
++
++  const wrapSavedRangeWithStyle = React.useCallback(
++    (styles: Partial<CSSStyleDeclaration>) => {
++      const editor = editorRef.current;
++      if (!editor) return false;
++
++      let range = lastNonCollapsedRangeRef.current ?? savedRangeRef.current;
++      const selectedText = lastSelectedTextRef.current.trim();
++      const applyToEditorContents = () => {
++        Array.from(editor.childNodes).forEach((node) => {
++          if (node.nodeType === Node.ELEMENT_NODE) {
++            Object.assign((node as HTMLElement).style, styles);
++            return;
++          }
++          if ((node.textContent ?? "").trim()) {
++            const wrapper = document.createElement("span");
++            Object.assign(wrapper.style, styles);
++            wrapper.textContent = node.textContent ?? "";
++            node.replaceWith(wrapper);
++          }
++        });
++        const fullRange = document.createRange();
++        fullRange.selectNodeContents(editor);
++        const selection = window.getSelection();
++        selection?.removeAllRanges();
++        selection?.addRange(fullRange);
++        savedRangeRef.current = fullRange.cloneRange();
++        lastNonCollapsedRangeRef.current = fullRange.cloneRange();
++        lastSelectedTextRef.current = editor.innerText;
++        syncEditorState();
++        return true;
++      };
++
++      if ((!range || range.collapsed || !editor.contains(range.commonAncestorContainer)) && selectedText) {
++        const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
++        let current: Text | null = null;
++        while ((current = walker.nextNode() as Text | null)) {
++          const index = (current.textContent ?? "").indexOf(selectedText);
++          if (index >= 0) {
++            const recoveredRange = document.createRange();
++            recoveredRange.setStart(current, index);
++            recoveredRange.setEnd(current, index + selectedText.length);
++            range = recoveredRange;
++            break;
++          }
++        }
++      }
++
++      if (!range || range.collapsed) return applyToEditorContents();
++
++      const commonAncestor = range.commonAncestorContainer;
++      if (!editor.contains(commonAncestor)) return applyToEditorContents();
++
++      const selectedNormalised = normaliseEditorText(selectedText || range.cloneContents().textContent || "");
++      const editorNormalised = normaliseEditorText(editor.innerText);
++      if (selectedNormalised && selectedNormalised === editorNormalised) {
++        return applyToEditorContents();
++      }
++
++      const wrapper = document.createElement("span");
++      Object.assign(wrapper.style, styles);
++
++      try {
++        const contents = range.extractContents();
++        wrapper.appendChild(contents);
++        range.insertNode(wrapper);
++
++        const selection = window.getSelection();
++        const nextRange = document.createRange();
++        nextRange.selectNodeContents(wrapper);
++        selection?.removeAllRanges();
++        selection?.addRange(nextRange);
++        savedRangeRef.current = nextRange.cloneRange();
++        lastNonCollapsedRangeRef.current = nextRange.cloneRange();
++        lastSelectedTextRef.current = wrapper.textContent ?? "";
++        syncEditorState();
++        return true;
++      } catch {
++        return false;
++      }
++    },
++    [syncEditorState],
+   );
+ 
+   const runValueCommand = React.useCallback(
+@@ -260,47 +585,255 @@ export function DocumentCardUI({
+     ) => {
+       setIsEditing(true);
+       window.requestAnimationFrame(() => {
+-        editorRef.current?.focus();
++        if (command === "fontName" && wrapSavedRangeWithStyle({ fontFamily: value })) return;
++        if (command === "foreColor" && wrapSavedRangeWithStyle({ color: value })) return;
++        if (command === "hiliteColor" && wrapSavedRangeWithStyle({ backgroundColor: value })) return;
++        if (command === "fontSize") {
++          const pxByCommandSize: Record<string, string> = {
++            "2": "13px",
++            "3": "16px",
++            "4": "20px",
++            "5": "28px",
++          };
++          if (wrapSavedRangeWithStyle({ fontSize: pxByCommandSize[value] ?? "16px" })) return;
++        }
++        restoreSelection();
+         const didApply = document.execCommand(command, false, value);
+         if (!didApply && command === "hiliteColor") {
+           document.execCommand("backColor", false, value);
+         }
+-        setEditorHtml(editorRef.current?.innerHTML ?? editorHtml);
++        syncEditorState();
+       });
+     },
+-    [editorHtml],
++    [restoreSelection, syncEditorState, wrapSavedRangeWithStyle],
++  );
++
++  const handleToolPointerDown = React.useCallback(
++    (event: React.MouseEvent | React.PointerEvent) => {
++      event.preventDefault();
++      saveSelection();
++    },
++    [saveSelection],
+   );
+ 
+-  const applyPixelFontSize = React.useCallback(
+-    (value: number) => {
+-      const nextSize = Math.max(8, Math.min(72, Math.round(value || 16)));
+-      setFontSizePx(nextSize);
++  const applyNamedFontSize = React.useCallback(
++    (value: string) => {
++      setFontSize(value);
++      runValueCommand("fontSize", value);
++    },
++    [runValueCommand],
++  );
++
++  const replaceSavedSelection = React.useCallback(
++    (replacement: string) => {
+       setIsEditing(true);
+       window.requestAnimationFrame(() => {
+-        editorRef.current?.focus();
+-        document.execCommand("fontSize", false, "7");
+-        editorRef.current?.querySelectorAll('font[size="7"]').forEach((font) => {
+-          const span = document.createElement("span");
+-          span.style.fontSize = `${nextSize}px`;
+-          while (font.firstChild) {
+-            span.appendChild(font.firstChild);
+-          }
+-          font.replaceWith(span);
++        const editor = editorRef.current;
++        if (!editor) return;
++        const markerId = rewriteMarkerIdRef.current;
++        const marker = markerId
++          ? editor.querySelector<HTMLElement>(`[data-clyra-rewrite-marker="${markerId}"]`)
++          : null;
++        const selection = window.getSelection();
++        const didRestore = marker ? false : restoreSelection();
++        const range = didRestore && selection?.rangeCount ? selection.getRangeAt(0) : null;
++        if (!marker && !range) return;
++
++        const lines = replacement.trim().split("\n");
++
++        const wrapper = document.createElement("span");
++        wrapper.className = "clyra-rephrase-result";
++
++        lines.forEach((line, index) => {
++          if (index > 0) wrapper.appendChild(document.createElement("br"));
++          wrapper.appendChild(document.createTextNode(line));
++        });
++
++        if (marker) {
++          marker.replaceWith(wrapper);
++        } else if (range) {
++          range.deleteContents();
++          range.insertNode(wrapper);
++        }
++
++        rewriteMarkerIdRef.current = null;
++
++        selection?.removeAllRanges();
++        const nextRange = document.createRange();
++        nextRange.setStartAfter(wrapper);
++        nextRange.collapse(true);
++        selection?.addRange(nextRange);
++        savedRangeRef.current = nextRange.cloneRange();
++        lastNonCollapsedRangeRef.current = null;
++        lastSelectedTextRef.current = "";
++
++        window.requestAnimationFrame(() => {
++          wrapper.classList.add("clyra-rephrase-result--settled");
++          window.setTimeout(() => {
++            const parent = wrapper.parentNode;
++            if (!parent) return;
++            while (wrapper.firstChild) {
++              parent.insertBefore(wrapper.firstChild, wrapper);
++            }
++            parent.removeChild(wrapper);
++            syncEditorState();
++          }, 1350);
+         });
+-        setEditorHtml(editorRef.current?.innerHTML ?? editorHtml);
++        syncEditorState();
+       });
+     },
+-    [editorHtml],
++    [restoreSelection, syncEditorState],
+   );
+ 
+-  const handleCopy = async () => {
++  const handleContextMenu = React.useCallback(
++    (event: React.MouseEvent<HTMLDivElement>) => {
++      saveSelection();
++      const liveSelectionText = window.getSelection()?.toString().trim() ?? "";
++      const storedSelectionText =
++        lastNonCollapsedRangeRef.current?.cloneContents().textContent?.trim() ?? "";
++      const selectionText = liveSelectionText || storedSelectionText;
++      if (!selectionText) return;
++      event.preventDefault();
++
++      const cardRect = cardRef.current?.getBoundingClientRect();
++      setContextMenu({
++        x: event.clientX - (cardRect?.left ?? 0),
++        y: event.clientY - (cardRect?.top ?? 0),
++        text: selectionText,
++      });
++    },
++    [saveSelection],
++  );
++
++  const requestRewrite = React.useCallback(
++    (mode: DocumentRewriteMode) => {
++      if (!contextMenu) return;
++      const selectedText = contextMenu.text;
++      setContextMenu(null);
++
++      const editor = editorRef.current;
++      const selection = window.getSelection();
++      const selectedRange = lastNonCollapsedRangeRef.current ?? savedRangeRef.current;
++
++      const markEditorContents = () => {
++        if (!editor) return false;
++        const markerId = `rewrite-${Date.now()}-${Math.round(Math.random() * 100000)}`;
++        const wrapper = document.createElement("div");
++        wrapper.className = "clyra-rephrase-mark clyra-rephrase-mark--block";
++        wrapper.dataset.clyraRewriteMarker = markerId;
++        while (editor.firstChild) {
++          wrapper.appendChild(editor.firstChild);
++        }
++        editor.appendChild(wrapper);
++        const markerRange = document.createRange();
++        markerRange.selectNode(wrapper);
++        savedRangeRef.current = markerRange.cloneRange();
++        lastNonCollapsedRangeRef.current = markerRange.cloneRange();
++        lastSelectedTextRef.current = wrapper.innerText;
++        rewriteMarkerIdRef.current = markerId;
++        selection?.removeAllRanges();
++        selection?.addRange(markerRange);
++        initialHtmlRef.current = editor.innerHTML;
++        setDocumentText(normaliseEditorText(editor.innerText));
++        return true;
++      };
++
++      const markRange = (range: Range) => {
++        const markerId = `rewrite-${Date.now()}-${Math.round(Math.random() * 100000)}`;
++        const mark = document.createElement("mark");
++        mark.className = "clyra-rephrase-mark";
++        mark.dataset.clyraRewriteMarker = markerId;
++        try {
++          const contents = range.extractContents();
++          mark.appendChild(contents);
++          range.insertNode(mark);
++          const markerRange = document.createRange();
++          markerRange.selectNode(mark);
++          savedRangeRef.current = markerRange.cloneRange();
++          lastNonCollapsedRangeRef.current = markerRange.cloneRange();
++          rewriteMarkerIdRef.current = markerId;
++          selection.removeAllRanges();
++          selection.addRange(markerRange);
++          if (editorRef.current) {
++            initialHtmlRef.current = editorRef.current.innerHTML;
++            setDocumentText(normaliseEditorText(editorRef.current.innerText));
++          }
++          return true;
++        } catch (e) {
++          rewriteMarkerIdRef.current = null;
++          return false;
++        }
++      };
++
++      let didMark = false;
++      if (editor && selectedRange && !selectedRange.collapsed && selection) {
++        const range = selectedRange.cloneRange();
++        selection.removeAllRanges();
++        selection.addRange(range);
++        didMark = markRange(range);
++      }
++
++      if (!didMark && editor) {
++        const normalisedSelection = normaliseEditorText(selectedText);
++        const normalisedEditor = normaliseEditorText(editor.innerText);
++        if (normalisedSelection && normalisedSelection === normalisedEditor) {
++          didMark = markEditorContents();
++        } else {
++          const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
++          let current: Text | null = null;
++          while ((current = walker.nextNode() as Text | null)) {
++            const index = (current.textContent ?? "").indexOf(selectedText);
++            if (index >= 0) {
++              const textRange = document.createRange();
++              textRange.setStart(current, index);
++              textRange.setEnd(current, index + selectedText.length);
++              didMark = markRange(textRange);
++              break;
++            }
++          }
++        }
++      }
++
++      if (!didMark && editor && normaliseEditorText(selectedText)) {
++        didMark = markEditorContents();
++      }
++
++      onRewriteRequest?.({
++        mode,
++        selectedText,
++        applyReplacement: replaceSavedSelection,
++      });
++    },
++    [contextMenu, onRewriteRequest, replaceSavedSelection, restoreSelection],
++  );
++
++  const writeRichClipboard = React.useCallback(async () => {
++    const html = readHtml();
+     const plain = readPlainText();
++    try {
++      if ("ClipboardItem" in window) {
++        await navigator.clipboard.write([
++          new ClipboardItem({
++            "text/html": new Blob([html], { type: "text/html" }),
++            "text/plain": new Blob([plain], { type: "text/plain" }),
++          }),
++        ]);
++        return;
++      }
++    } catch {
++      // Fall back to plain text below if rich clipboard is unavailable.
++    }
+     await navigator.clipboard.writeText(plain);
++  }, [readHtml, readPlainText]);
++
++  const handleCopy = async () => {
++    await writeRichClipboard();
+     setCopied(true);
+     setTimeout(() => setCopied(false), 1600);
+   };
+ 
+-  const openGmail = () => {
++  const openGmail = async () => {
++    await writeRichClipboard();
+     const body = readPlainText();
+     const url = `https://mail.google.com/mail/?view=cm&fs=1&su=${encodeURIComponent(
+       subject,
+@@ -309,7 +842,8 @@ export function DocumentCardUI({
+     setShowDropdown(false);
+   };
+ 
+-  const openOutlook = () => {
++  const openOutlook = async () => {
++    await writeRichClipboard();
+     const body = readPlainText();
+     const url = `https://outlook.live.com/mail/0/deeplink/compose?subject=${encodeURIComponent(
+       subject,
+@@ -320,13 +854,22 @@ export function DocumentCardUI({
+ 
+   const toolbarDisabled = isStreaming && !isEditing;
+   const displayLines = documentText.split("\n");
++  const toolTabs: Array<{ id: ToolTab; label: string }> = [
++    { id: "write", label: "Write" },
++    { id: "style", label: "Style" },
++    { id: "layout", label: "Layout" },
++  ];
+ 
+   return (
+-    <div
++    <motion.div
++      ref={cardRef}
+       className={cn(
+         "clyra-document-card w-full max-w-4xl mx-auto bg-white rounded-3xl border border-slate-200/80 shadow-[0_4px_24px_rgba(15,23,42,0.04)] overflow-hidden flex flex-col",
+         className,
+       )}
++      initial={{ opacity: 0, y: 20, filter: "blur(6px)" }}
++      animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
++      transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
+     >
+       <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-slate-100 relative">
+         <button
+@@ -406,162 +949,282 @@ export function DocumentCardUI({
+         {isEditing && (
+           <motion.div
+             className="clyra-doc-toolbar"
++            onPointerDownCapture={saveSelection}
+             initial={{ opacity: 0, height: 0, y: -8 }}
+             animate={{ opacity: 1, height: "auto", y: 0 }}
+             exit={{ opacity: 0, height: 0, y: -8 }}
+             transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+           >
+-            <div className="clyra-doc-tool-group clyra-doc-tool-group--typography">
+-              <label className="clyra-doc-select">
+-                <Type className="h-3.5 w-3.5" />
+-                <select
+-                  value={fontFamily}
+-                  disabled={toolbarDisabled}
+-                  onChange={(event) => {
+-                    setFontFamily(event.target.value);
+-                    runValueCommand("fontName", event.target.value);
+-                  }}
++            <div className="clyra-doc-tabbar" role="tablist" aria-label="Editor tools">
++              {toolTabs.map((tab) => (
++                <button
++                  key={tab.id}
++                  type="button"
++                  className={cn("clyra-doc-tab", activeToolTab === tab.id && "clyra-doc-tab--active")}
++                  onClick={() => setActiveToolTab(tab.id)}
++                  role="tab"
++                  aria-selected={activeToolTab === tab.id}
+                 >
+-                  <option value="Inter">Inter</option>
+-                  <option value="Arial">Arial</option>
+-                  <option value="Georgia">Georgia</option>
+-                  <option value="Times New Roman">Times</option>
+-                  <option value="Courier New">Mono</option>
+-                </select>
+-              </label>
+-
+-              <label className="clyra-doc-select clyra-doc-select--block">
+-                <select
+-                  value={blockStyle}
+-                  disabled={toolbarDisabled}
+-                  onChange={(event) => {
+-                    setBlockStyle(event.target.value);
+-                    runValueCommand("formatBlock", event.target.value);
+-                  }}
+-                >
+-                  <option value="P">Paragraph</option>
+-                  <option value="H2">Heading</option>
+-                  <option value="H3">Subhead</option>
+-                  <option value="BLOCKQUOTE">Quote</option>
+-                </select>
+-              </label>
+-
+-              <label className="clyra-doc-select clyra-doc-select--small">
+-                <select
+-                  value={fontSize}
+-                  disabled={toolbarDisabled}
+-                  onChange={(event) => {
+-                    setFontSize(event.target.value);
+-                    runValueCommand("fontSize", event.target.value);
+-                  }}
+-                >
+-                  <option value="2">Small</option>
+-                  <option value="3">Normal</option>
+-                  <option value="4">Large</option>
+-                  <option value="5">Title</option>
+-                </select>
+-              </label>
+-
+-              <label className="clyra-doc-number">
+-                <span>px</span>
+-                <input
+-                  type="number"
+-                  min={8}
+-                  max={72}
+-                  value={fontSizePx}
+-                  onChange={(event) => setFontSizePx(Number(event.target.value))}
+-                  onBlur={() => applyPixelFontSize(fontSizePx)}
+-                  onKeyDown={(event) => {
+-                    if (event.key === "Enter") {
+-                      event.preventDefault();
+-                      applyPixelFontSize(fontSizePx);
+-                    }
+-                  }}
+-                  aria-label="Text size in pixels"
+-                />
+-              </label>
++                  {activeToolTab === tab.id && (
++                    <motion.span
++                      className="clyra-doc-tab-indicator"
++                      layoutId="clyra-doc-tab-indicator"
++                      transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
++                    />
++                  )}
++                  <span>{tab.label}</span>
++                </button>
++              ))}
+             </div>
+ 
+-            <div className="clyra-doc-tool-group">
+-              <button type="button" className="clyra-doc-tool-button" onClick={() => runCommand("undo")}>
+-                <Undo2 className="h-4 w-4" />
+-              </button>
+-              <button type="button" className="clyra-doc-tool-button" onClick={() => runCommand("redo")}>
+-                <Redo2 className="h-4 w-4" />
+-              </button>
+-            </div>
+-
+-            <div className="clyra-doc-tool-group">
+-              <button type="button" className="clyra-doc-tool-button" onClick={() => runCommand("bold")}>
+-                <Bold className="h-4 w-4" />
+-              </button>
+-              <button type="button" className="clyra-doc-tool-button" onClick={() => runCommand("italic")}>
+-                <Italic className="h-4 w-4" />
+-              </button>
+-              <button type="button" className="clyra-doc-tool-button" onClick={() => runCommand("underline")}>
+-                <Underline className="h-4 w-4" />
+-              </button>
+-              <button type="button" className="clyra-doc-tool-button" onClick={() => runCommand("strikeThrough")}>
+-                <Strikethrough className="h-4 w-4" />
+-              </button>
+-            </div>
++            <AnimatePresence mode="wait" initial={false}>
++              <motion.div
++                key={activeToolTab}
++                className="clyra-doc-tool-panel"
++                initial={{ opacity: 0, y: 8 }}
++                animate={{ opacity: 1, y: 0 }}
++                exit={{ opacity: 0, y: -6 }}
++                transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
++              >
++                {activeToolTab === "write" && (
++                  <>
++                    <div className="clyra-doc-tool-group clyra-doc-tool-group--typography">
++                      <label className="clyra-doc-select">
++                        <Type className="h-3.5 w-3.5" />
++                        <select
++                          value={fontFamily}
++                          disabled={toolbarDisabled}
++                          onFocus={saveSelection}
++                          onChange={(event) => {
++                            setFontFamily(event.target.value);
++                            runValueCommand("fontName", event.target.value);
++                          }}
++                        >
++                          <option value="Inter">Inter</option>
++                          <option value="Arial">Arial</option>
++                          <option value="Georgia">Georgia</option>
++                          <option value="Times New Roman">Times</option>
++                          <option value="Courier New">Mono</option>
++                        </select>
++                      </label>
+ 
+-            <div className="clyra-doc-tool-group">
+-              <button type="button" className="clyra-doc-tool-button" onClick={() => runCommand("insertUnorderedList")}>
+-                <List className="h-4 w-4" />
+-              </button>
+-              <button type="button" className="clyra-doc-tool-button" onClick={() => runCommand("insertOrderedList")}>
+-                <ListOrdered className="h-4 w-4" />
+-              </button>
+-              <button type="button" className="clyra-doc-tool-button" onClick={() => runCommand("outdent")}>
+-                <IndentDecrease className="h-4 w-4" />
+-              </button>
+-              <button type="button" className="clyra-doc-tool-button" onClick={() => runCommand("indent")}>
+-                <IndentIncrease className="h-4 w-4" />
+-              </button>
+-            </div>
++                      <label className="clyra-doc-select clyra-doc-select--block">
++                        <select
++                          value={blockStyle}
++                          disabled={toolbarDisabled}
++                          onFocus={saveSelection}
++                          onChange={(event) => {
++                            setBlockStyle(event.target.value);
++                            runValueCommand("formatBlock", event.target.value);
++                          }}
++                        >
++                          <option value="P">Paragraph</option>
++                          <option value="H2">Heading</option>
++                          <option value="H3">Subhead</option>
++                          <option value="BLOCKQUOTE">Quote</option>
++                        </select>
++                      </label>
++                    </div>
++                    <div className="clyra-doc-tool-group">
++                      <button type="button" className="clyra-doc-tool-button" onPointerDown={handleToolPointerDown} onClick={() => runCommand("undo")}>
++                        <Undo2 className="h-4 w-4" />
++                      </button>
++                      <button type="button" className="clyra-doc-tool-button" onPointerDown={handleToolPointerDown} onClick={() => runCommand("redo")}>
++                        <Redo2 className="h-4 w-4" />
++                      </button>
++                    </div>
++                  </>
++                )}
+ 
+-            <div className="clyra-doc-tool-group">
+-              <button type="button" className="clyra-doc-tool-button" onClick={() => runCommand("justifyLeft")}>
+-                <AlignLeft className="h-4 w-4" />
+-              </button>
+-              <button type="button" className="clyra-doc-tool-button" onClick={() => runCommand("justifyCenter")}>
+-                <AlignCenter className="h-4 w-4" />
+-              </button>
+-              <button type="button" className="clyra-doc-tool-button" onClick={() => runCommand("justifyRight")}>
+-                <AlignRight className="h-4 w-4" />
+-              </button>
+-            </div>
++                {activeToolTab === "style" && (
++                  <>
++                    <div className="clyra-doc-tool-cluster">
++                      <span className="clyra-doc-tool-cluster-label">Size</span>
++                      <div className="clyra-doc-tool-group">
++                        <div className="clyra-doc-size-options" aria-label="Text size">
++                          {[
++                            ["2", "S"],
++                            ["3", "M"],
++                            ["4", "L"],
++                            ["5", "XL"],
++                          ].map(([sizeValue, label]) => (
++                            <button
++                              key={sizeValue}
++                              type="button"
++                              className={cn(
++                                "clyra-doc-size-button",
++                                fontSize === sizeValue && "clyra-doc-size-button--active",
++                              )}
++                              disabled={toolbarDisabled}
++                              onPointerDown={handleToolPointerDown}
++                              onClick={() => applyNamedFontSize(sizeValue)}
++                            >
++                              {label}
++                            </button>
++                          ))}
++                        </div>
++                      </div>
++                    </div>
++                    <div className="clyra-doc-tool-cluster">
++                      <span className="clyra-doc-tool-cluster-label">Format</span>
++                      <div className="clyra-doc-tool-group">
++                      <button type="button" className="clyra-doc-tool-button" onPointerDown={handleToolPointerDown} onClick={() => runCommand("bold")}>
++                        <Bold className="h-4 w-4" />
++                      </button>
++                      <button type="button" className="clyra-doc-tool-button" onPointerDown={handleToolPointerDown} onClick={() => runCommand("italic")}>
++                        <Italic className="h-4 w-4" />
++                      </button>
++                      <button type="button" className="clyra-doc-tool-button" onPointerDown={handleToolPointerDown} onClick={() => runCommand("underline")}>
++                        <Underline className="h-4 w-4" />
++                      </button>
++                      <button type="button" className="clyra-doc-tool-button" onPointerDown={handleToolPointerDown} onClick={() => runCommand("strikeThrough")}>
++                        <Strikethrough className="h-4 w-4" />
++                      </button>
++                      </div>
++                    </div>
++                    <div className="clyra-doc-tool-cluster">
++                      <span className="clyra-doc-tool-cluster-label">Colour</span>
++                      <div className="clyra-doc-colour-stack">
++                        <div className="clyra-doc-colour-row">
++                          <span>Text colour</span>
++                          {[
++                            ["#0f172a", "Text black"],
++                            ["#2563eb", "Text blue"],
++                            ["#16a34a", "Text green"],
++                          ].map(([colour, label]) => (
++                            <button
++                              key={label}
++                              type="button"
++                              className="clyra-doc-swatch-button"
++                              style={{ backgroundColor: colour }}
++                              aria-label={label}
++                              disabled={toolbarDisabled}
++                              onPointerDown={handleToolPointerDown}
++                              onClick={() => {
++                                setTextColour(colour);
++                                runValueCommand("foreColor", colour);
++                              }}
++                            />
++                          ))}
++                          <label className="clyra-doc-colour">
++                            <Palette className="h-3.5 w-3.5" />
++                            <input
++                              type="color"
++                              value={textColour}
++                              onPointerDown={saveSelection}
++                              onFocus={saveSelection}
++                              onChange={(event) => {
++                                setTextColour(event.target.value);
++                                runValueCommand("foreColor", event.target.value);
++                              }}
++                              aria-label="Text colour"
++                            />
++                          </label>
++                        </div>
++                        <div className="clyra-doc-colour-row">
++                          <span>Highlight colour</span>
++                          {[
++                            ["#fef08a", "Highlight yellow"],
++                            ["#dbeafe", "Highlight blue"],
++                            ["#dcfce7", "Highlight green"],
++                          ].map(([colour, label]) => (
++                            <button
++                              key={label}
++                              type="button"
++                              className="clyra-doc-swatch-button clyra-doc-swatch-button--highlight"
++                              style={{ backgroundColor: colour }}
++                              aria-label={label}
++                              disabled={toolbarDisabled}
++                              onPointerDown={handleToolPointerDown}
++                              onClick={() => {
++                                setHighlightColour(colour);
++                                runValueCommand("hiliteColor", colour);
++                              }}
++                            />
++                          ))}
++                          <label className="clyra-doc-colour">
++                            <span className="h-3.5 w-3.5 rounded-sm border border-slate-300 bg-white" />
++                            <input
++                              type="color"
++                              value={highlightColour}
++                              onPointerDown={saveSelection}
++                              onFocus={saveSelection}
++                              onChange={(event) => {
++                                setHighlightColour(event.target.value);
++                                runValueCommand("hiliteColor", event.target.value);
++                              }}
++                              aria-label="Highlight colour"
++                            />
++                          </label>
++                        </div>
++                      </div>
++                    </div>
++                    <div className="clyra-doc-tool-cluster clyra-doc-attachment-cluster">
++                      <span className="clyra-doc-tool-cluster-label">Attachments</span>
++                      <button
++                        type="button"
++                        className="clyra-doc-attach-button"
++                        onClick={() => attachmentInputRef.current?.click()}
++                      >
++                        <Paperclip className="h-3.5 w-3.5" />
++                        Add files
++                      </button>
++                      <input
++                        ref={attachmentInputRef}
++                        type="file"
++                        multiple
++                        className="hidden"
++                        onChange={(event) => {
++                          setDocumentAttachments(
++                            Array.from(event.target.files ?? []).map((file) => file.name),
++                          );
++                        }}
++                      />
++                      {documentAttachments.length > 0 && (
++                        <div className="clyra-doc-attachment-list">
++                          {documentAttachments.slice(0, 2).map((name) => (
++                            <span key={name}>{name}</span>
++                          ))}
++                          {documentAttachments.length > 2 && (
++                            <span>+{documentAttachments.length - 2}</span>
++                          )}
++                        </div>
++                      )}
++                    </div>
++                  </>
++                )}
+ 
+-            <div className="clyra-doc-tool-group">
+-              <button type="button" className="clyra-doc-tool-button" onClick={() => runCommand("removeFormat")}>
+-                <Eraser className="h-4 w-4" />
+-              </button>
+-              <label className="clyra-doc-colour">
+-                <Palette className="h-3.5 w-3.5" />
+-                <input
+-                  type="color"
+-                  value={textColour}
+-                  onChange={(event) => {
+-                    setTextColour(event.target.value);
+-                    runValueCommand("foreColor", event.target.value);
+-                  }}
+-                  aria-label="Text colour"
+-                />
+-              </label>
+-              <label className="clyra-doc-colour">
+-                <span className="h-3.5 w-3.5 rounded-sm border border-slate-300 bg-white" />
+-                <input
+-                  type="color"
+-                  value={highlightColour}
+-                  onChange={(event) => {
+-                    setHighlightColour(event.target.value);
+-                    runValueCommand("hiliteColor", event.target.value);
+-                  }}
+-                  aria-label="Highlight colour"
+-                />
+-              </label>
+-            </div>
++                {activeToolTab === "layout" && (
++                  <>
++                    <div className="clyra-doc-tool-group">
++                      <button type="button" className="clyra-doc-tool-button" onPointerDown={handleToolPointerDown} onClick={() => runCommand("insertUnorderedList")}>
++                        <List className="h-4 w-4" />
++                      </button>
++                      <button type="button" className="clyra-doc-tool-button" onPointerDown={handleToolPointerDown} onClick={() => runCommand("insertOrderedList")}>
++                        <ListOrdered className="h-4 w-4" />
++                      </button>
++                      <button type="button" className="clyra-doc-tool-button" onPointerDown={handleToolPointerDown} onClick={() => runCommand("outdent")}>
++                        <IndentDecrease className="h-4 w-4" />
++                      </button>
++                      <button type="button" className="clyra-doc-tool-button" onPointerDown={handleToolPointerDown} onClick={() => runCommand("indent")}>
++                        <IndentIncrease className="h-4 w-4" />
++                      </button>
++                    </div>
++                    <div className="clyra-doc-tool-group">
++                      <button type="button" className="clyra-doc-tool-button" onPointerDown={handleToolPointerDown} onClick={() => runCommand("justifyLeft")}>
++                        <AlignLeft className="h-4 w-4" />
++                      </button>
++                      <button type="button" className="clyra-doc-tool-button" onPointerDown={handleToolPointerDown} onClick={() => runCommand("justifyCenter")}>
++                        <AlignCenter className="h-4 w-4" />
++                      </button>
++                      <button type="button" className="clyra-doc-tool-button" onPointerDown={handleToolPointerDown} onClick={() => runCommand("justifyRight")}>
++                        <AlignRight className="h-4 w-4" />
++                      </button>
++                    </div>
++                  </>
++                )}
++              </motion.div>
++            </AnimatePresence>
+           </motion.div>
+         )}
+       </AnimatePresence>
+@@ -576,15 +1239,21 @@ export function DocumentCardUI({
+             transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
+           >
+             {isEditing ? (
+-              <input
+-                value={subject}
+-                onChange={(event) => setSubject(cleanDocumentText(event.target.value))}
+-                className="w-full bg-transparent text-lg font-medium text-slate-800 outline-none placeholder:text-slate-300"
+-                placeholder="Subject"
+-              />
++              <label className="clyra-doc-field">
++                <span>Subject</span>
++                <input
++                  value={subject}
++                  onChange={(event) => setSubject(cleanDocumentText(event.target.value))}
++                  className="w-full bg-transparent text-lg font-medium text-slate-800 outline-none placeholder:text-slate-300"
++                  placeholder="Add a subject"
++                />
++              </label>
+             ) : (
+-              <div className="text-slate-800 font-medium text-lg">
++              <div className="clyra-doc-field">
++                <span>Subject</span>
++                <div className="text-slate-800 font-medium text-lg">
+                 {subject || "(Subject)"}
++                </div>
+               </div>
+             )}
+           </motion.div>
+@@ -606,25 +1275,39 @@ export function DocumentCardUI({
+         ) : (
+           <motion.div
+             key={isEditing ? "editing-body" : "reading-body"}
+-            className="clyra-doc-body px-6 sm:px-8 py-6 text-slate-800"
+-            initial={{ opacity: 0, y: 10, filter: "blur(6px)" }}
+-            animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
++            className={cn(
++              "clyra-doc-body px-6 sm:px-8 py-6 text-slate-800",
++              isEmail ? "clyra-doc-card-container--email" : "",
++            )}
++            initial={{ opacity: 0, y: 24, filter: "blur(8px)", scale: 0.98 }}
++            animate={{ opacity: 1, y: 0, filter: "blur(0px)", scale: 1 }}
+             exit={{ opacity: 0, y: -8, filter: "blur(5px)" }}
+-            transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
++            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+           >
++            <div className="clyra-doc-body-label">{isEmail ? "Message" : "Notes"}</div>
+             {isEditing ? (
+               <div
+-                ref={editorRef}
++                ref={setEditorElement}
+                 className="clyra-doc-editor"
+                 contentEditable
+                 suppressContentEditableWarning
+                 spellCheck
+-                dangerouslySetInnerHTML={{ __html: editorHtml }}
+-                onInput={(event) => {
+-                  const target = event.currentTarget as HTMLDivElement;
+-                  setEditorHtml(target.innerHTML);
+-                  setDocumentText(normaliseEditorText(target.innerText));
++                onMouseUp={saveSelection}
++                onKeyDown={acceptAutocomplete}
++                onKeyUp={(e) => {
++                  saveSelection();
++                  if (contextMenu) setContextMenu(null);
++                  if (e.key !== "Tab") {
++                    handleAutocompleteCheck();
++                  }
+                 }}
++                onFocus={saveSelection}
++	                onContextMenu={handleContextMenu}
++	                onInput={(event) => {
++                  initialHtmlRef.current = event.currentTarget.innerHTML;
++	                  saveSelection();
++	                  window.requestAnimationFrame(handleAutocompleteCheck);
++	                }}
+                 aria-label={isEmail ? "Editable email body" : "Editable notes"}
+               />
+ 	            ) : (
+@@ -640,6 +1323,40 @@ export function DocumentCardUI({
+           </motion.div>
+         )}
+       </AnimatePresence>
+-    </div>
++      <AnimatePresence>
++        {contextMenu && (
++          <motion.div
++            className="clyra-doc-context-menu"
++            style={{ left: contextMenu.x, top: contextMenu.y }}
++            initial={{ opacity: 0, y: 8, scale: 0.96 }}
++            animate={{ opacity: 1, y: 0, scale: 1 }}
++            exit={{ opacity: 0, y: 8, scale: 0.96 }}
++            transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
++          >
++            <button
++              type="button"
++              onClick={() => requestRewrite("rephrase")}
++            >
++              Rephrase selection
++            </button>
++          </motion.div>
++        )}
++      </AnimatePresence>
++      <AnimatePresence>
++        {autocomplete && (
++          <motion.div
++            className="clyra-doc-autocomplete"
++            style={{ left: autocomplete.x, top: autocomplete.y }}
++            initial={{ opacity: 0, y: 7, scale: 0.97 }}
++            animate={{ opacity: 1, y: 0, scale: 1 }}
++            exit={{ opacity: 0, y: 5, scale: 0.97 }}
++            transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
++          >
++            <span>{autocomplete.suggestion}</span>
++            <kbd>Tab</kbd>
++          </motion.div>
++        )}
++      </AnimatePresence>
++    </motion.div>
+   );
+ }
+diff --git a/src/components/vibe/VibeLivePreviewPanel.tsx b/src/components/vibe/VibeLivePreviewPanel.tsx
+index fab0e18..43c177d 100644
+--- a/src/components/vibe/VibeLivePreviewPanel.tsx
++++ b/src/components/vibe/VibeLivePreviewPanel.tsx
+@@ -55,6 +55,40 @@ type Props = {
+ 
+ type WorkspaceMode = "preview" | "code";
+ 
++const CODE_COMPLETIONS = [
++  "function",
++  "const",
++  "return",
++  "className",
++  "children",
++  "component",
++  "interface",
++  "useState",
++  "useEffect",
++  "useMemo",
++  "useCallback",
++  "import",
++  "export",
++  "async",
++  "await",
++  "background",
++  "transition",
++  "transform",
++  "borderRadius",
++  "document",
++  "window",
++  "response",
++  "request",
++  "Promise",
++];
++
++function getCodeCompletion(prefix: string) {
++  const lower = prefix.toLowerCase();
++  return CODE_COMPLETIONS.find(
++    (item) => item.toLowerCase().startsWith(lower) && item.length > prefix.length,
++  );
++}
++
+ type AgentCursorState = {
+   visible: boolean;
+   x: number;
+@@ -344,6 +378,12 @@ export function VibeLivePreviewPanel({
+   });
+   const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>("preview");
+   const [editorScroll, setEditorScroll] = useState({ top: 0, left: 0 });
++  const [codeCompletion, setCodeCompletion] = useState<{
++    suggestion: string;
++    prefix: string;
++    x: number;
++    y: number;
++  } | null>(null);
+   const [addressInput, setAddressInput] = useState("");
+   const [lastError, setLastError] = useState<{
+     message: string;
+@@ -368,6 +408,7 @@ export function VibeLivePreviewPanel({
+     clicking: false,
+   });
+   const iframeRef = useRef<HTMLIFrameElement | null>(null);
++  const codeTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+   const lastSessionSignatureRef = useRef<string | null>(null);
+   const cursorTimeoutsRef = useRef<number[]>([]);
+ 
+@@ -606,6 +647,50 @@ export function VibeLivePreviewPanel({
+ 
+   const editorValue = mergedFiles[activePath] ?? "";
+ 
++  const updateCodeCompletion = useCallback((textarea: HTMLTextAreaElement) => {
++    const beforeCursor = textarea.value.slice(0, textarea.selectionStart);
++    const match = beforeCursor.match(/([A-Za-z_$][\w$]*)$/);
++    if (!match || match[1].length < 2) {
++      setCodeCompletion(null);
++      return;
++    }
++
++    const suggestion = getCodeCompletion(match[1]);
++    if (!suggestion) {
++      setCodeCompletion(null);
++      return;
++    }
++
++    const lines = beforeCursor.split("\n");
++    const lineIndex = lines.length - 1;
++    const column = lines[lineIndex]?.length ?? 0;
++    const lineHeight = 20;
++    const charWidth = 7.2;
++    setCodeCompletion({
++      suggestion,
++      prefix: match[1],
++      x: Math.min(520, 64 + column * charWidth - textarea.scrollLeft),
++      y: Math.max(10, 12 + lineIndex * lineHeight - textarea.scrollTop - 36),
++    });
++  }, []);
++
++  const acceptCodeCompletion = useCallback(() => {
++    const textarea = codeTextareaRef.current;
++    if (!textarea || !codeCompletion || !activePath) return false;
++    const start = textarea.selectionStart;
++    const end = textarea.selectionEnd;
++    const remainder = codeCompletion.suggestion.slice(codeCompletion.prefix.length);
++    const next = `${editorValue.slice(0, start)}${remainder}${editorValue.slice(end)}`;
++    setMergedFiles((m) => ({ ...m, [activePath]: next }));
++    setCodeCompletion(null);
++    window.requestAnimationFrame(() => {
++      const nextPosition = start + remainder.length;
++      textarea.focus();
++      textarea.setSelectionRange(nextPosition, nextPosition);
++    });
++    return true;
++  }, [activePath, codeCompletion, editorValue]);
++
+   const runAgentCursorReplay = useCallback(() => {
+     for (const id of cursorTimeoutsRef.current) window.clearTimeout(id);
+     cursorTimeoutsRef.current = [];
+@@ -1028,6 +1113,7 @@ export function VibeLivePreviewPanel({
+                   </code>
+                 </pre>
+                 <textarea
++                  ref={codeTextareaRef}
+                   key={activePath}
+                   value={editorValue}
+                   onChange={(event) => {
+@@ -1036,17 +1122,44 @@ export function VibeLivePreviewPanel({
+                       if (!activePath) return m;
+                       return { ...m, [activePath]: next };
+                     });
++                    updateCodeCompletion(event.currentTarget);
++                  }}
++                  onKeyDown={(event) => {
++                    if (event.key === "Tab" && codeCompletion) {
++                      event.preventDefault();
++                      acceptCodeCompletion();
++                    }
+                   }}
++                  onKeyUp={(event) => {
++                    if (event.key !== "Tab") updateCodeCompletion(event.currentTarget);
++                  }}
++                  onBlur={() => setCodeCompletion(null)}
+                   onScroll={(event) => {
+                     setEditorScroll({
+                       top: event.currentTarget.scrollTop,
+                       left: event.currentTarget.scrollLeft,
+                     });
++                    updateCodeCompletion(event.currentTarget);
+                   }}
+                   spellCheck={false}
+                   className="relative z-10 h-full min-h-0 w-full resize-none overflow-auto bg-transparent py-3 pl-16 pr-6 font-mono text-[12px] leading-5 text-transparent caret-white outline-none scrollbar-none selection:bg-blue-400/30"
+                   aria-label="Code editor"
+                 />
++                <AnimatePresence>
++                  {codeCompletion && (
++                    <motion.div
++                      className="clyra-code-autocomplete"
++                      style={{ left: codeCompletion.x, top: codeCompletion.y }}
++                      initial={{ opacity: 0, y: 8, scale: 0.96, filter: "blur(5px)" }}
++                      animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
++                      exit={{ opacity: 0, y: 6, scale: 0.96, filter: "blur(4px)" }}
++                      transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
++                    >
++                      <span>{codeCompletion.suggestion}</span>
++                      <kbd>Tab</kbd>
++                    </motion.div>
++                  )}
++                </AnimatePresence>
+               </div>
+             </div>
+           ) : null}
+diff --git a/src/index.css b/src/index.css
+index bb1c2ea..5872c97 100644
+--- a/src/index.css
++++ b/src/index.css
+@@ -743,6 +743,11 @@
+     contain: layout;
+ }
+ 
++.clyra-ai-orb-shell--intro {
++    animation: clyra-ai-orb-intro-rise 1.35s cubic-bezier(0.12, 0.78, 0.18, 1) both;
++    will-change: transform, opacity;
++}
++
+ .clyra-ai-orb {
+     position: relative;
+     display: flex;
+@@ -911,7 +916,7 @@
+ 
+ .clyra-ai-orb-shell--intro .clyra-ai-orb-ball::before {
+     opacity: 0.94;
+-    animation: clyra-ai-orb-intro-palette 2.65s cubic-bezier(0.2, 1, 0.25, 1) both;
++    animation: clyra-ai-orb-intro-palette 2.9s cubic-bezier(0.16, 1, 0.24, 1) both;
+ }
+ 
+ .clyra-ai-orb-shell:not(.clyra-ai-orb-shell--intro) .clyra-ai-orb-ball::after {
+@@ -1020,18 +1025,33 @@
+     }
+ }
+ 
++@keyframes clyra-ai-orb-intro-rise {
++    0% {
++        opacity: 0;
++        transform: translate3d(0, 32px, 0) scale(0.94);
++    }
++    54% {
++        opacity: 1;
++        transform: translate3d(0, 4px, 0) scale(1.012);
++    }
++    100% {
++        opacity: 1;
++        transform: translate3d(0, 0, 0) scale(1);
++    }
++}
++
+ @keyframes clyra-ai-orb-intro-palette {
+     0% {
+-        background-position: 53% 58%;
+-        transform: translateZ(0) scale(0.94) rotate(-12deg);
++        background-position: 54% 60%;
++        transform: translateZ(0) scale(0.98) rotate(-8deg);
+     }
+     52% {
+         background-position: 48% 51%;
+-        transform: translateZ(0) scale(1.07) rotate(5deg);
++        transform: translateZ(0) scale(1.055) rotate(3deg);
+     }
+     100% {
+         background-position: 43% 45%;
+-        transform: translateZ(0) scale(1.16) rotate(16deg);
++        transform: translateZ(0) scale(1.12) rotate(9deg);
+     }
+ }
+ 
+@@ -1787,6 +1807,7 @@ body,
+ 
+ .clyra-document-card {
+     color: #1e293b;
++    position: relative;
+ }
+ 
+ .clyra-doc-action,
+@@ -1794,7 +1815,6 @@ body,
+ .clyra-doc-provider-button,
+ .clyra-doc-tool-button,
+ .clyra-doc-select,
+-.clyra-doc-number,
+ .clyra-doc-colour {
+     border: 1px solid rgba(226, 232, 240, 0.95);
+     background: rgba(255, 255, 255, 0.86);
+@@ -1824,7 +1844,6 @@ body,
+ .clyra-doc-provider-button:hover,
+ .clyra-doc-tool-button:hover,
+ .clyra-doc-select:hover,
+-.clyra-doc-number:hover,
+ .clyra-doc-colour:hover {
+     transform: translateY(-1px);
+     border-color: rgba(148, 163, 184, 0.42);
+@@ -1863,6 +1882,73 @@ body,
+     border-radius: 999px;
+ }
+ 
++.clyra-doc-size-options {
++    display: inline-flex;
++    align-items: center;
++    gap: 3px;
++    border-radius: 999px;
++    background: rgba(226, 232, 240, 0.42);
++    padding: 3px;
++}
++
++.clyra-doc-size-button {
++    display: inline-flex;
++    height: 28px;
++    min-width: 30px;
++    align-items: center;
++    justify-content: center;
++    border-radius: 999px;
++    color: #64748b;
++    font-size: 11px;
++    font-weight: 800;
++    transition:
++        background-color 160ms ease,
++        color 160ms ease,
++        transform 160ms cubic-bezier(0.22, 1, 0.36, 1),
++        box-shadow 160ms ease;
++}
++
++.clyra-doc-size-button:hover {
++    color: #0f172a;
++    transform: translateY(-1px);
++}
++
++.clyra-doc-size-button--active {
++    background: #fff;
++    color: #0f172a;
++    box-shadow: 0 6px 16px rgba(15, 23, 42, 0.07);
++}
++
++.clyra-doc-swatch-button {
++    display: inline-flex;
++    height: 24px;
++    width: 24px;
++    align-items: center;
++    justify-content: center;
++    border: 2px solid rgba(255, 255, 255, 0.95);
++    border-radius: 999px;
++    box-shadow:
++        0 0 0 1px rgba(148, 163, 184, 0.28),
++        0 6px 14px rgba(15, 23, 42, 0.06);
++    transition:
++        transform 160ms cubic-bezier(0.22, 1, 0.36, 1),
++        box-shadow 160ms ease;
++}
++
++.clyra-doc-swatch-button:hover {
++    transform: translateY(-1px) scale(1.04);
++    box-shadow:
++        0 0 0 1px rgba(100, 116, 139, 0.36),
++        0 9px 20px rgba(15, 23, 42, 0.1);
++}
++
++.clyra-doc-swatch-button--highlight {
++    box-shadow:
++        inset 0 0 0 1px rgba(15, 23, 42, 0.05),
++        0 0 0 1px rgba(148, 163, 184, 0.2),
++        0 6px 14px rgba(15, 23, 42, 0.05);
++}
++
+ .clyra-doc-provider-button {
+     display: flex;
+     width: 100%;
+@@ -1876,10 +1962,10 @@ body,
+ }
+ 
+ .clyra-doc-toolbar {
+-    display: flex;
+-    flex-wrap: wrap;
++    display: grid;
++    grid-template-columns: auto minmax(0, 1fr);
+     align-items: center;
+-    gap: 8px;
++    gap: 12px;
+     border-bottom: 1px solid rgba(241, 245, 249, 0.95);
+     background:
+         linear-gradient(180deg, rgba(248, 250, 252, 0.9), rgba(255, 255, 255, 0.9)),
+@@ -1888,6 +1974,74 @@ body,
+     padding: 10px 18px;
+ }
+ 
++.clyra-doc-tabbar {
++    display: inline-flex;
++    align-items: center;
++    gap: 3px;
++    border-radius: 999px;
++    border: 1px solid rgba(226, 232, 240, 0.9);
++    background: rgba(255, 255, 255, 0.72);
++    padding: 3px;
++}
++
++.clyra-doc-tab {
++    position: relative;
++    isolation: isolate;
++    display: inline-flex;
++    align-items: center;
++    justify-content: center;
++    min-width: 64px;
++    height: 30px;
++    border-radius: 999px;
++    color: #64748b;
++    font-size: 12px;
++    font-weight: 700;
++    transition: color 180ms ease;
++}
++
++.clyra-doc-tab--active {
++    color: #0f172a;
++}
++
++.clyra-doc-tab-indicator {
++    position: absolute;
++    inset: 0;
++    z-index: -1;
++    border-radius: inherit;
++    border: 1px solid rgba(226, 232, 240, 0.95);
++    background: rgba(255, 255, 255, 0.94);
++    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.06);
++}
++
++.clyra-doc-tool-panel {
++    display: flex;
++    min-width: 0;
++    flex-wrap: wrap;
++    align-items: center;
++    justify-content: flex-end;
++    gap: 8px;
++}
++
++.clyra-doc-tool-cluster {
++    display: inline-flex;
++    align-items: center;
++    gap: 7px;
++    border-radius: 999px;
++    border: 1px solid rgba(226, 232, 240, 0.72);
++    background: rgba(255, 255, 255, 0.78);
++    min-height: 44px;
++    padding: 4px 5px 4px 10px;
++    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.86);
++}
++
++.clyra-doc-tool-cluster-label {
++    color: #94a3b8;
++    font-size: 10px;
++    font-weight: 800;
++    letter-spacing: 0.07em;
++    text-transform: uppercase;
++}
++
+ .clyra-doc-tool-group {
+     display: inline-flex;
+     align-items: center;
+@@ -1903,7 +2057,6 @@ body,
+ }
+ 
+ .clyra-doc-select,
+-.clyra-doc-number,
+ .clyra-doc-colour {
+     display: inline-flex;
+     height: 36px;
+@@ -1932,34 +2085,93 @@ body,
+     min-width: 94px;
+ }
+ 
+-.clyra-doc-number {
++.clyra-doc-colour input {
++    height: 20px;
++    width: 24px;
++    cursor: pointer;
++    border: 0;
++    background: transparent;
++    padding: 0;
++}
++
++.clyra-doc-colour-stack {
++    display: inline-flex;
++    align-items: center;
+     gap: 6px;
+-    padding: 0 8px 0 10px;
++    padding: 2px;
+ }
+ 
+-.clyra-doc-number span {
+-    font-size: 11px;
+-    font-weight: 700;
+-    color: #94a3b8;
++.clyra-doc-colour-row {
++    display: inline-flex;
++    min-height: 34px;
++    align-items: center;
++    gap: 5px;
++    border-radius: 999px;
++    background: rgba(248, 250, 252, 0.68);
++    padding: 2px 3px 2px 9px;
+ }
+ 
+-.clyra-doc-number input {
+-    width: 42px;
+-    border: 0;
+-    background: transparent;
+-    color: #334155;
++.clyra-doc-colour-row > span:first-child {
++    min-width: 0;
++    color: #64748b;
++    font-size: 10.5px;
++    font-weight: 760;
++    letter-spacing: 0.01em;
++    white-space: nowrap;
++}
++
++.clyra-doc-attachment-cluster {
++    max-width: min(100%, 330px);
++}
++
++.clyra-doc-attach-button {
++    display: inline-flex;
++    height: 34px;
++    align-items: center;
++    gap: 7px;
++    border-radius: 999px;
++    border: 1px solid rgba(226, 232, 240, 0.95);
++    background: rgba(248, 250, 252, 0.92);
++    padding: 0 11px;
++    color: #475569;
+     font-size: 12px;
+-    font-weight: 700;
+-    outline: none;
++    font-weight: 720;
++    transition:
++        transform 170ms cubic-bezier(0.22, 1, 0.36, 1),
++        background-color 170ms ease,
++        border-color 170ms ease,
++        color 170ms ease,
++        box-shadow 170ms ease;
+ }
+ 
+-.clyra-doc-colour input {
+-    height: 20px;
+-    width: 24px;
+-    cursor: pointer;
+-    border: 0;
+-    background: transparent;
+-    padding: 0;
++.clyra-doc-attach-button:hover {
++    transform: translateY(-1px);
++    border-color: rgba(148, 163, 184, 0.46);
++    background: #fff;
++    color: #0f172a;
++    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.065);
++}
++
++.clyra-doc-attachment-list {
++    display: inline-flex;
++    min-width: 0;
++    align-items: center;
++    gap: 5px;
++    overflow: hidden;
++}
++
++.clyra-doc-attachment-list span {
++    max-width: 92px;
++    overflow: hidden;
++    border-radius: 999px;
++    background: rgba(241, 245, 249, 0.9);
++    padding: 5px 8px;
++    color: #64748b;
++    font-size: 10.5px;
++    font-weight: 720;
++    line-height: 1;
++    text-overflow: ellipsis;
++    white-space: nowrap;
+ }
+ 
+ .clyra-doc-editor {
+@@ -1973,16 +2185,42 @@ body,
+     outline: none;
+ }
+ 
+-.clyra-doc-body::-webkit-scrollbar {
+-    display: none;
+-}
+-
+ .clyra-doc-body {
+     max-height: 306px;
+     min-height: 142px;
+     overflow-y: auto;
+     overflow-x: hidden;
+-    scrollbar-width: none;
++    scrollbar-width: thin;
++    scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
++}
++
++.clyra-visible-scrollbar {
++    scrollbar-width: thin;
++    scrollbar-color: rgba(148, 163, 184, 0.34) transparent;
++}
++
++.clyra-doc-body::-webkit-scrollbar,
++.clyra-visible-scrollbar::-webkit-scrollbar {
++    width: 8px;
++    height: 8px;
++}
++
++.clyra-doc-body::-webkit-scrollbar-track,
++.clyra-visible-scrollbar::-webkit-scrollbar-track {
++    background: transparent;
++}
++
++.clyra-doc-body::-webkit-scrollbar-thumb,
++.clyra-visible-scrollbar::-webkit-scrollbar-thumb {
++    border: 2px solid transparent;
++    border-radius: 999px;
++    background-clip: content-box;
++    background-color: rgba(148, 163, 184, 0.34);
++}
++
++.clyra-doc-body::-webkit-scrollbar-thumb:hover,
++.clyra-visible-scrollbar::-webkit-scrollbar-thumb:hover {
++    background-color: rgba(100, 116, 139, 0.44);
+ }
+ 
+ .clyra-doc-display {
+@@ -2001,6 +2239,31 @@ body,
+     color: #475569;
+ }
+ 
++.clyra-doc-shimmer-text {
++    display: inline-block;
++    background-image: linear-gradient(
++        100deg,
++        #64748b 0%,
++        #64748b 28%,
++        #0f172a 42%,
++        #94a3b8 52%,
++        #475569 64%,
++        #64748b 100%
++    );
++    background-size: 240% 100%;
++    -webkit-background-clip: text;
++    background-clip: text;
++    color: transparent;
++    font-size: 13.5px;
++    font-weight: 650;
++    animation: clyra-doc-shimmer 1.35s cubic-bezier(0.4, 0, 0.2, 1) infinite;
++}
++
++@keyframes clyra-doc-shimmer {
++    0% { background-position: 140% 0; }
++    100% { background-position: -120% 0; }
++}
++
+ .clyra-doc-preparing-icon {
+     display: inline-grid;
+     height: 34px;
+@@ -2016,6 +2279,251 @@ body,
+     outline: none;
+ }
+ 
++.clyra-doc-body-label,
++.clyra-doc-field > span {
++    display: block;
++    margin-bottom: 8px;
++    color: #94a3b8;
++    font-size: 11px;
++    font-weight: 750;
++    letter-spacing: 0.08em;
++    text-transform: uppercase;
++}
++
++.clyra-doc-context-menu {
++    position: absolute;
++    z-index: 80;
++    display: grid;
++    gap: 4px;
++    min-width: 206px;
++    border: 1px solid rgba(226, 232, 240, 0.92);
++    border-radius: 18px;
++    background: rgba(255, 255, 255, 0.98);
++    padding: 6px;
++    box-shadow: 0 18px 48px rgba(15, 23, 42, 0.12);
++}
++
++.clyra-doc-context-menu button {
++    border-radius: 13px;
++    padding: 9px 11px;
++    color: #334155;
++    text-align: left;
++    font-size: 13px;
++    font-weight: 650;
++    transition:
++        background-color 160ms ease,
++        color 160ms ease,
++        transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
++}
++
++.clyra-doc-context-menu button:hover {
++    background: rgba(241, 245, 249, 0.86);
++    color: #0f172a;
++    transform: translateX(1px);
++}
++
++.clyra-doc-autocomplete {
++    position: absolute;
++    z-index: 90;
++    pointer-events: none;
++    display: inline-flex;
++    align-items: center;
++    gap: 8px;
++    border-radius: 999px;
++    border: 1px solid rgba(226, 232, 240, 0.98);
++    background: rgba(255, 255, 255, 0.98);
++    color: #0f172a;
++    box-shadow:
++        0 14px 32px rgba(15, 23, 42, 0.095),
++        inset 0 1px 0 rgba(255, 255, 255, 0.92);
++    padding: 6px 7px 6px 12px;
++    font-size: 12px;
++    font-weight: 700;
++    line-height: 1;
++    will-change: transform, opacity;
++}
++
++.clyra-code-autocomplete {
++    position: absolute;
++    z-index: 90;
++    pointer-events: none;
++    display: inline-flex;
++    align-items: center;
++    gap: 8px;
++    border-radius: 999px;
++    border-color: rgba(148, 163, 184, 0.24);
++    background: rgba(2, 6, 23, 0.96);
++    color: #fff;
++    box-shadow: 0 14px 38px rgba(15, 23, 42, 0.18);
++    padding: 6px 7px 6px 12px;
++    font-size: 12px;
++    font-weight: 700;
++    line-height: 1;
++    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
++    will-change: transform, opacity;
++}
++
++.clyra-doc-autocomplete kbd {
++    display: inline-flex;
++    align-items: center;
++    justify-content: center;
++    border-radius: 999px;
++    border: 1px solid rgba(226, 232, 240, 0.95);
++    background: #f8fafc;
++    padding: 3px 6px;
++    color: #64748b;
++    font-size: 9px;
++    font-weight: 850;
++    letter-spacing: 0.08em;
++    text-transform: uppercase;
++}
++
++.clyra-code-autocomplete kbd {
++    display: inline-flex;
++    align-items: center;
++    justify-content: center;
++    border-radius: 999px;
++    background: rgba(255, 255, 255, 0.16);
++    padding: 3px 6px;
++    color: rgba(255, 255, 255, 0.78);
++    font-size: 9px;
++    font-weight: 800;
++    letter-spacing: 0.08em;
++    text-transform: uppercase;
++}
++
++.clyra-rephrase-mark {
++    position: relative;
++    border-radius: 6px;
++    background: linear-gradient(90deg, rgba(254, 240, 138, 0.5), rgba(219, 234, 254, 0.62), rgba(254, 240, 138, 0.5));
++    background-size: 220% 100%;
++    color: inherit;
++    box-decoration-break: clone;
++    -webkit-box-decoration-break: clone;
++    padding: 0 2px;
++    animation:
++        clyra-rephrase-mark-pulse 1.4s ease-in-out infinite,
++        clyra-rephrase-thinking-sweep 2.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
++}
++
++.clyra-rephrase-mark--block {
++    display: block;
++    margin: -2px;
++    padding: 2px;
++}
++
++.clyra-rephrase-result {
++    position: relative;
++    border-radius: 6px;
++    background: rgba(220, 252, 231, 0.78);
++    box-decoration-break: clone;
++    -webkit-box-decoration-break: clone;
++    padding: 0 2px;
++    box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.13), 0 8px 22px rgba(15, 23, 42, 0.08);
++    transition:
++        background-color 980ms cubic-bezier(0.16, 1, 0.3, 1),
++        box-shadow 980ms cubic-bezier(0.16, 1, 0.3, 1),
++        filter 980ms cubic-bezier(0.16, 1, 0.3, 1);
++    animation: clyra-rephrase-result-arrive 720ms cubic-bezier(0.16, 1, 0.3, 1) both;
++}
++
++.clyra-rephrase-result--settled {
++    background: rgba(255, 255, 255, 0);
++    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
++    filter: saturate(1.02);
++}
++
++@keyframes clyra-rephrase-result-arrive {
++    0% {
++        opacity: 0;
++        transform: translateY(6px);
++        filter: blur(4px);
++    }
++    58% {
++        opacity: 1;
++        transform: translateY(-1px);
++        filter: blur(0);
++    }
++    100% {
++        opacity: 1;
++        transform: translateY(0);
++        filter: blur(0);
++    }
++}
++
++@keyframes clyra-rephrase-thinking-sweep {
++    0% {
++        background-position: 120% 0;
++    }
++    100% {
++        background-position: -120% 0;
++    }
++}
++
++.clyra-rewrite-chip {
++    overflow: hidden;
++    color: #475569;
++    backdrop-filter: blur(14px) saturate(1.08);
++    -webkit-backdrop-filter: blur(14px) saturate(1.08);
++    background:
++        linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.94)),
++        #fff;
++}
++
++.clyra-rewrite-chip-dot {
++    opacity: 0.68;
++}
++
++@keyframes clyra-rephrase-mark-pulse {
++    0%,
++    100% {
++        background: rgba(254, 240, 138, 0.42);
++        box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.22);
++    }
++    50% {
++        background: rgba(254, 249, 195, 0.78);
++        box-shadow: 0 0 0 4px rgba(250, 204, 21, 0.12);
++    }
++}
++
++.clyra-doc-editor span.bg-transparent {
++    transition: background-color 700ms ease;
++}
++
++.clyra-writing-suggestions {
++    position: absolute;
++    left: 18px;
++    bottom: calc(100% + 8px);
++    z-index: 45;
++    display: inline-flex;
++    align-items: center;
++    gap: 8px;
++    border: 1px solid rgba(226, 232, 240, 0.88);
++    border-radius: 999px;
++    background: rgba(255, 255, 255, 0.96);
++    padding: 5px 6px 5px 12px;
++    color: #94a3b8;
++    font-size: 12px;
++    font-weight: 650;
++    box-shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
++}
++
++.clyra-writing-suggestions button {
++    border-radius: 999px;
++    background: #f8fafc;
++    padding: 5px 10px;
++    color: #1e293b;
++    font-weight: 750;
++    transition:
++        background-color 160ms ease,
++        transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
++}
++
++.clyra-writing-suggestions button:hover {
++    background: #eef2f7;
++    transform: translateY(-1px);
++}
++
+ .clyra-doc-editor div {
+     min-height: 1.72em;
+ }
+@@ -2046,3 +2554,14 @@ body,
+     margin: 0.65rem 0;
+     padding-left: 1.35rem;
+ }
++
++@media (max-width: 760px) {
++    .clyra-doc-toolbar {
++        grid-template-columns: 1fr;
++    }
++
++    .clyra-doc-tabbar,
++    .clyra-doc-tool-panel {
++        justify-content: flex-start;
++    }
++}
