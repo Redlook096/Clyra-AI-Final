@@ -1529,55 +1529,30 @@ The local fallback is intentionally compact so recovery stays fast and reliable.
           role: "user",
           content: `User request - build a complete, polished React 19 + TypeScript experience with Tailwind-compatible classes, lucide-react, and framer-motion where helpful.
 
-Project context: elite in-browser coding agent. Your stream is rendered as a live timeline:
-  - DEEP THINKING / MID-TASK REFLECTION / SELF-CRITIQUE / SHIPPED blocks render as inline expandable "Thought" panels.
-  - ANALYZE renders as a small "Analysing <path>" banner.
-  - CODE renders as a typed mini code box, one block per file.
-  - RUN renders as a single-row "Run Command <cmd>" card.
-  - Short prose lines BETWEEN blocks render as small narration lines (kept short - one sentence each).
-  - Once everything finishes, the UI auto-renders a "Build complete" summary listing each file you wrote and its top-level exports, so make sure exports are named and (ideally) preceded by a brief JSDoc.
-
-You MUST follow the mandatory agent loop. Do NOT stop after the first thinking block.
+Project context: elite in-browser coding agent. Your stream is rendered as a live timeline.
+You MUST follow the mandatory agent loop and use a plan-first approach.
 
 Project root for this build:
   ${vibeProjectRoot}
 
 Required build contract:
   1) Think like a senior product engineer. Build the complete version the user probably expects, not the smallest possible component.
-  2) Emit a concise opening <<<VIBE_THINKING>>> block that identifies the product type, necessary screens/states, file map, and one active TodoWrite item.
-  3) Write real source files under ${vibeProjectRoot}. Do not create plan.md, README.md, or process docs unless the user explicitly asks.
-  4) For any non-trivial app, emit at least 6 focused source files: types, data, reusable UI, feature components/screens, hooks or utils where useful, and App wiring.
-  5) Split the work into honest implementation steps. After each step, emit a <<<VIBE_THINKING>>> reflection naming what was actually completed, what changed in the codebase, what risk remains, and the next concrete step.
-       - Tiny requests like a calculator or simple converter usually need 2 implementation steps and 4-6 files.
-       - Medium tools/dashboards usually need 3-4 steps and 6-9 files.
-       - Full landing pages, SaaS products, games, or workflow apps usually need 4-6 steps and enough files to cover the complete surface.
-       - Do not create fake steps. If a task is small, keep the process small.
-  6) Build obvious supporting features automatically:
-       - Landing/SaaS: navbar, mobile menu, hero, features, benefits, pricing, FAQ, testimonials, CTA, footer, login, signup, forgot password, onboarding/dashboard preview.
-       - Dashboard: sidebar/topbar, stats, filters/search, charts or visual summaries, recent activity, settings/profile preview, empty/loading states, responsive mobile layout.
-       - Chat app: conversation sidebar, messages, send behavior, typing state, empty state, new chat flow, responsive layout.
-       - Auth: login, signup, forgot password, validation, loading/errors, password visibility, reusable auth card.
-       - Game: playable loop, controls, scoring, win/loss/reset, tuned visuals, instructions, pause/restart.
-       - Tool/editor: validation, menus/tabs/dropdowns, saved/local state, empty/error/success states, responsive controls.
-  7) Every button, menu, tab, modal, form, dropdown, sidebar, and navigation element you render must work locally with React state. Do not fake working UI.
-  8) Use prompt-specific product judgement, sample data, copy, components, and visual direction. Avoid generic renamed templates.
-  9) Verify with one <<<VIBE_RUN>>> card before the final SHIPPED block.
+  2) DEEP REASONING: Before any code, you MUST emit a <<<VIBE_CODE file="${vibeProjectRoot}/plan.md">>> block.
+     - This plan must be a detailed breakdown of architecture, file structure, component hierarchy, state management, and implementation steps.
+     - Use this plan to think deeply and reason through complex logic before writing any React code.
+  3) Emit a concise opening <<<VIBE_THINKING>>> block that identifies the product type, architecture, and the first step from your plan.
+  4) Write real source files under ${vibeProjectRoot}. 
+  5) Split the work into honest implementation steps. After each step, emit a <<<VIBE_THINKING>>> reflection naming what was actually completed, what changed in the codebase, what risk remains, and the next concrete step from your plan.md.
+  6) Build obvious supporting features automatically (Auth, Dashboards, Landing Sections, etc.).
+  7) Every button, menu, tab, modal, form, dropdown, sidebar, and navigation element you render must work locally with React state.
+  8) Verify with one <<<VIBE_RUN>>> card before the final SHIPPED block.
 
 Hard rules:
-  - The live preview must be the requested app/product itself. Do NOT build a landing page, marketing page, portfolio, explainer, or a page that merely describes the request unless the user explicitly asked for that.
-  - Never build an explainer website about the user's request. If they ask for a calculator, render a calculator; if they ask for a game, render the playable game; if they ask for a landing page, render the landing page.
-  - Include meaningful interactive state and controls when the requested product implies an app, tool, game, dashboard, editor, or workflow.
-  - Avoid basic repeated UI. Pick a prompt-specific design direction, custom sample data, unique layout structure, and domain-specific interactions. The result must not look like the same preset with renamed text.
-  - Animations must be purposeful and varied: use motion for state changes, feedback, transitions, or gameplay, not the same generic fade on every element.
   - NEVER use markdown triple-backtick fences. All code goes inside <<<VIBE_CODE>>> as raw source.
-  - NEVER print decorative divider lines made of box-drawing characters.
   - Prose OUTSIDE delimiters must be short (≤1 sentence). Long reasoning belongs inside DEEP THINKING.
-  - In <<<VIBE_CODE>>>, \`added\` must equal the number of lines in that code block (split on newlines); \`removed\` = lines removed when editing.
-  - SANDBOX: every \`file\` and \`path\` MUST start with \`${vibeProjectRoot}/\`. The host strips and rejects anything outside that namespace, so do NOT use absolute paths, \`..\`, or pretend to edit Clyra's own source. The preview is mounted automatically from the sandbox; do not ask the user to start another dev server.
-  - Aim for 2-4 useful thinking blocks (open / mid-reflection if needed / verify / shipped). Do not pad the stream with fake process steps.
-  - Group tightly-related files into one step instead of reflecting between every file.
-  - Each top-level export in your CODE blocks should have a one-line JSDoc above it for the build summary.
-  - The final SHIPPED block must list the actual files created and the interactions/states that work.
+  - SANDBOX: every \`file\` and \`path\` MUST start with \`${vibeProjectRoot}/\`.
+  - Each top-level export in your CODE blocks should have a one-line JSDoc above it.
+  - The final SHIPPED block must list the actual files created.
 
 Request details: ${userPrompt}`,
         },
@@ -2287,6 +2262,15 @@ Please analyze the code you just wrote and fix this error.`;
     },
     [adjustHeight, textareaRef],
   );
+
+  const getRecentVibeProjects = useMemo(() => {
+    return filteredProjectChats.slice(0, 3).map((chat) => ({
+      id: chat.id,
+      title: chat.title,
+      updatedAt: chat.updatedAt,
+      isRunning: chat.vibeRunning,
+    }));
+  }, [filteredProjectChats]);
 
   const applyQuickPrompt = (prompt: string, skeleton?: string) => {
     setActiveWorkspaceTab("chat");
@@ -3638,6 +3622,43 @@ Please analyze the code you just wrote and fix this error.`;
                                     </button>
                                   </motion.div>
                                 ))}
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+
+                          <AnimatePresence>
+                            {isVibeWorkspace && isExpanded && getRecentVibeProjects.length > 0 && (
+                              <motion.div
+                                initial={{ opacity: 0, height: 0 }}
+                                animate={{ opacity: 1, height: "auto" }}
+                                exit={{ opacity: 0, height: 0 }}
+                                className="px-4 pb-3"
+                              >
+                                <div className="flex items-center gap-2 overflow-x-auto scrollbar-none py-1">
+                                  {getRecentVibeProjects.map((project) => (
+                                    <button
+                                      key={project.id}
+                                      onClick={() => {
+                                        const chat = chats.find(c => c.id === project.id);
+                                        if (chat) openChatSession(chat);
+                                      }}
+                                      className="flex shrink-0 items-center gap-2.5 rounded-xl border border-black/[0.04] bg-white/40 px-3 py-1.5 transition-all hover:border-black/10 hover:bg-white active:scale-95 backdrop-blur-md"
+                                    >
+                                      <div className="relative flex h-6 w-6 items-center justify-center rounded-lg bg-slate-900 text-white">
+                                        <SquarePen className="h-3 w-3" />
+                                        {project.isRunning && (
+                                          <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
+                                            <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
+                                          </span>
+                                        )}
+                                      </div>
+                                      <span className="text-[12.5px] font-bold tracking-tight text-slate-700">
+                                        {project.title}
+                                      </span>
+                                    </button>
+                                  ))}
+                                </div>
                               </motion.div>
                             )}
                           </AnimatePresence>
