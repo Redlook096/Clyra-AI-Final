@@ -20,9 +20,10 @@ import xml.etree.ElementTree as ET
 
 TMP_ROOT = "./tmp"
 OUTPUT_DIR = "./output"
-OUTPUT_WIDTH = 1280
-OUTPUT_HEIGHT = 720
+OUTPUT_WIDTH = 720
+OUTPUT_HEIGHT = 1280
 OUTPUT_FPS = 30
+MAX_CLIP_LENGTH = 30.0
 
 
 def emit(step, status, **data):
@@ -74,12 +75,8 @@ def fmt_time(seconds):
     return f"{minutes}:{int(seconds % 60):02d}"
 
 
-def parse_duration(value, default=40.0):
-    try:
-        duration = float(value)
-    except (TypeError, ValueError):
-        duration = default
-    return max(12.0, min(60.0, duration))
+def parse_duration(value, default=MAX_CLIP_LENGTH):
+    return MAX_CLIP_LENGTH
 
 
 def parse_captions(caption_track):
@@ -152,14 +149,29 @@ def keyword_set(moment_type):
     base = {
         "viral": "wow reveal shocked insane best secret never crazy huge amazing",
         "funny": "laugh funny hilarious joke awkward silly ridiculous",
+        "sad": "sad cry cried tears goodbye lost alone death died dead",
+        "angry": "angry mad yelling shouting fight argument drama wrong",
         "dramatic": "problem danger mistake wrong serious impossible finally",
+        "inspirational": "dream build believe learn changed future possible",
         "inspiring": "dream build believe learn changed future possible",
-        "surprising": "suddenly surprise unexpected reveal secret actually",
+        "shocking": "suddenly surprise shocked unexpected reveal secret actually",
+        "surprising": "suddenly surprise shocked unexpected reveal secret actually",
         "action": "go move run hit jump fight fast start now",
+        "reaction": "reaction shocked laugh cry angry face wow wait",
     }
     custom = re.findall(r"[a-z0-9']+", (moment_type or "").lower())
     if custom and moment_type not in base:
-        return set(custom)
+        semantic = {
+            "dies": "dies died dead killed death falls collapse funeral goodbye",
+            "laughing": "laugh laughing laughed funny haha giggle smile",
+            "angry": "angry mad yelling shouting argument fight drama",
+            "falls": "fall falls fell trip trips crash down",
+            "shocked": "shocked surprise surprised wow unbelievable",
+        }
+        expanded = set(custom)
+        for token in custom:
+            expanded.update(semantic.get(token, "").split())
+        return expanded
     return set(base.get(moment_type, base["viral"]).split())
 
 
@@ -238,15 +250,15 @@ def ass_text(value):
 
 def subtitle_override(position):
     anchors = {
-        "top": (8, 118),
-        "top-centre": (8, 118),
-        "center": (5, 360),
-        "centre": (5, 360),
-        "bottom": (2, 596),
-        "bottom-centre": (2, 596),
+        "top": (8, 220),
+        "top-centre": (8, 220),
+        "center": (5, 640),
+        "centre": (5, 640),
+        "bottom": (2, 1050),
+        "bottom-centre": (2, 1050),
     }
     alignment, y = anchors.get(position, anchors["bottom"])
-    return alignment, f"{{\\an{alignment}\\pos(640,{y})\\q2\\bord7\\shad2}}"
+    return alignment, f"{{\\an{alignment}\\pos(360,{y})\\q2\\bord6\\shad1}}"
 
 
 def subtitle_beats(words, clip_start, clip_end):
@@ -293,13 +305,15 @@ def write_subtitles(path, words, clip_start, clip_end, font, font_size, color, p
 
     with open(path, "w", encoding="utf-8") as handle:
         handle.write("[Script Info]\n")
-        handle.write("ScriptType: v4.00+\nPlayResX: 1280\nPlayResY: 720\nWrapStyle: 2\nScaledBorderAndShadow: yes\n")
+        handle.write(
+            f"ScriptType: v4.00+\nPlayResX: {OUTPUT_WIDTH}\nPlayResY: {OUTPUT_HEIGHT}\nWrapStyle: 2\nScaledBorderAndShadow: yes\n"
+        )
         handle.write("\n[V4+ Styles]\n")
         handle.write(
             "Format: Name,Fontname,Fontsize,PrimaryColour,OutlineColour,BackColour,Bold,Alignment,MarginL,MarginR,MarginV,Outline,Shadow,Encoding\n"
         )
         handle.write(
-            f"Style: Word,{font},{font_size},{ass_color(color)},&H00000000,&H80000000,1,{alignment},40,40,28,7,2,1\n"
+            f"Style: Word,{font},{font_size},{ass_color(color)},&H00000000,&H80000000,1,{alignment},36,36,44,6,1,1\n"
         )
         handle.write("\n[Events]\n")
         handle.write("Format: Layer,Start,End,Style,Name,MarginL,MarginR,MarginV,Effect,Text\n")
@@ -314,8 +328,8 @@ def run_ffmpeg(args, timeout=90):
 
 def extract_clean_clip(input_url, local_fallback_path, clip_path, clip_start, clip_duration):
     video_filter = (
-        f"scale={OUTPUT_WIDTH}:{OUTPUT_HEIGHT}:flags=lanczos:force_original_aspect_ratio=decrease,"
-        f"pad={OUTPUT_WIDTH}:{OUTPUT_HEIGHT}:(ow-iw)/2:(oh-ih)/2:black,"
+        f"scale={OUTPUT_WIDTH}:{OUTPUT_HEIGHT}:flags=bicubic:force_original_aspect_ratio=increase,"
+        f"crop={OUTPUT_WIDTH}:{OUTPUT_HEIGHT}:(iw-ow)/2:(ih-oh)/2,"
         f"fps={OUTPUT_FPS}"
     )
     base = [
@@ -332,9 +346,9 @@ def extract_clean_clip(input_url, local_fallback_path, clip_path, clip_start, cl
         "-c:v",
         "libx264",
         "-preset",
-        "medium",
+        "veryfast",
         "-crf",
-        "18",
+        "22",
         "-pix_fmt",
         "yuv420p",
         "-c:a",
@@ -365,6 +379,34 @@ def extract_clean_clip(input_url, local_fallback_path, clip_path, clip_start, cl
 def transcribe_clip_words(clip_path):
     expose_ffmpeg_to_subprocesses()
 
+    words = []
+    try:
+        from faster_whisper import WhisperModel
+
+        model_name = os.environ.get("CLIPPER_WHISPER_MODEL", "base.en")
+        compute_type = os.environ.get("WHISPER_COMPUTE_TYPE", "int8")
+        model = WhisperModel(model_name, device="cpu", compute_type=compute_type)
+        segments, _info = model.transcribe(
+            clip_path,
+            word_timestamps=True,
+            vad_filter=True,
+            beam_size=3,
+            language="en",
+            condition_on_previous_text=False,
+        )
+        for segment in segments:
+            for item in segment.words or []:
+                token = re.sub(r"[^A-Za-z0-9']+", "", str(item.word or "").strip()).upper()
+                if not token:
+                    continue
+                start = max(0.0, float(item.start or 0.0))
+                end = max(start + 0.05, float(item.end or start + 0.2))
+                words.append({"word": token[:28], "start": start, "end": end})
+        if words:
+            return words
+    except Exception:
+        words = []
+
     import whisper
 
     model_name = os.environ.get("CLIPPER_WHISPER_MODEL", "base.en")
@@ -379,7 +421,6 @@ def transcribe_clip_words(clip_path):
         verbose=False,
     )
 
-    words = []
     for segment in result.get("segments", []):
         for item in segment.get("words", []) or []:
             token = re.sub(r"[^A-Za-z0-9']+", "", str(item.get("word", "")).strip()).upper()
@@ -415,9 +456,9 @@ def burn_subtitles(source_clip_path, output_path, subtitle_path):
             "-c:v",
             "libx264",
             "-preset",
-            "medium",
+            "veryfast",
             "-crf",
-            "16",
+            "21",
             "-pix_fmt",
             "yuv420p",
             "-c:a",
@@ -437,11 +478,11 @@ def main():
     url = sys.argv[1].strip()
     cfg = json.loads(sys.argv[2]) if len(sys.argv) > 2 else {}
     font = str(cfg.get("font", "Impact"))
-    font_size = int(cfg.get("font_size", 52))
+    font_size = min(92, max(44, int(cfg.get("font_size", 74))))
     text_color = str(cfg.get("text_colour", "#FFFFFF"))
     position = str(cfg.get("position", "bottom"))
     moment_type = str(cfg.get("moment_type", "viral"))
-    requested_duration = parse_duration(cfg.get("clip_duration", 40))
+    requested_duration = parse_duration(cfg.get("clip_duration", MAX_CLIP_LENGTH))
     base_name = clean_name(str(cfg.get("clip_name", "clip")))
     job_id = f"{base_name}-{int(time.time() * 1000) % 1000000}"
     output_name = f"{job_id}.mp4"
@@ -521,7 +562,7 @@ def main():
         if not os.path.exists(output_path) or os.path.getsize(output_path) <= 1024:
             fail("Encoder did not produce a playable MP4")
 
-        emit("render", "complete", message=f"720p 30fps MP4 ready ({os.path.getsize(output_path) // 1024} KB)")
+        emit("render", "complete", message=f"720x1280 30fps MP4 ready ({os.path.getsize(output_path) // 1024} KB)")
         elapsed = time.time() - started
         caption_words = [word["word"] for word in transcribed_words if len(word["word"]) > 2]
         emit(
@@ -543,7 +584,7 @@ def main():
             total_seconds=round(elapsed),
             file_size=os.path.getsize(output_path),
             timing_source=timing_source,
-            output_quality="720p 30fps AAC 256k",
+            output_quality="720x1280 vertical 30fps AAC 256k",
         )
     except SystemExit:
         raise

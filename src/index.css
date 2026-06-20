@@ -3,341 +3,371 @@
 
 /* Hide scrollbars while keeping overflow scroll (textarea, chat, palettes). */
 .scrollbar-none {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 .scrollbar-none::-webkit-scrollbar {
-    display: none;
-    width: 0;
-    height: 0;
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 :root {
-    /* Legacy; main layout uses --clyra-ui-scale */
-    --app-scale: 1;
-    /* Set by App resize / visualViewport (defaults safe for SSR) */
-    --clyra-ui-scale: 1;
-    --clyra-content-cap: 768px;
+  /* Legacy; main layout uses --clyra-ui-scale */
+  --app-scale: 1;
+  /* Set by App resize / visualViewport (defaults safe for SSR) */
+  --clyra-ui-scale: 1;
+  --clyra-content-cap: 768px;
 }
 
 .clyra-app-shell {
-    position: relative;
-    isolation: isolate;
-    background: #fff;
+  position: relative;
+  isolation: isolate;
+  background: #fff;
 }
 
 .clyra-app-shell::before {
-    display: none;
+  display: none;
 }
 
 .clyra-main-surface {
-    background: #fff !important;
-    border-left: 0 !important;
-    width: 100%;
+  background: #fff !important;
+  border-left: 0 !important;
+  width: 100%;
 }
 
 .clyra-screen-stage {
-    background: transparent;
-    transform: translateZ(0);
-    backface-visibility: hidden;
+  background: transparent;
+  transform: translateZ(0);
+  backface-visibility: hidden;
 }
 
 .clyra-sidebar-rail {
-    background: transparent !important;
-    pointer-events: auto;
+  background: transparent !important;
+  pointer-events: auto;
 }
 
 .clyra-sidebar-rail--closed {
-    pointer-events: none !important;
+  pointer-events: none !important;
 }
 
 @keyframes clyra-fluid-background {
-    0%, 100% {
-        transform: translate3d(-1.2%, -0.8%, 0) scale(1.02);
-    }
-    50% {
-        transform: translate3d(1.2%, 0.9%, 0) scale(1.025);
-    }
+  0%,
+  100% {
+    transform: translate3d(-1.2%, -0.8%, 0) scale(1.02);
+  }
+  50% {
+    transform: translate3d(1.2%, 0.9%, 0) scale(1.025);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .clyra-app-shell::before {
-        animation: none;
-    }
+  .clyra-app-shell::before {
+    animation: none;
+  }
 
-    .clyra-workflow-tab,
-    .clyra-workflow-tabs,
-    .clyra-workflow-tabs::after,
-    .clyra-sidebar-toggle::before,
-    .clyra-sidebar-close::before,
-    .clyra-temp-chat-toggle::before {
-        transition-duration: 1ms !important;
-    }
+  .clyra-workflow-tab,
+  .clyra-workflow-tabs,
+  .clyra-workflow-tabs::after,
+  .clyra-sidebar-toggle::before,
+  .clyra-sidebar-close::before,
+  .clyra-temp-chat-toggle::before {
+    transition-duration: 1ms !important;
+  }
 }
 
 /* Extra vertical room so scaled UI (transform) isn’t clipped at the bottom */
 .clyra-stage-safe {
-    flex: 1 1 0%;
-    min-height: 0;
-    min-width: 0;
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-    padding-bottom: max(0.75rem, calc((var(--clyra-ui-scale, 1) - 1) * 15rem));
+  flex: 1 1 0%;
+  min-height: 0;
+  min-width: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  padding-bottom: max(0.75rem, calc((var(--clyra-ui-scale, 1) - 1) * 15rem));
 }
 
 .clyra-layout-stage {
-    flex: 1 1 auto;
-    min-height: 0;
-    min-width: 0;
-    transform: scale(var(--clyra-ui-scale));
-    transform-origin: top center;
-    width: calc(100% / var(--clyra-ui-scale));
-    max-width: calc(var(--clyra-content-cap) / var(--clyra-ui-scale));
-    transition:
-        transform 0.22s ease-out,
-        width 0.22s ease-out,
-        max-width 0.22s ease-out;
-    will-change: transform;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  transform: scale(var(--clyra-ui-scale));
+  transform-origin: top center;
+  width: calc(100% / var(--clyra-ui-scale));
+  max-width: calc(var(--clyra-content-cap) / var(--clyra-ui-scale));
+  transition:
+    transform 0.22s ease-out,
+    width 0.22s ease-out,
+    max-width 0.22s ease-out;
+  will-change: transform;
 }
 
 .clyra-workflow-tabs {
-    position: relative;
-    display: inline-flex;
-    max-width: min(100%, 560px);
-    align-items: center;
-    gap: 4px;
-    overflow-x: auto;
-    border: 1px solid rgba(148, 163, 184, 0);
-    border-radius: 999px;
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0), rgba(248, 250, 252, 0)),
-        rgba(255, 255, 255, 0);
-    padding: 5px;
-    box-shadow:
-        0 18px 40px rgba(15, 23, 42, 0),
-        inset 0 1px 0 rgba(255, 255, 255, 0);
-    backdrop-filter: blur(0) saturate(1);
-    -webkit-backdrop-filter: blur(0) saturate(1);
-    scrollbar-width: none;
-    transition:
-        border-color 320ms cubic-bezier(0.22, 1, 0.36, 1),
-        background 320ms cubic-bezier(0.22, 1, 0.36, 1),
-        box-shadow 320ms cubic-bezier(0.22, 1, 0.36, 1),
-        backdrop-filter 320ms cubic-bezier(0.22, 1, 0.36, 1);
-    perspective: 900px;
-    transform-style: preserve-3d;
+  position: relative;
+  display: inline-flex;
+  max-width: min(100%, 560px);
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  border: 1px solid rgba(148, 163, 184, 0);
+  border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0), rgba(248, 250, 252, 0)),
+    rgba(255, 255, 255, 0);
+  padding: 5px;
+  box-shadow:
+    0 18px 40px rgba(15, 23, 42, 0),
+    inset 0 1px 0 rgba(255, 255, 255, 0);
+  backdrop-filter: blur(0) saturate(1);
+  -webkit-backdrop-filter: blur(0) saturate(1);
+  scrollbar-width: none;
+  transition:
+    border-color 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    background 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    backdrop-filter 320ms cubic-bezier(0.22, 1, 0.36, 1);
+  perspective: 900px;
+  transform-style: preserve-3d;
 }
 
 .clyra-workflow-tabs::after {
-    position: absolute;
-    left: 12%;
-    right: 12%;
-    bottom: -13px;
-    z-index: -1;
-    height: 18px;
-    pointer-events: none;
-    content: "";
-    border-radius: 999px;
-    background: radial-gradient(ellipse at center, rgba(15, 23, 42, 0.16), transparent 68%);
-    filter: blur(8px);
-    opacity: 0;
-    transform: translateY(-4px) scaleX(0.88);
-    transition:
-        opacity 260ms ease,
-        transform 360ms cubic-bezier(0.16, 1, 0.3, 1);
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  bottom: -13px;
+  z-index: -1;
+  height: 18px;
+  pointer-events: none;
+  content: "";
+  border-radius: 999px;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(15, 23, 42, 0.16),
+    transparent 68%
+  );
+  filter: blur(8px);
+  opacity: 0;
+  transform: translateY(-4px) scaleX(0.88);
+  transition:
+    opacity 260ms ease,
+    transform 360ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .clyra-workflow-tabs:hover,
 .clyra-workflow-tabs:focus-within {
-    border-color: rgba(148, 163, 184, 0.24);
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(248, 250, 252, 0.78)),
-        rgba(255, 255, 255, 0.72);
-    box-shadow:
-        0 16px 34px rgba(15, 23, 42, 0.07),
-        inset 0 1px 0 rgba(255, 255, 255, 0.9);
-    backdrop-filter: blur(9px) saturate(1.06);
-    -webkit-backdrop-filter: blur(9px) saturate(1.06);
+  border-color: rgba(148, 163, 184, 0.24);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.88),
+      rgba(248, 250, 252, 0.78)
+    ),
+    rgba(255, 255, 255, 0.72);
+  box-shadow:
+    0 16px 34px rgba(15, 23, 42, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  backdrop-filter: blur(9px) saturate(1.06);
+  -webkit-backdrop-filter: blur(9px) saturate(1.06);
 }
 
 .clyra-workflow-tabs:hover::after,
 .clyra-workflow-tabs:focus-within::after {
-    opacity: 1;
-    transform: translateY(0) scaleX(1);
+  opacity: 1;
+  transform: translateY(0) scaleX(1);
 }
 
 .clyra-workflow-tabs::-webkit-scrollbar {
-    display: none;
+  display: none;
 }
 
 .clyra-workflow-tab {
-    position: relative;
-    isolation: isolate;
-    display: inline-flex;
-    min-width: 0;
-    align-items: center;
-    justify-content: center;
-    gap: 7px;
-    border-radius: 999px;
-    padding: 9px 13px;
-    color: rgba(71, 85, 105, 0.82);
-    font-size: 13px;
-    font-weight: 650;
-    line-height: 1;
-    transition:
-        color 260ms ease,
-        text-shadow 320ms ease,
-        transform 420ms cubic-bezier(0.18, 1, 0.32, 1),
-        opacity 260ms ease;
-    transform-style: preserve-3d;
-    transform-origin: 50% 72%;
-    white-space: nowrap;
-    will-change: transform;
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: 999px;
+  padding: 9px 13px;
+  color: rgba(71, 85, 105, 0.82);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1;
+  transition:
+    color 260ms ease,
+    text-shadow 320ms ease,
+    transform 420ms cubic-bezier(0.18, 1, 0.32, 1),
+    opacity 260ms ease;
+  transform-style: preserve-3d;
+  transform-origin: 50% 72%;
+  white-space: nowrap;
+  will-change: transform;
 }
 
 .clyra-workflow-tab__hover {
-    position: absolute;
-    left: 2px;
-    right: 2px;
-    top: calc(50% + 1px);
-    height: calc(100% - 4px);
-    translate: 0 -50%;
-    z-index: -1;
-    border: 1px solid rgba(15, 23, 42, 0.07);
-    border-radius: inherit;
-    background:
-        radial-gradient(circle at 24% 12%, rgba(255, 255, 255, 0.94), transparent 34%),
-        linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(226, 232, 240, 0.52));
-    box-shadow:
-        0 8px 22px rgba(15, 23, 42, 0.075),
-        inset 0 1px 0 rgba(255, 255, 255, 0.9);
-    opacity: 1;
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  top: calc(50% + 1px);
+  height: calc(100% - 4px);
+  translate: 0 -50%;
+  z-index: -1;
+  border: 1px solid rgba(15, 23, 42, 0.07);
+  border-radius: inherit;
+  background:
+    radial-gradient(
+      circle at 24% 12%,
+      rgba(255, 255, 255, 0.94),
+      transparent 34%
+    ),
+    linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.92),
+      rgba(226, 232, 240, 0.52)
+    );
+  box-shadow:
+    0 8px 22px rgba(15, 23, 42, 0.075),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  opacity: 1;
 }
 
 .clyra-workflow-tab:hover {
-    color: #0f172a;
-    transform: translateY(1px) rotateX(2deg) rotateY(-1deg) translateZ(4px);
-    transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), color 0.3s ease;
+  color: #0f172a;
+  transform: translateY(1px) rotateX(2deg) rotateY(-1deg) translateZ(4px);
+  transition:
+    transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    color 0.3s ease;
 }
 
 .clyra-workflow-tab--active {
-    color: #0f172a;
-    text-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
-    transform: translateY(1px) rotateX(1deg) translateZ(3px);
-    transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), color 0.3s ease;
+  color: #0f172a;
+  text-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+  transform: translateY(1px) rotateX(1deg) translateZ(3px);
+  transition:
+    transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    color 0.3s ease;
 }
 
 .clyra-workflow-tabs:hover .clyra-workflow-tab:not(:hover) {
-    opacity: 0.78;
-    transform: translateY(0);
+  opacity: 0.78;
+  transform: translateY(0);
 }
 
 .clyra-workflow-tabs.dark-tabs {
-    background: #000;
-    border-color: rgba(255, 255, 255, 0.2) !important;
+  background: #000;
+  border-color: rgba(255, 255, 255, 0.2) !important;
 }
 .clyra-workflow-tabs.dark-tabs:hover,
 .clyra-workflow-tabs.dark-tabs:focus-within {
-    border-color: rgba(255, 255, 255, 0.8) !important;
-    background: #000;
+  border-color: rgba(255, 255, 255, 0.8) !important;
+  background: #000;
 }
 
 .clyra-workflow-tabs.dark-tabs .clyra-workflow-tab {
-    color: rgba(255, 255, 255, 0.7);
+  color: rgba(255, 255, 255, 0.7);
 }
 
 .clyra-workflow-tabs.dark-tabs .clyra-workflow-tab:hover,
 .clyra-workflow-tabs.dark-tabs .clyra-workflow-tab--active {
-    color: #fff;
+  color: #fff;
 }
 
 .clyra-workflow-tabs.dark-tabs .clyra-workflow-tab__hover {
-    background: rgba(255, 255, 255, 0.15);
-    border-color: rgba(255, 255, 255, 0.2);
-    box-shadow: none;
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: none;
 }
 
 .clyra-workspace-scene {
-    contain: layout paint;
-    background: transparent;
+  contain: layout paint;
+  background: transparent;
 }
 
 .clyra-workspace-swipe-shadow {
-    pointer-events: none;
-    position: absolute;
-    left: 50%;
-    top: 53%;
-    z-index: 1;
-    width: min(620px, 46vw);
-    height: min(250px, 28vh);
-    border-radius: 999px;
-    background:
-        radial-gradient(ellipse at center,
-            rgba(15, 23, 42, 0.038) 0%,
-            rgba(15, 23, 42, 0.022) 34%,
-            rgba(15, 23, 42, 0) 72%);
-    transform: translate3d(-50%, -50%, 0);
-    will-change: transform, opacity;
+  pointer-events: none;
+  position: absolute;
+  left: 50%;
+  top: 53%;
+  z-index: 1;
+  width: min(620px, 46vw);
+  height: min(250px, 28vh);
+  border-radius: 999px;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(15, 23, 42, 0.038) 0%,
+    rgba(15, 23, 42, 0.022) 34%,
+    rgba(15, 23, 42, 0) 72%
+  );
+  transform: translate3d(-50%, -50%, 0);
+  will-change: transform, opacity;
 }
 
 .clyra-workspace-card {
-    position: absolute;
-    inset: 0;
-    transform-origin: 50% 50%;
-    box-sizing: border-box;
-    border: 0 !important;
-    overflow: visible;
-    will-change: transform, opacity;
-    isolation: isolate;
-    background: transparent !important;
-    box-shadow: none !important;
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 50%;
+  box-sizing: border-box;
+  border: 0 !important;
+  overflow: visible;
+  will-change: transform, opacity;
+  isolation: isolate;
+  background: transparent !important;
+  box-shadow: none !important;
 }
 
 .clyra-workspace-card::before {
-    display: none;
+  display: none;
 }
 
 .clyra-workspace-card::after {
-    display: none;
+  display: none;
 }
 
 .clyra-composer-transition {
-    transform-origin: 50% 50%;
+  transform-origin: 50% 50%;
 }
 
 .clyra-sidebar-toggle,
 .clyra-sidebar-close {
-    isolation: isolate;
-    overflow: hidden;
+  isolation: isolate;
+  overflow: hidden;
 }
 
 .clyra-temp-chat-toggle {
-    position: fixed;
-    isolation: isolate;
-    overflow: hidden;
+  position: fixed;
+  isolation: isolate;
+  overflow: hidden;
 }
 
 .clyra-sidebar-toggle::before,
 .clyra-sidebar-close::before,
 .clyra-temp-chat-toggle::before {
-    position: absolute;
-    inset: 2px;
-    z-index: -1;
-    content: "";
-    border: 1px solid rgba(15, 23, 42, 0.07);
-    border-radius: inherit;
-    background:
-        radial-gradient(circle at 24% 12%, rgba(255, 255, 255, 0.95), transparent 34%),
-        linear-gradient(135deg, rgba(255, 255, 255, 0.88), rgba(226, 232, 240, 0.44));
-    box-shadow:
-        0 10px 24px rgba(15, 23, 42, 0.07),
-        inset 0 1px 0 rgba(255, 255, 255, 0.88);
-    opacity: 0;
-    transform: scale(0.92);
-    transition:
-        opacity 150ms cubic-bezier(0.22, 1, 0.36, 1),
-        transform 180ms cubic-bezier(0.18, 1, 0.32, 1);
+  position: absolute;
+  inset: 2px;
+  z-index: -1;
+  content: "";
+  border: 1px solid rgba(15, 23, 42, 0.07);
+  border-radius: inherit;
+  background:
+    radial-gradient(
+      circle at 24% 12%,
+      rgba(255, 255, 255, 0.95),
+      transparent 34%
+    ),
+    linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.88),
+      rgba(226, 232, 240, 0.44)
+    );
+  box-shadow:
+    0 10px 24px rgba(15, 23, 42, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.88);
+  opacity: 0;
+  transform: scale(0.92);
+  transition:
+    opacity 150ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 180ms cubic-bezier(0.18, 1, 0.32, 1);
 }
 
 .clyra-sidebar-toggle:hover::before,
@@ -346,30 +376,38 @@
 .clyra-sidebar-toggle:focus-visible::before,
 .clyra-sidebar-close:focus-visible::before,
 .clyra-temp-chat-toggle:focus-visible::before {
-    opacity: 1;
-    transform: scale(1);
+  opacity: 1;
+  transform: scale(1);
 }
 
 .clyra-sidebar-panel {
-    position: relative;
-    overflow: hidden;
-    border: 1px solid rgba(148, 163, 184, 0.18);
-    border-radius: 24px;
-    background:
-        radial-gradient(circle at 18% 0%, rgba(255, 255, 255, 0.96), transparent 34%),
-        linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(248, 250, 252, 0.42)),
-        rgba(255, 255, 255, 0.46);
-    box-shadow:
-        0 16px 34px rgba(15, 23, 42, 0.052),
-        inset 0 1px 0 rgba(255, 255, 255, 0.78),
-        inset 0 -1px 0 rgba(148, 163, 184, 0.06);
-    backdrop-filter: blur(8px) saturate(1.04);
-    -webkit-backdrop-filter: blur(8px) saturate(1.04);
-    contain: layout paint;
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 24px;
+  background:
+    radial-gradient(
+      circle at 18% 0%,
+      rgba(255, 255, 255, 0.96),
+      transparent 34%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.72),
+      rgba(248, 250, 252, 0.42)
+    ),
+    rgba(255, 255, 255, 0.46);
+  box-shadow:
+    0 16px 34px rgba(15, 23, 42, 0.052),
+    inset 0 1px 0 rgba(255, 255, 255, 0.78),
+    inset 0 -1px 0 rgba(148, 163, 184, 0.06);
+  backdrop-filter: blur(8px) saturate(1.04);
+  -webkit-backdrop-filter: blur(8px) saturate(1.04);
+  contain: layout paint;
 }
 
 .clyra-sidebar-section {
-    border-bottom: 1px solid rgba(15, 23, 42, 0.05);
+  border-bottom: 1px solid rgba(15, 23, 42, 0.05);
 }
 
 .clyra-sidebar-action,
@@ -378,17 +416,17 @@
 .clyra-sidebar-footer,
 .clyra-sidebar-search,
 .clyra-sidebar-input {
-    border: 1px solid transparent;
-    background: transparent;
-    box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0),
-        0 8px 18px rgba(15, 23, 42, 0);
-    transition:
-        color 180ms cubic-bezier(0.22, 1, 0.36, 1),
-        border-color 180ms cubic-bezier(0.22, 1, 0.36, 1),
-        background 180ms cubic-bezier(0.22, 1, 0.36, 1),
-        box-shadow 180ms cubic-bezier(0.22, 1, 0.36, 1),
-        transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  border: 1px solid transparent;
+  background: transparent;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0),
+    0 8px 18px rgba(15, 23, 42, 0);
+  transition:
+    color 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    background 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .clyra-sidebar-action:hover,
@@ -397,367 +435,412 @@
 .clyra-sidebar-search:focus,
 .clyra-sidebar-input:focus,
 .clyra-sidebar-close:hover {
-    border-color: rgba(148, 163, 184, 0.2);
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.68), rgba(255, 255, 255, 0.3)),
-        rgba(255, 255, 255, 0.3);
-    box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.78),
-        0 10px 24px rgba(15, 23, 42, 0.055);
+  border-color: rgba(148, 163, 184, 0.2);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.68),
+      rgba(255, 255, 255, 0.3)
+    ),
+    rgba(255, 255, 255, 0.3);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.78),
+    0 10px 24px rgba(15, 23, 42, 0.055);
 }
 
 .clyra-sidebar-action--active {
-    border-color: transparent;
-    background: transparent;
-    box-shadow: none;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
 }
 
 .clyra-sidebar-project-dot {
-    opacity: 0;
-    transform: scale(0.7);
-    transition:
-        opacity 160ms cubic-bezier(0.22, 1, 0.36, 1),
-        transform 160ms cubic-bezier(0.22, 1, 0.36, 1),
-        background-color 160ms cubic-bezier(0.22, 1, 0.36, 1);
+  opacity: 0;
+  transform: scale(0.7);
+  transition:
+    opacity 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 160ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .group:hover .clyra-sidebar-project-dot,
 .clyra-sidebar-project-dot--visible {
-    opacity: 1;
-    transform: scale(1);
+  opacity: 1;
+  transform: scale(1);
 }
 
 .clyra-sidebar-search {
-    outline: none;
+  outline: none;
 }
 
 .clyra-sidebar-footer {
-    border-color: transparent;
-    background: transparent;
-    box-shadow: none;
+  border-color: transparent;
+  background: transparent;
+  box-shadow: none;
 }
 
 .clyra-assistant-mark {
-    position: relative;
-    margin-top: 7px;
-    display: grid;
-    width: 28px;
-    height: 28px;
-    flex: 0 0 28px;
-    place-items: center;
-    border: 1px solid rgba(148, 163, 184, 0.2);
-    border-radius: 999px;
-    background:
-        radial-gradient(circle at 32% 24%, rgba(255, 255, 255, 0.95) 0 12%, transparent 36%),
-        conic-gradient(from 140deg, #111827, #2563eb, #14b8a6, #111827);
-    box-shadow:
-        0 10px 22px rgba(15, 23, 42, 0.12),
-        inset 0 1px 3px rgba(255, 255, 255, 0.78);
+  position: relative;
+  margin-top: 7px;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  place-items: center;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 999px;
+  background:
+    radial-gradient(
+      circle at 32% 24%,
+      rgba(255, 255, 255, 0.95) 0 12%,
+      transparent 36%
+    ),
+    conic-gradient(from 140deg, #111827, #2563eb, #14b8a6, #111827);
+  box-shadow:
+    0 10px 22px rgba(15, 23, 42, 0.12),
+    inset 0 1px 3px rgba(255, 255, 255, 0.78);
 }
 
 .clyra-assistant-mark span {
-    width: 8px;
-    height: 8px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.92);
-    box-shadow: 0 0 12px rgba(255, 255, 255, 0.88);
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.88);
 }
 
 .clyra-assistant-message {
-    padding-left: 0;
-    border-left: none;
-    width: 100%;
-    min-width: 0;
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    padding: 0;
-    box-shadow: none;
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
+  padding-left: 0;
+  border-left: none;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .clyra-assistant-message--vibe {
-    border: 0;
-    border-radius: 0;
-    background: transparent;
-    padding: 0;
-    box-shadow: none;
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
 }
 
 .clyra-chat-quick-actions {
-    display: flex;
-    max-width: min(100%, 620px);
-    flex-wrap: wrap;
-    justify-content: center;
-    gap: 8px;
+  display: flex;
+  max-width: min(100%, 620px);
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
 }
 
 .clyra-chat-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    border: 1px solid rgba(148, 163, 184, 0.18);
-    border-radius: 999px;
-    background:
-        radial-gradient(circle at 12% 0%, rgba(255, 255, 255, 0.86), transparent 34%),
-        linear-gradient(180deg, rgba(255, 255, 255, 0.62), rgba(255, 255, 255, 0.3)),
-        rgba(255, 255, 255, 0.34);
-    padding: 9px 12px;
-    color: rgba(51, 65, 85, 0.86);
-    font-size: 12.5px;
-    font-weight: 650;
-    line-height: 1;
-    box-shadow:
-        0 8px 18px rgba(15, 23, 42, 0.045),
-        inset 0 1px 0 rgba(255, 255, 255, 0.78);
-    transition:
-        color 180ms ease,
-        border-color 180ms ease,
-        transform 180ms ease,
-        box-shadow 180ms ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 999px;
+  background:
+    radial-gradient(
+      circle at 12% 0%,
+      rgba(255, 255, 255, 0.86),
+      transparent 34%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.62),
+      rgba(255, 255, 255, 0.3)
+    ),
+    rgba(255, 255, 255, 0.34);
+  padding: 9px 12px;
+  color: rgba(51, 65, 85, 0.86);
+  font-size: 12.5px;
+  font-weight: 650;
+  line-height: 1;
+  box-shadow:
+    0 8px 18px rgba(15, 23, 42, 0.045),
+    inset 0 1px 0 rgba(255, 255, 255, 0.78);
+  transition:
+    color 180ms ease,
+    border-color 180ms ease,
+    transform 180ms ease,
+    box-shadow 180ms ease;
 }
 
 .clyra-chat-chip:hover {
-    border-color: rgba(100, 116, 139, 0.24);
-    color: #0f172a;
-    transform: translateY(-1px);
-    box-shadow:
-        0 14px 30px rgba(15, 23, 42, 0.08),
-        inset 0 1px 0 rgba(255, 255, 255, 0.86);
+  border-color: rgba(100, 116, 139, 0.24);
+  color: #0f172a;
+  transform: translateY(-1px);
+  box-shadow:
+    0 14px 30px rgba(15, 23, 42, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.86);
 }
 
 .clyra-vibe-launch-panel {
-    width: min(100%, 620px);
-    border: 1px solid rgba(148, 163, 184, 0.18);
-    border-radius: 24px;
-    background:
-        radial-gradient(circle at 14% 0%, rgba(255, 255, 255, 0.95), transparent 34%),
-        radial-gradient(circle at 88% 12%, rgba(20, 184, 166, 0.12), transparent 30%),
-        linear-gradient(180deg, rgba(255, 255, 255, 0.68), rgba(255, 255, 255, 0.28)),
-        rgba(255, 255, 255, 0.34);
-    box-shadow:
-        0 16px 36px rgba(15, 23, 42, 0.06),
-        inset 0 1px 0 rgba(255, 255, 255, 0.82);
-    padding: 10px;
-    backdrop-filter: blur(10px) saturate(1.04);
-    -webkit-backdrop-filter: blur(10px) saturate(1.04);
+  width: min(100%, 620px);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 24px;
+  background:
+    radial-gradient(
+      circle at 14% 0%,
+      rgba(255, 255, 255, 0.95),
+      transparent 34%
+    ),
+    radial-gradient(
+      circle at 88% 12%,
+      rgba(20, 184, 166, 0.12),
+      transparent 30%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.68),
+      rgba(255, 255, 255, 0.28)
+    ),
+    rgba(255, 255, 255, 0.34);
+  box-shadow:
+    0 16px 36px rgba(15, 23, 42, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.82);
+  padding: 10px;
+  backdrop-filter: blur(10px) saturate(1.04);
+  -webkit-backdrop-filter: blur(10px) saturate(1.04);
 }
 
 .clyra-vibe-status-row {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 7px;
-    margin-bottom: 8px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 7px;
+  margin-bottom: 8px;
 }
 
 .clyra-vibe-status-row span {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 30px;
-    border: 1px solid rgba(148, 163, 184, 0.12);
-    border-radius: 999px;
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(248, 250, 252, 0.34)),
-        rgba(255, 255, 255, 0.34);
-    color: rgba(71, 85, 105, 0.88);
-    font-size: 11.5px;
-    font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 999px;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.72),
+      rgba(248, 250, 252, 0.34)
+    ),
+    rgba(255, 255, 255, 0.34);
+  color: rgba(71, 85, 105, 0.88);
+  font-size: 11.5px;
+  font-weight: 700;
 }
 
 .clyra-vibe-chip-grid {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
 }
 
 .clyra-vibe-chip {
-    display: inline-flex;
-    min-width: 0;
-    align-items: center;
-    justify-content: center;
-    gap: 7px;
-    border: 1px solid rgba(15, 23, 42, 0.08);
-    border-radius: 16px;
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(248, 250, 252, 0.44)),
-        rgba(255, 255, 255, 0.34);
-    padding: 10px 11px;
-    color: #1e293b;
-    font-size: 12.5px;
-    font-weight: 700;
-    box-shadow:
-        0 8px 20px rgba(15, 23, 42, 0.045),
-        inset 0 1px 0 rgba(255, 255, 255, 0.78);
-    backdrop-filter: blur(10px) saturate(1.06);
-    -webkit-backdrop-filter: blur(10px) saturate(1.06);
-    transition:
-        transform 180ms ease,
-        border-color 180ms ease,
-        box-shadow 180ms ease;
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 16px;
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.72),
+      rgba(248, 250, 252, 0.44)
+    ),
+    rgba(255, 255, 255, 0.34);
+  padding: 10px 11px;
+  color: #1e293b;
+  font-size: 12.5px;
+  font-weight: 700;
+  box-shadow:
+    0 8px 20px rgba(15, 23, 42, 0.045),
+    inset 0 1px 0 rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(10px) saturate(1.06);
+  -webkit-backdrop-filter: blur(10px) saturate(1.06);
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    box-shadow 180ms ease;
 }
 
 .clyra-vibe-agent-card,
 .clyra-vibe-agent-pill {
-    border: 1px solid rgba(148, 163, 184, 0.18);
-    background:
-        radial-gradient(circle at 10% 0%, rgba(255, 255, 255, 0.92), transparent 34%),
-        linear-gradient(180deg, rgba(255, 255, 255, 0.68), rgba(248, 250, 252, 0.36)),
-        rgba(255, 255, 255, 0.38);
-    box-shadow:
-        0 12px 28px rgba(15, 23, 42, 0.045),
-        inset 0 1px 0 rgba(255, 255, 255, 0.78);
-    backdrop-filter: blur(12px) saturate(1.08);
-    -webkit-backdrop-filter: blur(12px) saturate(1.08);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background:
+    radial-gradient(
+      circle at 10% 0%,
+      rgba(255, 255, 255, 0.92),
+      transparent 34%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.68),
+      rgba(248, 250, 252, 0.36)
+    ),
+    rgba(255, 255, 255, 0.38);
+  box-shadow:
+    0 12px 28px rgba(15, 23, 42, 0.045),
+    inset 0 1px 0 rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(12px) saturate(1.08);
+  -webkit-backdrop-filter: blur(12px) saturate(1.08);
 }
 
 .clyra-vibe-agent-line {
-    position: relative;
-    border-left: 1px solid rgba(15, 23, 42, 0.08);
-    padding-left: 12px;
+  position: relative;
+  border-left: 1px solid rgba(15, 23, 42, 0.08);
+  padding-left: 12px;
 }
 
 .clyra-vibe-chip:hover {
-    border-color: rgba(15, 23, 42, 0.16);
-    transform: translateY(-1px);
-    box-shadow:
-        0 12px 26px rgba(15, 23, 42, 0.07),
-        inset 0 1px 0 rgba(255, 255, 255, 0.86);
+  border-color: rgba(15, 23, 42, 0.16);
+  transform: translateY(-1px);
+  box-shadow:
+    0 12px 26px rgba(15, 23, 42, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.86);
 }
 
 .clyra-vibe-composer {
-    border-radius: 999px !important;
+  border-radius: 999px !important;
 }
 
 .clyra-vibe-composer > div {
-    display: flex;
-    min-height: 52px;
-    align-items: center;
-    gap: 6px;
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  gap: 6px;
 }
 
 .clyra-vibe-composer > div > .px-3.py-1 {
-    min-width: 0;
-    flex: 1 1 auto;
-    padding: 0 0 0 10px;
+  min-width: 0;
+  flex: 1 1 auto;
+  padding: 0 0 0 10px;
 }
 
 .clyra-vibe-composer textarea {
-    height: 40px !important;
-    min-height: 40px !important;
-    max-height: 40px !important;
-    padding-top: 8px !important;
-    padding-bottom: 8px !important;
-    font-size: 15px !important;
-    line-height: 24px !important;
+  height: 40px !important;
+  min-height: 40px !important;
+  max-height: 40px !important;
+  padding-top: 8px !important;
+  padding-bottom: 8px !important;
+  font-size: 15px !important;
+  line-height: 24px !important;
 }
 
 .clyra-vibe-controls {
-    display: contents !important;
+  display: contents !important;
 }
 
 .clyra-vibe-controls > div:first-child {
-    order: -1;
-    flex: 0 0 auto;
-    gap: 4px;
-    padding-left: 8px;
+  order: -1;
+  flex: 0 0 auto;
+  gap: 4px;
+  padding-left: 8px;
 }
 
 .clyra-vibe-controls > div:last-child > div:first-child {
-    display: none !important;
+  display: none !important;
 }
 
 .clyra-vibe-controls > div:last-child {
-    order: 2;
-    flex: 0 0 auto;
-    padding-right: 8px;
+  order: 2;
+  flex: 0 0 auto;
+  padding-right: 8px;
 }
 
 .clyra-vibe-controls [class*="ml-1"][class*="rounded-full"] {
-    margin-left: 0;
+  margin-left: 0;
 }
 
 .clyra-vibe-composer .clyra-attachments-row {
-    order: 3;
-    flex: 1 0 100%;
-    padding: 0 14px 10px;
+  order: 3;
+  flex: 1 0 100%;
+  padding: 0 14px 10px;
 }
 
 @media (max-width: 640px) {
-    .clyra-vibe-chip-grid,
-    .clyra-vibe-status-row {
-        grid-template-columns: 1fr;
-    }
+  .clyra-vibe-chip-grid,
+  .clyra-vibe-status-row {
+    grid-template-columns: 1fr;
+  }
 
-    .clyra-vibe-composer > div {
-        gap: 2px;
-    }
+  .clyra-vibe-composer > div {
+    gap: 2px;
+  }
 
-    .clyra-vibe-controls [class*="sm:inline-block"] {
-        display: none !important;
-    }
+  .clyra-vibe-controls [class*="sm:inline-block"] {
+    display: none !important;
+  }
 }
 
 @media (max-width: 640px) {
-    .clyra-workflow-tabs {
-        width: 100%;
-        justify-content: flex-start;
-    }
+  .clyra-workflow-tabs {
+    width: 100%;
+    justify-content: flex-start;
+  }
 
-    .clyra-workflow-tab {
-        flex: 1 0 auto;
-        padding-inline: 11px;
-        font-size: 12px;
-    }
+  .clyra-workflow-tab {
+    flex: 1 0 auto;
+    padding-inline: 11px;
+    font-size: 12px;
+  }
 
-    .clyra-assistant-mark {
-        display: none;
-    }
+  .clyra-assistant-mark {
+    display: none;
+  }
 
-    .clyra-assistant-message {
+  .clyra-assistant-message {
     padding-left: 0;
     border-left: none;
-        padding: 0;
-        border-radius: 0;
-    }
+    padding: 0;
+    border-radius: 0;
+  }
 
-    .clyra-assistant-message--vibe {
-        padding: 0;
-        border-radius: 0;
-    }
+  .clyra-assistant-message--vibe {
+    padding: 0;
+    border-radius: 0;
+  }
 }
 
 .clyra-ai-orb-shell {
-    --orb-size: 78px;
-    position: relative;
-    display: grid;
-    flex-shrink: 0;
-    place-items: center;
-    width: min(100%, 220px);
-    height: 128px;
-    margin-inline: auto;
-    overflow: visible;
-    contain: layout;
+  --orb-size: 78px;
+  position: relative;
+  display: grid;
+  flex-shrink: 0;
+  place-items: center;
+  width: min(100%, 220px);
+  height: 128px;
+  margin-inline: auto;
+  overflow: visible;
+  contain: layout;
 }
 
 .clyra-ai-orb-shell--intro {
-    animation: clyra-ai-orb-intro-rise 1.35s cubic-bezier(0.12, 0.78, 0.18, 1) both;
-    will-change: transform, opacity;
+  animation: clyra-ai-orb-intro-rise 1.35s cubic-bezier(0.12, 0.78, 0.18, 1)
+    both;
+  will-change: transform, opacity;
 }
 
 .clyra-ai-orb {
-    position: relative;
-    display: flex;
-    width: var(--orb-size);
-    height: var(--orb-size);
-    cursor: default;
-    transform-origin: center;
-    overflow: visible;
-    animation: clyra-ai-orb-float 6.2s ease-in-out infinite;
-    will-change: transform;
+  position: relative;
+  display: flex;
+  width: var(--orb-size);
+  height: var(--orb-size);
+  cursor: default;
+  transform-origin: center;
+  overflow: visible;
+  animation: clyra-ai-orb-float 6.2s ease-in-out infinite;
+  will-change: transform;
 }
 
 .clyra-ai-orb-shell--intro .clyra-ai-orb,
@@ -768,222 +851,265 @@
 .clyra-ai-orb-shell--intro .clyra-ai-orb-rings::before,
 .clyra-ai-orb-shell--intro .clyra-ai-orb-rings::after,
 .clyra-ai-orb-shell--intro .clyra-ai-orb-glow {
-    animation-play-state: paused;
+  animation-play-state: paused;
 }
 
 .clyra-ai-orb-shell--intro .clyra-ai-orb::before {
-    opacity: 0;
+  opacity: 0;
 }
 
 .clyra-ai-orb-shell--intro .clyra-ai-orb::after {
-    opacity: 0;
+  opacity: 0;
 }
 
 .clyra-ai-orb-shell--intro .clyra-ai-orb-ball {
-    filter: none;
+  filter: none;
 }
 
 .clyra-ai-orb-shell--intro .clyra-ai-orb-lines,
 .clyra-ai-orb-shell--intro .clyra-ai-orb-glow,
 .clyra-ai-orb-shell--intro .clyra-ai-orb-rings {
-    opacity: 0;
+  opacity: 0;
 }
 
 .clyra-ai-orb-shell:not(.clyra-ai-orb-shell--intro) .clyra-ai-orb-lines {
-    opacity: 1;
-    transition:
-        opacity 880ms cubic-bezier(0.16, 1, 0.28, 1) 70ms,
-        transform 880ms cubic-bezier(0.16, 1, 0.28, 1) 70ms;
+  opacity: 1;
+  transition:
+    opacity 880ms cubic-bezier(0.16, 1, 0.28, 1) 70ms,
+    transform 880ms cubic-bezier(0.16, 1, 0.28, 1) 70ms;
 }
 
 .clyra-ai-orb-shell:not(.clyra-ai-orb-shell--intro) .clyra-ai-orb-rings {
-    opacity: 1;
-    transition: opacity 980ms cubic-bezier(0.16, 1, 0.28, 1) 90ms;
+  opacity: 1;
+  transition: opacity 980ms cubic-bezier(0.16, 1, 0.28, 1) 90ms;
 }
 
 .clyra-ai-orb-shell:not(.clyra-ai-orb-shell--intro) .clyra-ai-orb-glow {
-    opacity: 0.52;
-    transition: opacity 1040ms cubic-bezier(0.16, 1, 0.28, 1) 40ms;
+  opacity: 0.52;
+  transition: opacity 1040ms cubic-bezier(0.16, 1, 0.28, 1) 40ms;
 }
 
 .clyra-ai-orb::before {
-    position: absolute;
-    inset: -54px;
-    z-index: -2;
-    pointer-events: none;
-    content: "";
-    border-radius: 999px;
-    background: var(--orb-halo-bg, radial-gradient(
-        circle,
-        rgba(96, 165, 250, 0.22) 0%,
-        rgba(45, 212, 191, 0.16) 28%,
-        rgba(139, 92, 246, 0.1) 48%,
-        transparent 72%
-    ));
-    opacity: 0.9;
-    transform: translateZ(0);
-    animation: clyra-ai-orb-halo 7.5s ease-in-out infinite;
-    transition: opacity 1080ms cubic-bezier(0.16, 1, 0.28, 1) 40ms;
+  position: absolute;
+  inset: -54px;
+  z-index: -2;
+  pointer-events: none;
+  content: "";
+  border-radius: 999px;
+  background: var(
+    --orb-halo-bg,
+    radial-gradient(
+      circle,
+      rgba(96, 165, 250, 0.22) 0%,
+      rgba(45, 212, 191, 0.16) 28%,
+      rgba(139, 92, 246, 0.1) 48%,
+      transparent 72%
+    )
+  );
+  opacity: 0.9;
+  transform: translateZ(0);
+  animation: clyra-ai-orb-halo 7.5s ease-in-out infinite;
+  transition: opacity 1080ms cubic-bezier(0.16, 1, 0.28, 1) 40ms;
 }
 
 .clyra-ai-orb::after {
-    position: absolute;
-    inset: -28px;
-    z-index: -1;
-    pointer-events: none;
-    content: "";
-    border-radius: 999px;
-    background: radial-gradient(circle, rgba(255, 255, 255, 0.45), transparent 68%);
-    opacity: 0.72;
-    transition: opacity 860ms cubic-bezier(0.16, 1, 0.28, 1) 20ms;
+  position: absolute;
+  inset: -28px;
+  z-index: -1;
+  pointer-events: none;
+  content: "";
+  border-radius: 999px;
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.45),
+    transparent 68%
+  );
+  opacity: 0.72;
+  transition: opacity 860ms cubic-bezier(0.16, 1, 0.28, 1) 20ms;
 }
 
 .clyra-ai-orb-icons {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    z-index: 10;
-    display: flex;
-    height: 24px;
-    width: 24px;
-    transform: translate(-50%, -50%);
-    pointer-events: none;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 10;
+  display: flex;
+  height: 24px;
+  width: 24px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
 }
 
 .clyra-ai-orb-svg {
-    width: 100%;
-    height: 100%;
-    color: white;
-    drop-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  width: 100%;
+  height: 100%;
+  color: white;
+  drop-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .clyra-ai-orb-ball {
-    position: absolute;
-    inset: 0;
-    overflow: hidden;
-    border-radius: 999px;
-    box-shadow:
-        inset 0 0 20px rgba(255, 255, 255, 0.6),
-        inset 0 0 6px rgba(255, 255, 255, 0.8),
-        0 4px 20px rgba(0, 0, 0, 0.1);
-    filter: url("#clyra-ai-orb-gooey");
-    animation: clyra-ai-orb-breathe 5.4s ease-in-out infinite;
-    transform: translateZ(0);
-    transition:
-        filter 780ms cubic-bezier(0.16, 1, 0.28, 1),
-        box-shadow 960ms cubic-bezier(0.16, 1, 0.28, 1);
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: 999px;
+  box-shadow:
+    inset 0 0 20px rgba(255, 255, 255, 0.6),
+    inset 0 0 6px rgba(255, 255, 255, 0.8),
+    0 4px 20px rgba(0, 0, 0, 0.1);
+  filter: url("#clyra-ai-orb-gooey");
+  animation: clyra-ai-orb-breathe 5.4s ease-in-out infinite;
+  transform: translateZ(0);
+  transition:
+    filter 780ms cubic-bezier(0.16, 1, 0.28, 1),
+    box-shadow 960ms cubic-bezier(0.16, 1, 0.28, 1);
 }
 
 .clyra-ai-orb-ball::before {
-    position: absolute;
-    inset: -7%;
-    z-index: 1;
-    content: "";
-    border-radius: inherit;
-    background:
-        radial-gradient(circle at 31% 72%, rgb(var(--orb-intro-b) / 0.82) 0%, rgb(var(--orb-intro-b) / 0.58) 25%, transparent 58%),
-        radial-gradient(circle at 43% 35%, rgb(var(--orb-intro-c) / 0.72) 0%, rgb(var(--orb-intro-c) / 0.48) 26%, transparent 56%),
-        radial-gradient(circle at 76% 47%, rgb(var(--orb-intro-a) / 0.66) 0%, rgb(var(--orb-intro-a) / 0.42) 32%, transparent 64%),
-        radial-gradient(circle at 56% 86%, rgb(var(--orb-intro-d) / 0.34) 0%, transparent 58%),
-        linear-gradient(145deg, rgb(var(--orb-intro-b) / 0.54), rgb(var(--orb-intro-a) / 0.76) 48%, rgb(var(--orb-intro-c) / 0.62));
-    background-size: 118% 118%;
-    background-position: 47% 51%;
-    mix-blend-mode: normal;
-    opacity: 0;
-    transform: translateZ(0) scale(1.04) rotate(-10deg);
-    transform-origin: center;
-    pointer-events: none;
-    transition:
-        opacity 880ms cubic-bezier(0.16, 1, 0.28, 1),
-        transform 880ms cubic-bezier(0.16, 1, 0.28, 1);
-    will-change: opacity, transform;
+  position: absolute;
+  inset: -7%;
+  z-index: 1;
+  content: "";
+  border-radius: inherit;
+  background:
+    radial-gradient(
+      circle at 31% 72%,
+      rgb(var(--orb-intro-b) / 0.82) 0%,
+      rgb(var(--orb-intro-b) / 0.58) 25%,
+      transparent 58%
+    ),
+    radial-gradient(
+      circle at 43% 35%,
+      rgb(var(--orb-intro-c) / 0.72) 0%,
+      rgb(var(--orb-intro-c) / 0.48) 26%,
+      transparent 56%
+    ),
+    radial-gradient(
+      circle at 76% 47%,
+      rgb(var(--orb-intro-a) / 0.66) 0%,
+      rgb(var(--orb-intro-a) / 0.42) 32%,
+      transparent 64%
+    ),
+    radial-gradient(
+      circle at 56% 86%,
+      rgb(var(--orb-intro-d) / 0.34) 0%,
+      transparent 58%
+    ),
+    linear-gradient(
+      145deg,
+      rgb(var(--orb-intro-b) / 0.54),
+      rgb(var(--orb-intro-a) / 0.76) 48%,
+      rgb(var(--orb-intro-c) / 0.62)
+    );
+  background-size: 118% 118%;
+  background-position: 47% 51%;
+  mix-blend-mode: normal;
+  opacity: 0;
+  transform: translateZ(0) scale(1.04) rotate(-10deg);
+  transform-origin: center;
+  pointer-events: none;
+  transition:
+    opacity 880ms cubic-bezier(0.16, 1, 0.28, 1),
+    transform 880ms cubic-bezier(0.16, 1, 0.28, 1);
+  will-change: opacity, transform;
 }
 
 .clyra-ai-orb-ball::after {
-    position: absolute;
-    inset: -30%;
-    z-index: 5;
-    content: "";
-    border-radius: inherit;
-    background:
-        radial-gradient(circle, rgba(255, 255, 255, 0.62) 0%, rgb(var(--orb-intro-d) / 0.28) 28%, rgb(var(--orb-intro-b) / 0.18) 48%, transparent 70%);
-    mix-blend-mode: screen;
-    opacity: 0;
-    pointer-events: none;
-    transform: translateZ(0) scale(0.62);
-    transform-origin: center;
+  position: absolute;
+  inset: -30%;
+  z-index: 5;
+  content: "";
+  border-radius: inherit;
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.62) 0%,
+    rgb(var(--orb-intro-d) / 0.28) 28%,
+    rgb(var(--orb-intro-b) / 0.18) 48%,
+    transparent 70%
+  );
+  mix-blend-mode: screen;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateZ(0) scale(0.62);
+  transform-origin: center;
 }
 
 .clyra-ai-orb-shell--intro .clyra-ai-orb-ball::before {
-    opacity: 0.94;
-    animation: clyra-ai-orb-intro-palette 2.9s cubic-bezier(0.16, 1, 0.24, 1) both;
+  opacity: 0.94;
+  animation: clyra-ai-orb-intro-palette 2.9s cubic-bezier(0.16, 1, 0.24, 1) both;
 }
 
 .clyra-ai-orb-shell:not(.clyra-ai-orb-shell--intro) .clyra-ai-orb-ball::after {
-    animation: clyra-ai-orb-reveal-bloom 1.18s cubic-bezier(0.16, 1, 0.28, 1) both;
+  animation: clyra-ai-orb-reveal-bloom 1.18s cubic-bezier(0.16, 1, 0.28, 1) both;
 }
 
 .clyra-ai-orb-lines {
-    position: absolute;
-    inset: -20px;
-    z-index: 2;
-    background: repeating-conic-gradient(
-        from 0deg,
-        transparent 0deg,
-        rgba(255, 255, 255, 0.15) 2deg,
-        transparent 4deg
-    );
-    mix-blend-mode: overlay;
-    animation: clyra-ai-orb-morph 9s ease-in-out infinite;
+  position: absolute;
+  inset: -20px;
+  z-index: 2;
+  background: repeating-conic-gradient(
+    from 0deg,
+    transparent 0deg,
+    rgba(255, 255, 255, 0.15) 2deg,
+    transparent 4deg
+  );
+  mix-blend-mode: overlay;
+  animation: clyra-ai-orb-morph 9s ease-in-out infinite;
 }
 
 .clyra-ai-orb-rings {
-    position: absolute;
-    inset: 0;
-    z-index: 3;
-    border-radius: 999px;
-    pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: 999px;
+  pointer-events: none;
 }
 
 .clyra-ai-orb-rings::before,
 .clyra-ai-orb-rings::after {
-    position: absolute;
-    inset: 4px;
-    content: "";
-    border: 5px solid transparent;
-    border-radius: 999px;
-    background: var(--orb-ring-bg, linear-gradient(white, #38bdf8, #6366f1, #c4b5fd) border-box);
-    opacity: 0.84;
-    -webkit-mask:
-        linear-gradient(#fff 0 0) padding-box,
-        linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
+  position: absolute;
+  inset: 4px;
+  content: "";
+  border: 5px solid transparent;
+  border-radius: 999px;
+  background: var(
+    --orb-ring-bg,
+    linear-gradient(white, #38bdf8, #6366f1, #c4b5fd) border-box
+  );
+  opacity: 0.84;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) padding-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
 }
 
 .clyra-ai-orb-rings::before {
-    animation: clyra-ai-orb-ring-a 8.5s linear infinite;
+  animation: clyra-ai-orb-ring-a 8.5s linear infinite;
 }
 
 .clyra-ai-orb-rings::after {
-    animation: clyra-ai-orb-ring-b 8.5s linear infinite;
+  animation: clyra-ai-orb-ring-b 8.5s linear infinite;
 }
 
 .clyra-ai-orb-glow {
-    position: absolute;
-    inset: 12px;
-    z-index: 4;
-    border-radius: 999px;
-    background: radial-gradient(circle, rgba(255, 255, 255, 0.66), transparent 68%);
-    mix-blend-mode: screen;
-    opacity: 0.52;
-    animation: clyra-ai-orb-glow 4.2s ease-in-out infinite;
+  position: absolute;
+  inset: 12px;
+  z-index: 4;
+  border-radius: 999px;
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.66),
+    transparent 68%
+  );
+  mix-blend-mode: screen;
+  opacity: 0.52;
+  animation: clyra-ai-orb-glow 4.2s ease-in-out infinite;
 }
 
 .clyra-ai-orb-shell--intro .clyra-ai-orb::before,
 .clyra-ai-orb-shell--intro .clyra-ai-orb::after {
-    opacity: 0 !important;
-    animation: none !important;
+  opacity: 0 !important;
+  animation: none !important;
 }
 
 .clyra-ai-orb-shell--intro .clyra-ai-orb-lines,
@@ -991,601 +1117,686 @@
 .clyra-ai-orb-shell--intro .clyra-ai-orb-glow,
 .clyra-ai-orb-shell--intro .clyra-ai-orb-rings::before,
 .clyra-ai-orb-shell--intro .clyra-ai-orb-rings::after {
-    opacity: 0 !important;
-    animation: none !important;
+  opacity: 0 !important;
+  animation: none !important;
 }
 
 .clyra-ai-orb-filter {
-    position: absolute;
-    width: 0;
-    height: 0;
-    pointer-events: none;
+  position: absolute;
+  width: 0;
+  height: 0;
+  pointer-events: none;
 }
 
 @keyframes clyra-ai-orb-float {
-    0%,
-    100% {
-        transform: translateY(0) scale(1);
-    }
-    50% {
-        transform: translateY(-5px) scale(1.025);
-    }
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-5px) scale(1.025);
+  }
 }
 
 @keyframes clyra-ai-orb-breathe {
-    0%,
-    100% {
-        transform: scale(1);
-    }
-    46% {
-        transform: scale(1.045);
-    }
-    72% {
-        transform: scale(0.99);
-    }
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  46% {
+    transform: scale(1.045);
+  }
+  72% {
+    transform: scale(0.99);
+  }
 }
 
 @keyframes clyra-ai-orb-intro-rise {
-    0% {
-        opacity: 0;
-        transform: translate3d(0, 32px, 0) scale(0.94);
-    }
-    54% {
-        opacity: 1;
-        transform: translate3d(0, 4px, 0) scale(1.012);
-    }
-    100% {
-        opacity: 1;
-        transform: translate3d(0, 0, 0) scale(1);
-    }
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 32px, 0) scale(0.94);
+  }
+  54% {
+    opacity: 1;
+    transform: translate3d(0, 4px, 0) scale(1.012);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
 }
 
 @keyframes clyra-ai-orb-intro-palette {
-    0% {
-        background-position: 54% 60%;
-        transform: translateZ(0) scale(0.98) rotate(-8deg);
-    }
-    52% {
-        background-position: 48% 51%;
-        transform: translateZ(0) scale(1.055) rotate(3deg);
-    }
-    100% {
-        background-position: 43% 45%;
-        transform: translateZ(0) scale(1.12) rotate(9deg);
-    }
+  0% {
+    background-position: 54% 60%;
+    transform: translateZ(0) scale(0.98) rotate(-8deg);
+  }
+  52% {
+    background-position: 48% 51%;
+    transform: translateZ(0) scale(1.055) rotate(3deg);
+  }
+  100% {
+    background-position: 43% 45%;
+    transform: translateZ(0) scale(1.12) rotate(9deg);
+  }
 }
 
 @keyframes clyra-ai-orb-reveal-bloom {
-    0% {
-        opacity: 0;
-        transform: translateZ(0) scale(0.62);
-    }
-    32% {
-        opacity: 0.82;
-        transform: translateZ(0) scale(1.04);
-    }
-    66% {
-        opacity: 0.32;
-        transform: translateZ(0) scale(1.28);
-    }
-    100% {
-        opacity: 0;
-        transform: translateZ(0) scale(1.5);
-    }
+  0% {
+    opacity: 0;
+    transform: translateZ(0) scale(0.62);
+  }
+  32% {
+    opacity: 0.82;
+    transform: translateZ(0) scale(1.04);
+  }
+  66% {
+    opacity: 0.32;
+    transform: translateZ(0) scale(1.28);
+  }
+  100% {
+    opacity: 0;
+    transform: translateZ(0) scale(1.5);
+  }
 }
 
 @keyframes clyra-ai-orb-morph {
-    0%,
-    100% {
-        clip-path: polygon(50% 20%, 66% 29%, 80% 43%, 76% 62%, 62% 75%, 50% 82%, 37% 75%, 23% 62%, 20% 43%, 34% 29%);
-        transform: translate(-50%, -50%) rotate(0deg) scale(1);
-    }
-    34% {
-        clip-path: polygon(50% 12%, 74% 22%, 88% 48%, 72% 72%, 52% 86%, 34% 76%, 16% 58%, 22% 34%, 36% 20%, 46% 30%);
-        transform: translate(-50%, -50%) rotate(18deg) scale(1.04);
-    }
-    66% {
-        clip-path: polygon(50% 24%, 72% 30%, 82% 40%, 83% 62%, 63% 80%, 48% 74%, 30% 84%, 18% 58%, 28% 38%, 38% 22%);
-        transform: translate(-50%, -50%) rotate(-15deg) scale(0.98);
-    }
+  0%,
+  100% {
+    clip-path: polygon(
+      50% 20%,
+      66% 29%,
+      80% 43%,
+      76% 62%,
+      62% 75%,
+      50% 82%,
+      37% 75%,
+      23% 62%,
+      20% 43%,
+      34% 29%
+    );
+    transform: translate(-50%, -50%) rotate(0deg) scale(1);
+  }
+  34% {
+    clip-path: polygon(
+      50% 12%,
+      74% 22%,
+      88% 48%,
+      72% 72%,
+      52% 86%,
+      34% 76%,
+      16% 58%,
+      22% 34%,
+      36% 20%,
+      46% 30%
+    );
+    transform: translate(-50%, -50%) rotate(18deg) scale(1.04);
+  }
+  66% {
+    clip-path: polygon(
+      50% 24%,
+      72% 30%,
+      82% 40%,
+      83% 62%,
+      63% 80%,
+      48% 74%,
+      30% 84%,
+      18% 58%,
+      28% 38%,
+      38% 22%
+    );
+    transform: translate(-50%, -50%) rotate(-15deg) scale(0.98);
+  }
 }
 
 @keyframes clyra-ai-orb-ring-a {
-    0% {
-        transform: rotateY(170deg) rotateX(120deg) rotateZ(0deg);
-    }
-    50% {
-        transform: rotateY(320deg) rotateX(260deg) rotateZ(180deg) scale(1.06);
-    }
-    100% {
-        transform: rotateY(530deg) rotateX(480deg) rotateZ(360deg);
-    }
+  0% {
+    transform: rotateY(170deg) rotateX(120deg) rotateZ(0deg);
+  }
+  50% {
+    transform: rotateY(320deg) rotateX(260deg) rotateZ(180deg) scale(1.06);
+  }
+  100% {
+    transform: rotateY(530deg) rotateX(480deg) rotateZ(360deg);
+  }
 }
 
 @keyframes clyra-ai-orb-ring-b {
-    0% {
-        transform: rotateY(80deg) rotateX(210deg) rotateZ(80deg);
-    }
-    50% {
-        transform: rotateY(260deg) rotateX(390deg) rotateZ(240deg) scale(1.08);
-    }
-    100% {
-        transform: rotateY(440deg) rotateX(570deg) rotateZ(440deg);
-    }
+  0% {
+    transform: rotateY(80deg) rotateX(210deg) rotateZ(80deg);
+  }
+  50% {
+    transform: rotateY(260deg) rotateX(390deg) rotateZ(240deg) scale(1.08);
+  }
+  100% {
+    transform: rotateY(440deg) rotateX(570deg) rotateZ(440deg);
+  }
 }
 
 @keyframes clyra-ai-orb-glow {
-    0%,
-    100% {
-        transform: scale(0.92);
-    }
-    50% {
-        transform: scale(1.08);
-    }
+  0%,
+  100% {
+    transform: scale(0.92);
+  }
+  50% {
+    transform: scale(1.08);
+  }
 }
 
 @keyframes clyra-ai-orb-halo {
-    0%,
-    100% {
-        transform: scale(0.96);
-    }
-    50% {
-        transform: scale(1.06);
-    }
+  0%,
+  100% {
+    transform: scale(0.96);
+  }
+  50% {
+    transform: scale(1.06);
+  }
 }
 
 @media (max-width: 640px) {
-    .clyra-ai-orb-shell {
-        --orb-size: 68px;
-        height: 112px;
-    }
+  .clyra-ai-orb-shell {
+    --orb-size: 68px;
+    height: 112px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .clyra-app-shell::before {
-        animation: none !important;
-    }
+  .clyra-app-shell::before {
+    animation: none !important;
+  }
 
-    .clyra-ai-orb,
-    .clyra-ai-orb::before,
-    .clyra-ai-orb-ball,
-    .clyra-ai-orb-lines,
-    .clyra-ai-orb-rings::before,
-    .clyra-ai-orb-rings::after,
-    .clyra-ai-orb-glow {
-        animation: none !important;
-    }
+  .clyra-ai-orb,
+  .clyra-ai-orb::before,
+  .clyra-ai-orb-ball,
+  .clyra-ai-orb-lines,
+  .clyra-ai-orb-rings::before,
+  .clyra-ai-orb-rings::after,
+  .clyra-ai-orb-glow {
+    animation: none !important;
+  }
 }
 
 .clyra-chat-user-bubble {
-    position: relative;
-    overflow: hidden;
-    opacity: 0;
-    transform: translateY(10px) scale(0.96);
-    border-color: rgba(148, 163, 184, 0.22) !important;
-    background-image:
-        radial-gradient(circle at 12% 0%, rgba(255, 255, 255, 0.76), transparent 34%),
-        linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.18));
-    box-shadow: none !important;
-    filter: none;
-    backdrop-filter: blur(8px) saturate(1.03);
-    -webkit-backdrop-filter: blur(8px) saturate(1.03);
-    animation: clyra-user-bubble-appear 0.65s calc(var(--delay, 0.04) * 1s)
-        both cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    transform-origin: bottom right;
+  position: relative;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(10px) scale(0.96);
+  border-color: rgba(148, 163, 184, 0.22) !important;
+  background-image:
+    radial-gradient(
+      circle at 12% 0%,
+      rgba(255, 255, 255, 0.76),
+      transparent 34%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.42),
+      rgba(255, 255, 255, 0.18)
+    );
+  box-shadow: none !important;
+  filter: none;
+  backdrop-filter: blur(8px) saturate(1.03);
+  -webkit-backdrop-filter: blur(8px) saturate(1.03);
+  animation: clyra-user-bubble-appear 0.65s calc(var(--delay, 0.04) * 1s) both
+    cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transform-origin: bottom right;
 }
 
 .clyra-chat-user-bubble--first {
-    animation-name: clyra-first-user-bubble-rise;
-    animation-duration: 1.02s;
-    animation-delay: 0.03s;
-    animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  animation-name: clyra-first-user-bubble-rise;
+  animation-duration: 1.02s;
+  animation-delay: 0.03s;
+  animation-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .clyra-chat-user-bubble--first::after {
-    position: absolute;
-    inset: -45%;
-    pointer-events: none;
-    content: "";
-    background:
-        radial-gradient(circle at 70% 76%, rgba(255, 255, 255, 0.68), transparent 20%),
-        linear-gradient(115deg, transparent 34%, rgba(255, 255, 255, 0.48) 48%, transparent 62%);
-    opacity: 0;
-    transform: translate3d(-18%, 22%, 0) rotate(8deg);
-    animation: clyra-first-user-glass-impact 0.86s 0.1s both cubic-bezier(0.16, 1, 0.3, 1);
+  position: absolute;
+  inset: -45%;
+  pointer-events: none;
+  content: "";
+  background:
+    radial-gradient(
+      circle at 70% 76%,
+      rgba(255, 255, 255, 0.68),
+      transparent 20%
+    ),
+    linear-gradient(
+      115deg,
+      transparent 34%,
+      rgba(255, 255, 255, 0.48) 48%,
+      transparent 62%
+    );
+  opacity: 0;
+  transform: translate3d(-18%, 22%, 0) rotate(8deg);
+  animation: clyra-first-user-glass-impact 0.86s 0.1s both
+    cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .clyra-chat-user-text {
-    margin: 0;
-    color: #172033;
-    white-space: pre-wrap;
+  margin: 0;
+  color: #172033;
+  white-space: pre-wrap;
 }
 
 .clyra-chat-user-gradient {
-    min-height: 1.2em;
+  min-height: 1.2em;
 }
 
 .clyra-chat-user-word {
-    display: inline-block;
-    opacity: 0;
-    transform: translateY(8px);
-    color: transparent;
-    -webkit-text-fill-color: transparent;
-    background-image:
-        linear-gradient(
-            100deg,
-            #172033 0%,
-            #172033 28%,
-            #256f8f 42%,
-            #4f46e5 52%,
-            #0f766e 62%,
-            #172033 78%,
-            #172033 100%
-        );
-    background-size: 260% 100%;
-    background-position: 118% 50%;
-    -webkit-background-clip: text;
-    background-clip: text;
-    animation:
-        clyra-user-text-reveal 0.5s
-            calc(var(--delay, 0.04) * 1s + var(--word, 1) * 0.08s) both
-            cubic-bezier(0.175, 0.885, 0.32, 1.275),
-        clyra-user-word-gradient-wave 2.4s
-            calc(var(--delay, 0.04) * 1s + var(--word, 1) * 0.045s) both
-            cubic-bezier(0.16, 1, 0.3, 1);
+  display: inline-block;
+  opacity: 0;
+  transform: translateY(8px);
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  background-image: linear-gradient(
+    100deg,
+    #172033 0%,
+    #172033 28%,
+    #256f8f 42%,
+    #4f46e5 52%,
+    #0f766e 62%,
+    #172033 78%,
+    #172033 100%
+  );
+  background-size: 260% 100%;
+  background-position: 118% 50%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation:
+    clyra-user-text-reveal 0.5s
+      calc(var(--delay, 0.04) * 1s + var(--word, 1) * 0.08s) both
+      cubic-bezier(0.175, 0.885, 0.32, 1.275),
+    clyra-user-word-gradient-wave 2.4s
+      calc(var(--delay, 0.04) * 1s + var(--word, 1) * 0.045s) both
+      cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes clyra-first-user-bubble-rise {
-    0% {
-        opacity: 0;
-        transform: translateY(96px) scale(0.93);
-        filter: blur(12px);
-    }
-    46% {
-        opacity: 1;
-        transform: translateY(-7px) scale(1.018);
-        filter: blur(0px);
-    }
-    68% {
-        transform: translateY(2px) scale(0.996);
-    }
-    100% {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-        filter: blur(0px);
-    }
+  0% {
+    opacity: 0;
+    transform: translateY(96px) scale(0.93);
+    filter: blur(12px);
+  }
+  46% {
+    opacity: 1;
+    transform: translateY(-7px) scale(1.018);
+    filter: blur(0px);
+  }
+  68% {
+    transform: translateY(2px) scale(0.996);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0px);
+  }
 }
 
 @keyframes clyra-first-user-glass-impact {
-    0% {
-        opacity: 0;
-        transform: translate3d(-22%, 28%, 0) rotate(8deg);
-    }
-    28% {
-        opacity: 0.82;
-    }
-    100% {
-        opacity: 0;
-        transform: translate3d(22%, -18%, 0) rotate(8deg);
-    }
+  0% {
+    opacity: 0;
+    transform: translate3d(-22%, 28%, 0) rotate(8deg);
+  }
+  28% {
+    opacity: 0.82;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(22%, -18%, 0) rotate(8deg);
+  }
 }
 
 @keyframes clyra-user-bubble-appear {
-    100% {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-    }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 @keyframes clyra-user-gradient-wave {
-    0% {
-        background-position: 50% 126%;
-    }
-    58% {
-        background-position: 50% 44%;
-    }
-    100% {
-        background-position: 50% -12%;
-    }
+  0% {
+    background-position: 50% 126%;
+  }
+  58% {
+    background-position: 50% 44%;
+  }
+  100% {
+    background-position: 50% -12%;
+  }
 }
 
 @keyframes clyra-user-word-gradient-wave {
-    0% {
-        background-position: 118% 50%;
-    }
-    52% {
-        background-position: 48% 50%;
-    }
-    100% {
-        background-position: -28% 50%;
-    }
+  0% {
+    background-position: 118% 50%;
+  }
+  52% {
+    background-position: 48% 50%;
+  }
+  100% {
+    background-position: -28% 50%;
+  }
 }
 
 @keyframes clyra-user-text-reveal {
-    100% {
-        opacity: 1;
-        transform: translateY(0);
-    }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .clyra-assistant-stream-line {
-    position: relative;
-    display: block;
-    color: #172033;
-    background-image:
-        linear-gradient(
-            105deg,
-            #172033 0%,
-            #172033 30%,
-            #0f766e 43%,
-            #256f8f 52%,
-            #4f46e5 60%,
-            #172033 74%,
-            #172033 100%
-        );
-    background-size: 245% 100%;
-    background-position: 112% 50%;
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    animation:
-        clyra-assistant-stream-gradient 2.45s both cubic-bezier(0.16, 1, 0.3, 1),
-        clyra-assistant-soft-enter 0.28s both cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  display: block;
+  color: #172033;
+  background-image: linear-gradient(
+    105deg,
+    #172033 0%,
+    #172033 30%,
+    #0f766e 43%,
+    #256f8f 52%,
+    #4f46e5 60%,
+    #172033 74%,
+    #172033 100%
+  );
+  background-size: 245% 100%;
+  background-position: 112% 50%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation:
+    clyra-assistant-stream-gradient 2.45s both cubic-bezier(0.16, 1, 0.3, 1),
+    clyra-assistant-soft-enter 0.28s both cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .clyra-assistant-stream-line::after {
-    display: none;
-    content: none;
+  display: none;
+  content: none;
 }
 
 .clyra-file-chip {
-    border: 1px solid rgba(148, 163, 184, 0.18);
-    background:
-        radial-gradient(circle at 12% 0%, rgba(255, 255, 255, 0.9), transparent 36%),
-        linear-gradient(180deg, rgba(255, 255, 255, 0.68), rgba(248, 250, 252, 0.36)),
-        rgba(255, 255, 255, 0.34);
-    box-shadow:
-        0 8px 20px rgba(15, 23, 42, 0.035),
-        inset 0 1px 0 rgba(255, 255, 255, 0.82);
-    backdrop-filter: blur(10px) saturate(1.06);
-    -webkit-backdrop-filter: blur(10px) saturate(1.06);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  background:
+    radial-gradient(
+      circle at 12% 0%,
+      rgba(255, 255, 255, 0.9),
+      transparent 36%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.68),
+      rgba(248, 250, 252, 0.36)
+    ),
+    rgba(255, 255, 255, 0.34);
+  box-shadow:
+    0 8px 20px rgba(15, 23, 42, 0.035),
+    inset 0 1px 0 rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(10px) saturate(1.06);
+  -webkit-backdrop-filter: blur(10px) saturate(1.06);
 }
 
 .clyra-file-trigger {
-    border: 1px solid rgba(148, 163, 184, 0.14);
-    background:
-        radial-gradient(circle at 24% 12%, rgba(255, 255, 255, 0.88), transparent 34%),
-        linear-gradient(180deg, rgba(255, 255, 255, 0.56), rgba(248, 250, 252, 0.28)),
-        rgba(255, 255, 255, 0.26);
-    box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.74),
-        0 8px 18px rgba(15, 23, 42, 0.035);
-    backdrop-filter: blur(8px) saturate(1.04);
-    -webkit-backdrop-filter: blur(8px) saturate(1.04);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  background:
+    radial-gradient(
+      circle at 24% 12%,
+      rgba(255, 255, 255, 0.88),
+      transparent 34%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.56),
+      rgba(248, 250, 252, 0.28)
+    ),
+    rgba(255, 255, 255, 0.26);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.74),
+    0 8px 18px rgba(15, 23, 42, 0.035);
+  backdrop-filter: blur(8px) saturate(1.04);
+  -webkit-backdrop-filter: blur(8px) saturate(1.04);
 }
 
 .clyra-file-trigger:hover {
-    border-color: rgba(100, 116, 139, 0.22);
-    background:
-        radial-gradient(circle at 24% 12%, rgba(255, 255, 255, 0.96), transparent 34%),
-        linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(248, 250, 252, 0.42)),
-        rgba(255, 255, 255, 0.38);
+  border-color: rgba(100, 116, 139, 0.22);
+  background:
+    radial-gradient(
+      circle at 24% 12%,
+      rgba(255, 255, 255, 0.96),
+      transparent 34%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.72),
+      rgba(248, 250, 252, 0.42)
+    ),
+    rgba(255, 255, 255, 0.38);
 }
 
 @keyframes clyra-assistant-stream-gradient {
-    0% {
-        background-position: 112% 50%;
-    }
-    45% {
-        background-position: 48% 50%;
-    }
-    100% {
-        background-position: -18% 50%;
-    }
+  0% {
+    background-position: 112% 50%;
+  }
+  45% {
+    background-position: 48% 50%;
+  }
+  100% {
+    background-position: -18% 50%;
+  }
 }
 
 @keyframes clyra-assistant-soft-enter {
-    0% {
-        opacity: 0;
-        filter: blur(7px);
-        transform: translateY(5px);
-    }
-    100% {
-        opacity: 1;
-        filter: blur(0);
-        transform: translateY(0);
-    }
+  0% {
+    opacity: 0;
+    filter: blur(7px);
+    transform: translateY(5px);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
-    .clyra-chat-user-bubble,
-    .clyra-chat-user-word {
-        opacity: 1;
-        transform: none;
-        animation: none !important;
-    }
+  .clyra-chat-user-bubble,
+  .clyra-chat-user-word {
+    opacity: 1;
+    transform: none;
+    animation: none !important;
+  }
 
-    .clyra-chat-user-text,
-    .clyra-chat-user-word,
-    .clyra-assistant-stream-line {
-        animation: none !important;
-        background-image: none;
-        color: #172033;
-        -webkit-text-fill-color: currentColor;
-    }
+  .clyra-chat-user-text,
+  .clyra-chat-user-word,
+  .clyra-assistant-stream-line {
+    animation: none !important;
+    background-image: none;
+    color: #172033;
+    -webkit-text-fill-color: currentColor;
+  }
 }
 
 /* Premium glass chat composer */
 .input-wrapper:not(.loading) {
-    border-color: rgba(148, 163, 184, 0.34) !important;
-    background:
-        radial-gradient(circle at 9% 0%, rgba(255, 255, 255, 0.96), transparent 34%),
-        linear-gradient(180deg, rgba(255, 255, 255, 0.74), rgba(248, 250, 252, 0.5)),
-        rgba(255, 255, 255, 0.46) !important;
-    box-shadow:
-        0 20px 48px rgba(15, 23, 42, 0.095),
-        inset 0 1px 0 rgba(255, 255, 255, 0.92),
-        inset 0 -1px 0 rgba(148, 163, 184, 0.1) !important;
-    backdrop-filter: blur(12px) saturate(1.06);
-    -webkit-backdrop-filter: blur(12px) saturate(1.06);
+  border-color: rgba(148, 163, 184, 0.34) !important;
+  background:
+    radial-gradient(
+      circle at 9% 0%,
+      rgba(255, 255, 255, 0.96),
+      transparent 34%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.74),
+      rgba(248, 250, 252, 0.5)
+    ),
+    rgba(255, 255, 255, 0.46) !important;
+  box-shadow:
+    0 20px 48px rgba(15, 23, 42, 0.095),
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    inset 0 -1px 0 rgba(148, 163, 184, 0.1) !important;
+  backdrop-filter: blur(12px) saturate(1.06);
+  -webkit-backdrop-filter: blur(12px) saturate(1.06);
 }
 
 .clyra-prompt-ghost-layer {
-    color: transparent;
-    text-shadow: none;
-    animation: clyra-prompt-layer-enter 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  color: transparent;
+  text-shadow: none;
+  animation: clyra-prompt-layer-enter 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .clyra-prompt-ghost {
-    display: inline;
-    background:
-        linear-gradient(100deg, rgba(100, 116, 139, 0.54), rgba(148, 163, 184, 0.78), rgba(100, 116, 139, 0.54));
-    background-size: 220% 100%;
-    background-clip: text;
-    -webkit-background-clip: text;
-    color: transparent;
-    -webkit-text-fill-color: transparent;
-    font-weight: 650;
-    animation: clyra-prompt-ghost-shimmer 1.9s ease-in-out infinite;
+  display: inline;
+  background: linear-gradient(
+    100deg,
+    rgba(100, 116, 139, 0.54),
+    rgba(148, 163, 184, 0.78),
+    rgba(100, 116, 139, 0.54)
+  );
+  background-size: 220% 100%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  font-weight: 650;
+  animation: clyra-prompt-ghost-shimmer 1.9s ease-in-out infinite;
 }
 
 @keyframes clyra-prompt-layer-enter {
-    0% {
-        opacity: 0;
-        filter: blur(5px);
-        transform: translateY(5px) scale(0.992);
-    }
-    100% {
-        opacity: 1;
-        filter: blur(0);
-        transform: translateY(0) scale(1);
-    }
+  0% {
+    opacity: 0;
+    filter: blur(5px);
+    transform: translateY(5px) scale(0.992);
+  }
+  100% {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0) scale(1);
+  }
 }
 
 @keyframes clyra-prompt-ghost-shimmer {
-    0% {
-        background-position: 110% 50%;
-    }
-    55%,
-    100% {
-        background-position: -70% 50%;
-    }
+  0% {
+    background-position: 110% 50%;
+  }
+  55%,
+  100% {
+    background-position: -70% 50%;
+  }
 }
 
 /* Shimmer Loading */
 .input-wrapper.loading {
-    border-color: transparent !important;
-    box-shadow:
-        0 0 30px -5px rgba(255, 255, 255, 0.4),
-        inset 0 0 15px rgba(255, 255, 255, 0.1) !important;
+  border-color: transparent !important;
+  box-shadow:
+    0 0 30px -5px rgba(255, 255, 255, 0.4),
+    inset 0 0 15px rgba(255, 255, 255, 0.1) !important;
 }
 
 /* 1. The glowing border doing laps */
 .input-wrapper.loading::before {
-    content: "";
-    position: absolute;
-    top: -1px;
-    left: -1px;
-    right: -1px;
-    bottom: -1px;
-    border-radius: inherit;
-    padding: 1.5px;
-    background: linear-gradient(
-        90deg,
-        transparent 0%,
-        rgba(200, 200, 200, 0.8) 50%,
-        transparent 100%
-    );
-    background-size: 200% 100%;
-    animation: shiningBorder 1.5s infinite linear;
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  right: -1px;
+  bottom: -1px;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(200, 200, 200, 0.8) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: shiningBorder 1.5s infinite linear;
 
-    -webkit-mask:
-        linear-gradient(#fff 0 0) content-box,
-        linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
 
-    pointer-events: none;
-    z-index: 10;
+  pointer-events: none;
+  z-index: 10;
 }
 
 /* 2. The inner diffuse sweep of light */
 .input-wrapper.loading::after {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: -100%;
-    width: 60%;
-    height: 100%;
-    background: linear-gradient(
-        90deg,
-        transparent,
-        rgba(200, 200, 200, 0.15),
-        transparent
-    );
-    animation: shimmerMove 1.5s infinite linear;
-    pointer-events: none;
-    border-radius: inherit;
-    z-index: 1;
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(200, 200, 200, 0.15),
+    transparent
+  );
+  animation: shimmerMove 1.5s infinite linear;
+  pointer-events: none;
+  border-radius: inherit;
+  z-index: 1;
 }
 
 @keyframes shiningBorder {
-    0% {
-        background-position: 200% 0;
-    }
-    100% {
-        background-position: -200% 0;
-    }
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
 }
 @keyframes shimmerMove {
-    0% {
-        transform: translateX(0);
-    }
-    100% {
-        transform: translateX(350%);
-    }
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(350%);
+  }
 }
 
 @keyframes vibe-pulse-smooth {
-    0%,
-    100% {
-        opacity: 0.4;
-        transform: scale(0.9);
-    }
-    50% {
-        opacity: 1;
-        transform: scale(1);
-    }
+  0%,
+  100% {
+    opacity: 0.4;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 .dot-pulse-smooth {
-    animation: vibe-pulse-smooth 1.5s ease-in-out infinite;
+  animation: vibe-pulse-smooth 1.5s ease-in-out infinite;
 }
 
 html,
 body,
 #root {
-    height: 100%;
+  height: 100%;
 }
 
 .markdown-body {
-    font-size: clamp(0.9rem, 0.82rem + 0.28vw, 1.05rem);
-    line-height: 1.6;
+  font-size: clamp(0.9rem, 0.82rem + 0.28vw, 1.05rem);
+  line-height: 1.6;
 }
 
 .markdown-body > *:first-child {
-    margin-top: 0;
+  margin-top: 0;
 }
 
 .markdown-body > *:last-child {
-    margin-bottom: 0;
+  margin-bottom: 0;
 }
 
 .markdown-body--vibe p {
-    color: #334155;
+  color: #334155;
 }
 
 .markdown-body p {
-    margin-bottom: 1em;
+  margin-bottom: 1em;
 }
 
 .markdown-body h1,
@@ -1594,219 +1805,312 @@ body,
 .markdown-body h4,
 .markdown-body h5,
 .markdown-body h6 {
-    font-weight: 600;
-    margin-top: 1.5em;
-    margin-bottom: 0.5em;
-    color: #0f172a;
+  font-weight: 600;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+  color: #0f172a;
 }
 
 .markdown-body strong {
-    font-weight: 600;
-    color: #0f172a;
+  font-weight: 600;
+  color: #0f172a;
 }
 
 .markdown-body ul {
-    list-style-type: disc;
-    padding-left: 1.5em;
-    margin-bottom: 1em;
+  list-style-type: disc;
+  padding-left: 1.5em;
+  margin-bottom: 1em;
 }
 
 .markdown-body ol {
-    list-style-type: decimal;
-    padding-left: 1.5em;
-    margin-bottom: 1em;
+  list-style-type: decimal;
+  padding-left: 1.5em;
+  margin-bottom: 1em;
 }
 
 .markdown-body li + li {
-    margin-top: 0.25em;
+  margin-top: 0.25em;
 }
 
 .markdown-body code {
-    background-color: #f1f5f9;
-    padding: 0.2em 0.4em;
-    border-radius: 4px;
-    font-family:
-        ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
-        "Liberation Mono", "Courier New", monospace;
-    font-size: 0.85em;
+  background-color: #f1f5f9;
+  padding: 0.2em 0.4em;
+  border-radius: 4px;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
+  font-size: 0.85em;
 }
 
 .markdown-body pre {
-    background-color: #f8fafc;
-    padding: 1em;
-    border-radius: 8px;
-    overflow-x: auto;
-    margin-bottom: 1em;
-    border: 1px solid #e2e8f0;
-    -ms-overflow-style: none;
-    scrollbar-width: none;
+  background-color: #f8fafc;
+  padding: 1em;
+  border-radius: 8px;
+  overflow-x: auto;
+  margin-bottom: 1em;
+  border: 1px solid #e2e8f0;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 .markdown-body pre::-webkit-scrollbar {
-    display: none;
-    height: 0;
+  display: none;
+  height: 0;
 }
 
 .markdown-body pre code {
-    background-color: transparent;
-    padding: 0;
-    border-radius: 0;
-    font-size: 0.85em;
+  background-color: transparent;
+  padding: 0;
+  border-radius: 0;
+  font-size: 0.85em;
 }
 
 .markdown-body blockquote {
-    border-left: 4px solid #cbd5e1;
-    padding-left: 1em;
-    color: #64748b;
-    margin-bottom: 1em;
+  border-left: 4px solid #cbd5e1;
+  padding-left: 1em;
+  color: #64748b;
+  margin-bottom: 1em;
 }
 
 .markdown-body a {
-    color: #2563eb;
-    text-decoration: underline;
+  color: #2563eb;
+  text-decoration: underline;
 }
 
 /* Performance optimizations */
 .clyra-workspace-card {
-    will-change: transform, opacity;
+  will-change: transform, opacity;
 }
 .clyra-workflow-tab {
-    will-change: transform;
+  will-change: transform;
 }
 .clyra-workflow-tab__hover {
-    will-change: transform;
+  will-change: transform;
 }
 #chat-container {
-    will-change: scroll-position;
-    -webkit-overflow-scrolling: touch;
-    min-height: 0;
-    overflow-y: auto;
-    overflow-x: hidden;
-    scroll-behavior: smooth;
+  will-change: scroll-position;
+  -webkit-overflow-scrolling: touch;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scroll-behavior: smooth;
 }
 .scrollbar-none {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
 /* First message premium entry */
 .clyra-chat-user-bubble--first {
-    animation: clyra-first-message-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: clyra-first-message-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 @keyframes clyra-first-message-up {
-    0% { opacity: 0; transform: translateY(16px) scale(0.98); }
-    100% { opacity: 1; transform: translateY(0) scale(1); }
+  0% {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 /* Smooth chat deletion */
 .clyra-chat-item-exit {
-    animation: clyra-chat-delete 0.25s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: clyra-chat-delete 0.25s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 @keyframes clyra-chat-delete {
-    0% { opacity: 1; transform: translateX(0) scale(1); max-height: 48px; }
-    100% { opacity: 0; transform: translateX(-20px) scale(0.9); max-height: 0; margin: 0; padding: 0; }
+  0% {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+    max-height: 48px;
+  }
+  100% {
+    opacity: 0;
+    transform: translateX(-20px) scale(0.9);
+    max-height: 0;
+    margin: 0;
+    padding: 0;
+  }
 }
 
-@keyframes clyra-first-msg-up{0%{opacity:0;transform:translateY(32px) scale(.94)}55%{opacity:1;transform:translateY(-6px) scale(1.02)}75%{transform:translateY(2px) scale(.99)}100%{opacity:1;transform:translateY(0) scale(1)}}
-.clyra-chat-user-bubble--first{animation:clyra-first-msg-up .7s cubic-bezier(.22,1,.36,1) forwards}
+@keyframes clyra-first-msg-up {
+  0% {
+    opacity: 0;
+    transform: translateY(32px) scale(0.94);
+  }
+  55% {
+    opacity: 1;
+    transform: translateY(-6px) scale(1.02);
+  }
+  75% {
+    transform: translateY(2px) scale(0.99);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.clyra-chat-user-bubble--first {
+  animation: clyra-first-msg-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
 
-#chat-container{padding-bottom:80px}
-.clyra-composer-glass{backdrop-filter:blur(16px) saturate(180%);-webkit-backdrop-filter:blur(16px) saturate(180%)}
+#chat-container {
+  padding-bottom: 80px;
+}
+.clyra-composer-glass {
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+}
 
-.clyra-chat-user-bubble{box-shadow:0 0 18px rgba(59,130,246,.15),0 2px 6px rgba(0,0,0,.04)!important;transition:box-shadow .3s ease}
+.clyra-chat-user-bubble {
+  box-shadow:
+    0 0 18px rgba(59, 130, 246, 0.15),
+    0 2px 6px rgba(0, 0, 0, 0.04) !important;
+  transition: box-shadow 0.3s ease;
+}
 
 /* Animated Workspace Backgrounds */
 .bg-anim-aurora {
-    background: linear-gradient(135deg, #f3e8ff, #e0e7ff, #fae8ff, #f3e8ff);
-    background-size: 300% 300%;
-    animation: clyra-bg-pan 18s ease infinite;
+  background: linear-gradient(135deg, #f3e8ff, #e0e7ff, #fae8ff, #f3e8ff);
+  background-size: 300% 300%;
+  animation: clyra-bg-pan 18s ease infinite;
 }
 .bg-anim-twilight {
-    background: linear-gradient(135deg, #f0f9ff, #e0f2fe, #fdf4ff, #f0f9ff);
-    background-size: 300% 300%;
-    animation: clyra-bg-pan 22s ease-in-out infinite;
+  background: linear-gradient(135deg, #f0f9ff, #e0f2fe, #fdf4ff, #f0f9ff);
+  background-size: 300% 300%;
+  animation: clyra-bg-pan 22s ease-in-out infinite;
 }
 .bg-anim-peach {
-    background: linear-gradient(135deg, #fff1f2, #ffedd5, #fef3c7, #fff1f2);
-    background-size: 300% 300%;
-    animation: clyra-bg-pan 20s ease-in-out infinite;
+  background: linear-gradient(135deg, #fff1f2, #ffedd5, #fef3c7, #fff1f2);
+  background-size: 300% 300%;
+  animation: clyra-bg-pan 20s ease-in-out infinite;
 }
 .bg-anim-mint {
-    background: linear-gradient(135deg, #f0fdf4, #ecfdf5, #dcfce7, #f0fdf4);
-    background-size: 300% 300%;
-    animation: clyra-bg-pan 19s ease-in-out infinite;
+  background: linear-gradient(135deg, #f0fdf4, #ecfdf5, #dcfce7, #f0fdf4);
+  background-size: 300% 300%;
+  animation: clyra-bg-pan 19s ease-in-out infinite;
 }
 
 @keyframes clyra-bg-pan {
-    0% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
 }
 
 .clyra-fluid-bg-container {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    overflow: hidden;
-    z-index: 0;
-    opacity: 0.15;
-    filter: blur(90px);
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+  opacity: 0.15;
+  filter: blur(90px);
 }
 
 .clyra-fluid-blob {
-    position: absolute;
-    border-radius: 50%;
-    mix-blend-mode: multiply;
+  position: absolute;
+  border-radius: 50%;
+  mix-blend-mode: multiply;
 }
 
 .dark .clyra-fluid-blob {
-    mix-blend-mode: screen;
+  mix-blend-mode: screen;
 }
 
 .clyra-fluid-blob-1 {
-    width: 60vw;
-    height: 60vw;
-    top: -10vw;
-    left: -10vw;
-    animation: clyra-blob-float-1 25s ease-in-out infinite alternate;
+  width: 60vw;
+  height: 60vw;
+  top: -10vw;
+  left: -10vw;
+  animation: clyra-blob-float-1 25s ease-in-out infinite alternate;
 }
 
 .clyra-fluid-blob-2 {
-    width: 50vw;
-    height: 50vw;
-    top: 20vw;
-    right: -10vw;
-    animation: clyra-blob-float-2 30s ease-in-out infinite alternate;
+  width: 50vw;
+  height: 50vw;
+  top: 20vw;
+  right: -10vw;
+  animation: clyra-blob-float-2 30s ease-in-out infinite alternate;
 }
 
 .clyra-fluid-blob-3 {
-    width: 70vw;
-    height: 70vw;
-    bottom: -20vw;
-    left: 20vw;
-    animation: clyra-blob-float-3 35s ease-in-out infinite alternate;
+  width: 70vw;
+  height: 70vw;
+  bottom: -20vw;
+  left: 20vw;
+  animation: clyra-blob-float-3 35s ease-in-out infinite alternate;
 }
 
 @keyframes clyra-blob-float-1 {
-    0% { transform: translate(0, 0) scale(1); }
-    50% { transform: translate(10vw, 15vw) scale(1.1); }
-    100% { transform: translate(-5vw, 25vw) scale(0.9); }
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(10vw, 15vw) scale(1.1);
+  }
+  100% {
+    transform: translate(-5vw, 25vw) scale(0.9);
+  }
 }
 
 @keyframes clyra-blob-float-2 {
-    0% { transform: translate(0, 0) scale(1); }
-    50% { transform: translate(-20vw, 10vw) scale(1.2); }
-    100% { transform: translate(-10vw, -15vw) scale(0.8); }
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(-20vw, 10vw) scale(1.2);
+  }
+  100% {
+    transform: translate(-10vw, -15vw) scale(0.8);
+  }
 }
 
 @keyframes clyra-blob-float-3 {
-    0% { transform: translate(0, 0) scale(1); }
-    50% { transform: translate(15vw, -20vw) scale(0.9); }
-    100% { transform: translate(30vw, -10vw) scale(1.1); }
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(15vw, -20vw) scale(0.9);
+  }
+  100% {
+    transform: translate(30vw, -10vw) scale(1.1);
+  }
 }
 
 .clyra-document-card {
-    color: #1e293b;
-    position: relative;
+  color: #1e293b;
+  position: relative;
+  max-height: min(88vh, 900px);
+}
+
+.clyra-doc-header,
+.clyra-doc-subject,
+.clyra-doc-toolbar {
+  position: sticky;
+  z-index: 24;
+  flex: 0 0 auto;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(18px) saturate(1.05);
+  -webkit-backdrop-filter: blur(18px) saturate(1.05);
+}
+
+.clyra-doc-header {
+  top: 0;
+}
+
+.clyra-doc-toolbar {
+  top: 67px;
+}
+
+.clyra-doc-subject {
+  top: 67px;
+  z-index: 22;
 }
 
 .clyra-doc-action,
@@ -1815,27 +2119,27 @@ body,
 .clyra-doc-tool-button,
 .clyra-doc-select,
 .clyra-doc-colour {
-    border: 1px solid rgba(226, 232, 240, 0.95);
-    background: rgba(255, 255, 255, 0.86);
-    color: #475569;
-    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8);
-    transition:
-        transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
-        background-color 180ms ease,
-        border-color 180ms ease,
-        color 180ms ease,
-        box-shadow 180ms ease;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  background: rgba(255, 255, 255, 0.86);
+  color: #475569;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8);
+  transition:
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 180ms ease,
+    border-color 180ms ease,
+    color 180ms ease,
+    box-shadow 180ms ease;
 }
 
 .clyra-doc-action {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    height: 38px;
-    border-radius: 999px;
-    padding: 0 14px;
-    font-size: 13px;
-    font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 38px;
+  border-radius: 999px;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .clyra-doc-action:hover,
@@ -1844,807 +2148,1056 @@ body,
 .clyra-doc-tool-button:hover,
 .clyra-doc-select:hover,
 .clyra-doc-colour:hover {
-    transform: translateY(-1px);
-    border-color: rgba(148, 163, 184, 0.42);
-    background: #fff;
-    color: #0f172a;
-    box-shadow: 0 10px 26px rgba(15, 23, 42, 0.055);
+  transform: translateY(-1px);
+  border-color: rgba(148, 163, 184, 0.42);
+  background: #fff;
+  color: #0f172a;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.055);
 }
 
 .clyra-doc-action:active,
 .clyra-doc-icon-button:active,
 .clyra-doc-provider-button:active,
 .clyra-doc-tool-button:active {
-    transform: translateY(0) scale(0.98);
+  transform: translateY(0) scale(0.98);
 }
 
 .clyra-doc-action:disabled,
 .clyra-doc-icon-button:disabled,
 .clyra-doc-tool-button:disabled {
-    cursor: default;
-    opacity: 0.42;
-    transform: none;
-    box-shadow: none;
+  cursor: default;
+  opacity: 0.42;
+  transform: none;
+  box-shadow: none;
 }
 
 .clyra-doc-action--active {
-    color: #0f172a;
-    border-color: rgba(148, 163, 184, 0.5);
+  color: #0f172a;
+  border-color: rgba(148, 163, 184, 0.5);
 }
 
 .clyra-doc-icon-button,
 .clyra-doc-tool-button {
-    display: inline-grid;
-    height: 36px;
-    width: 36px;
-    place-items: center;
-    border-radius: 999px;
+  display: inline-grid;
+  height: 36px;
+  width: 36px;
+  place-items: center;
+  border-radius: 999px;
 }
 
 .clyra-doc-size-options {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    gap: 1px;
-    border-radius: 999px;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.4), rgba(248, 250, 252, 0.1));
-    border: 1px solid rgba(226, 232, 240, 0.8);
-    box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.02);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    padding: 2px;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  border-radius: 999px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.4),
+    rgba(248, 250, 252, 0.1)
+  );
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.02);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  padding: 2px;
 }
 
 .clyra-doc-size-button {
-    position: relative;
-    z-index: 1;
-    display: inline-flex;
-    height: 28px;
-    min-width: 32px;
-    align-items: center;
-    justify-content: center;
-    border-radius: 999px;
-    color: rgba(71, 85, 105, 0.82);
-    font-size: 13px;
-    font-weight: 650;
-    transition:
-        color 260ms ease,
-        text-shadow 320ms ease,
-        transform 420ms cubic-bezier(0.18, 1, 0.32, 1);
-    transform-style: preserve-3d;
-    will-change: transform;
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  height: 28px;
+  min-width: 32px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  color: rgba(71, 85, 105, 0.82);
+  font-size: 13px;
+  font-weight: 650;
+  transition:
+    color 260ms ease,
+    text-shadow 320ms ease,
+    transform 420ms cubic-bezier(0.18, 1, 0.32, 1);
+  transform-style: preserve-3d;
+  will-change: transform;
 }
 
 .clyra-doc-size-button:hover {
-    color: #0f172a;
-    transform: translateY(1px) rotateX(2deg) rotateY(-1deg) translateZ(4px);
-    transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), color 0.3s ease;
+  color: #0f172a;
+  transform: translateY(1px) rotateX(2deg) rotateY(-1deg) translateZ(4px);
+  transition:
+    transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    color 0.3s ease;
 }
 
 .clyra-doc-size-button--active {
-    color: #0f172a;
-    text-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
-    transform: translateY(1px) rotateX(1deg) translateZ(3px);
-    transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), color 0.3s ease;
+  color: #0f172a;
+  text-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+  transform: translateY(1px) rotateX(1deg) translateZ(3px);
+  transition:
+    transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    color 0.3s ease;
 }
 
 .clyra-doc-hover-glass {
-    position: absolute;
-    left: 2px;
-    right: 2px;
-    top: calc(50% + 1px);
-    height: calc(100% - 4px);
-    translate: 0 -50%;
-    z-index: -1;
-    border: 1px solid rgba(15, 23, 42, 0.07);
-    border-radius: inherit;
-    background:
-        radial-gradient(circle at 24% 12%, rgba(255, 255, 255, 0.94), transparent 34%),
-        linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(226, 232, 240, 0.52));
-    box-shadow:
-        0 8px 22px rgba(15, 23, 42, 0.075),
-        inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  top: calc(50% + 1px);
+  height: calc(100% - 4px);
+  translate: 0 -50%;
+  z-index: -1;
+  border: 1px solid rgba(15, 23, 42, 0.07);
+  border-radius: inherit;
+  background:
+    radial-gradient(
+      circle at 24% 12%,
+      rgba(255, 255, 255, 0.94),
+      transparent 34%
+    ),
+    linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.92),
+      rgba(226, 232, 240, 0.52)
+    );
+  box-shadow:
+    0 8px 22px rgba(15, 23, 42, 0.075),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
 }
 
 .clyra-doc-swatch-button {
-    display: inline-flex;
-    height: 24px;
-    width: 24px;
-    align-items: center;
-    justify-content: center;
-    border: 2px solid rgba(255, 255, 255, 0.95);
-    border-radius: 999px;
-    box-shadow:
-        0 0 0 1px rgba(148, 163, 184, 0.28),
-        0 6px 14px rgba(15, 23, 42, 0.06);
-    transition:
-        transform 160ms cubic-bezier(0.22, 1, 0.36, 1),
-        box-shadow 160ms ease;
+  display: inline-flex;
+  height: 24px;
+  width: 24px;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid rgba(255, 255, 255, 0.95);
+  border-radius: 999px;
+  box-shadow:
+    0 0 0 1px rgba(148, 163, 184, 0.28),
+    0 6px 14px rgba(15, 23, 42, 0.06);
+  transition:
+    transform 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 160ms ease;
 }
 
 .clyra-doc-swatch-button:hover {
-    transform: translateY(-1px) scale(1.04);
-    box-shadow:
-        0 0 0 1px rgba(100, 116, 139, 0.36),
-        0 9px 20px rgba(15, 23, 42, 0.1);
+  transform: translateY(-1px) scale(1.04);
+  box-shadow:
+    0 0 0 1px rgba(100, 116, 139, 0.36),
+    0 9px 20px rgba(15, 23, 42, 0.1);
 }
 
 .clyra-doc-swatch-button--highlight {
-    box-shadow:
-        inset 0 0 0 1px rgba(15, 23, 42, 0.05),
-        0 0 0 1px rgba(148, 163, 184, 0.2),
-        0 6px 14px rgba(15, 23, 42, 0.05);
+  box-shadow:
+    inset 0 0 0 1px rgba(15, 23, 42, 0.05),
+    0 0 0 1px rgba(148, 163, 184, 0.2),
+    0 6px 14px rgba(15, 23, 42, 0.05);
 }
 
 .clyra-doc-provider-button {
-    display: flex;
-    width: 100%;
-    align-items: center;
-    gap: 10px;
-    border-radius: 14px;
-    padding: 8px 9px;
-    text-align: left;
-    font-size: 13px;
-    font-weight: 600;
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  border-radius: 14px;
+  padding: 8px 9px;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 600;
 }
 
 .clyra-doc-toolbar {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: center;
-    gap: 12px;
-    border-bottom: 1px solid rgba(241, 245, 249, 0.95);
-    background:
-        linear-gradient(180deg, rgba(248, 250, 252, 0.9), rgba(255, 255, 255, 0.9)),
-        #fff;
-    overflow: hidden;
-    padding: 10px 18px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid rgba(241, 245, 249, 0.95);
+  background:
+    linear-gradient(180deg, rgba(248, 250, 252, 0.9), rgba(255, 255, 255, 0.9)),
+    #fff;
+  overflow: hidden;
+  padding: 10px 18px;
 }
 
 .clyra-doc-tabbar {
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    border-radius: 999px;
-    border: 1px solid rgba(226, 232, 240, 0.9);
-    background: rgba(255, 255, 255, 0.72);
-    padding: 3px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  border-radius: 999px;
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  background: rgba(255, 255, 255, 0.72);
+  padding: 3px;
 }
 
 .clyra-doc-tab {
-    position: relative;
-    isolation: isolate;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 64px;
-    height: 30px;
-    border-radius: 999px;
-    color: rgba(71, 85, 105, 0.82);
-    font-size: 13px;
-    font-weight: 650;
-    transition:
-        color 260ms ease,
-        text-shadow 320ms ease,
-        transform 420ms cubic-bezier(0.18, 1, 0.32, 1);
-    transform-style: preserve-3d;
-    will-change: transform;
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 64px;
+  height: 30px;
+  border-radius: 999px;
+  color: rgba(71, 85, 105, 0.82);
+  font-size: 13px;
+  font-weight: 650;
+  transition:
+    color 260ms ease,
+    text-shadow 320ms ease,
+    transform 420ms cubic-bezier(0.18, 1, 0.32, 1);
+  transform-style: preserve-3d;
+  will-change: transform;
 }
 
 .clyra-doc-tab:hover {
-    color: #0f172a;
-    transform: translateY(1px) rotateX(2deg) rotateY(-1deg) translateZ(4px);
-    transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), color 0.3s ease;
+  color: #0f172a;
+  transform: translateY(1px) rotateX(2deg) rotateY(-1deg) translateZ(4px);
+  transition:
+    transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    color 0.3s ease;
 }
 
 .clyra-doc-tab--active {
-    color: #0f172a;
-    text-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
-    transform: translateY(1px) rotateX(1deg) translateZ(3px);
-    transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1), color 0.3s ease;
+  color: #0f172a;
+  text-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
+  transform: translateY(1px) rotateX(1deg) translateZ(3px);
+  transition:
+    transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    color 0.3s ease;
 }
 
 .clyra-doc-tool-panel {
-    display: flex;
-    min-width: 0;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
 .clyra-doc-tool-cluster {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    border-radius: 999px;
-    border: 1px solid rgba(226, 232, 240, 0.72);
-    background: rgba(255, 255, 255, 0.78);
-    min-height: 44px;
-    padding: 4px 5px 4px 10px;
-    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.86);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(226, 232, 240, 0.72);
+  background: rgba(255, 255, 255, 0.78);
+  min-height: 44px;
+  padding: 4px 5px 4px 10px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.86);
 }
 
 .clyra-doc-tool-cluster-label {
-    color: #94a3b8;
-    font-size: 10px;
-    font-weight: 800;
-    letter-spacing: 0.07em;
-    text-transform: uppercase;
+  color: #94a3b8;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
 }
 
 .clyra-doc-tool-group {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    border-radius: 999px;
-    background: rgba(248, 250, 252, 0.72);
-    padding: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  background: rgba(248, 250, 252, 0.72);
+  padding: 4px;
 }
 
 .clyra-doc-tool-group--typography {
-    flex-wrap: wrap;
-    border-radius: 18px;
+  flex-wrap: wrap;
+  border-radius: 18px;
 }
 
 .clyra-doc-select,
 .clyra-doc-colour {
-    display: inline-flex;
-    height: 36px;
-    align-items: center;
-    gap: 7px;
-    border-radius: 999px;
-    padding: 0 10px;
+  display: inline-flex;
+  height: 36px;
+  align-items: center;
+  gap: 7px;
+  border-radius: 999px;
+  padding: 0 10px;
 }
 
 .clyra-doc-colour--compact {
-    height: 28px;
-    padding: 0 6px;
-    gap: 4px;
-    border-radius: 8px;
-    background: rgba(248, 250, 252, 0.6);
-    border: 1px solid rgba(226, 232, 240, 0.5);
-    transition: background 150ms ease, border-color 150ms ease;
+  height: 28px;
+  padding: 0 6px;
+  gap: 4px;
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.6);
+  border: 1px solid rgba(226, 232, 240, 0.5);
+  transition:
+    background 150ms ease,
+    border-color 150ms ease;
 }
 .clyra-doc-colour--compact:hover {
-    background: #fff;
-    border-color: rgba(203, 213, 225, 0.8);
-    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+  background: #fff;
+  border-color: rgba(203, 213, 225, 0.8);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
 }
 
 .clyra-doc-select select {
-    min-width: 106px;
-    appearance: none;
-    border: 0;
-    background: transparent;
-    color: inherit;
-    font-size: 12px;
-    font-weight: 650;
-    outline: none;
+  min-width: 106px;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  outline: none;
 }
 
 .clyra-doc-select--small select {
-    min-width: 72px;
+  min-width: 72px;
 }
 
 .clyra-doc-select--block select {
-    min-width: 94px;
+  min-width: 94px;
 }
 
 .clyra-doc-colour input {
-    height: 20px;
-    width: 24px;
-    cursor: pointer;
-    border: 0;
-    background: transparent;
-    padding: 0;
+  height: 20px;
+  width: 24px;
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+  padding: 0;
 }
 
 .clyra-doc-colour-stack {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px;
 }
 
 .clyra-doc-colour-row {
-    display: inline-flex;
-    min-height: 34px;
-    align-items: center;
-    gap: 5px;
-    border-radius: 999px;
-    background: rgba(248, 250, 252, 0.68);
-    padding: 2px 3px 2px 9px;
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  background: rgba(248, 250, 252, 0.68);
+  padding: 2px 3px 2px 9px;
 }
 
 .clyra-doc-colour-row > span:first-child {
-    min-width: 0;
-    color: #64748b;
-    font-size: 10.5px;
-    font-weight: 760;
-    letter-spacing: 0.01em;
-    white-space: nowrap;
+  min-width: 0;
+  color: #64748b;
+  font-size: 10.5px;
+  font-weight: 760;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
 }
 
 .clyra-doc-attachment-cluster {
-    max-width: min(100%, 330px);
+  max-width: min(100%, 330px);
 }
 
 .clyra-doc-attach-button {
-    display: inline-flex;
-    height: 34px;
-    align-items: center;
-    gap: 7px;
-    border-radius: 999px;
-    border: 1px solid rgba(226, 232, 240, 0.95);
-    background: rgba(248, 250, 252, 0.92);
-    padding: 0 11px;
-    color: #475569;
-    font-size: 12px;
-    font-weight: 720;
-    transition:
-        transform 170ms cubic-bezier(0.22, 1, 0.36, 1),
-        background-color 170ms ease,
-        border-color 170ms ease,
-        color 170ms ease,
-        box-shadow 170ms ease;
+  display: inline-flex;
+  height: 34px;
+  align-items: center;
+  gap: 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  background: rgba(248, 250, 252, 0.92);
+  padding: 0 11px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 720;
+  transition:
+    transform 170ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 170ms ease,
+    border-color 170ms ease,
+    color 170ms ease,
+    box-shadow 170ms ease;
 }
 
 .clyra-doc-attach-button:hover {
-    transform: translateY(-1px);
-    border-color: rgba(148, 163, 184, 0.46);
-    background: #fff;
-    color: #0f172a;
-    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.065);
+  transform: translateY(-1px);
+  border-color: rgba(148, 163, 184, 0.46);
+  background: #fff;
+  color: #0f172a;
+  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.065);
 }
 
 .clyra-doc-attachment-list {
-    display: inline-flex;
-    min-width: 0;
-    align-items: center;
-    gap: 5px;
-    overflow: hidden;
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 5px;
+  overflow: hidden;
 }
 
 .clyra-doc-attachment-list span {
-    max-width: 92px;
-    overflow: hidden;
-    border-radius: 999px;
-    background: rgba(241, 245, 249, 0.9);
-    padding: 5px 8px;
-    color: #64748b;
-    font-size: 10.5px;
-    font-weight: 720;
-    line-height: 1;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  max-width: 92px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(241, 245, 249, 0.9);
+  padding: 5px 8px;
+  color: #64748b;
+  font-size: 10.5px;
+  font-weight: 720;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .clyra-doc-editor {
-    min-height: 220px;
-    overflow: visible;
-    white-space: pre-wrap;
-    color: #1e293b;
-    font-size: 15px;
-    font-weight: 400;
-    line-height: 1.72;
-    outline: none;
+  min-height: 220px;
+  overflow: visible;
+  white-space: pre-wrap;
+  color: #1e293b;
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.72;
+  outline: none;
 }
 
-.clyra-doc-body {
-    max-height: 306px;
-    min-height: 142px;
-    overflow-y: auto;
-    overflow-x: hidden;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+.clyra-doc-editor h1,
+.clyra-doc-editor h2,
+.clyra-doc-editor h3 {
+  color: #0f172a;
+  font-weight: 760;
+  letter-spacing: -0.025em;
+  line-height: 1.16;
+  white-space: normal;
 }
 
-.clyra-visible-scrollbar {
-    scrollbar-width: thin;
-    scrollbar-color: rgba(148, 163, 184, 0.34) transparent;
-}
-
-.clyra-doc-body::-webkit-scrollbar,
-.clyra-visible-scrollbar::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-}
-
-.clyra-doc-body::-webkit-scrollbar-track,
-.clyra-visible-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.clyra-doc-body::-webkit-scrollbar-thumb,
-.clyra-visible-scrollbar::-webkit-scrollbar-thumb {
-    border: 2px solid transparent;
-    border-radius: 999px;
-    background-clip: content-box;
-    background-color: rgba(148, 163, 184, 0.34);
-}
-
-.clyra-doc-body::-webkit-scrollbar-thumb:hover,
-.clyra-visible-scrollbar::-webkit-scrollbar-thumb:hover {
-    background-color: rgba(100, 116, 139, 0.44);
-}
-
-.clyra-doc-display {
-    white-space: pre-wrap;
-    color: #1e293b;
-    font-size: 15px;
-    font-weight: 400;
-    line-height: 1.72;
-}
-
-.clyra-doc-preparing {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    min-height: 118px;
-    color: #475569;
-}
-
-.clyra-doc-shimmer-text {
-    display: inline-block;
-    background-image: linear-gradient(
-        100deg,
-        #64748b 0%,
-        #64748b 28%,
-        #0f172a 42%,
-        #94a3b8 52%,
-        #475569 64%,
-        #64748b 100%
-    );
-    background-size: 240% 100%;
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    font-size: 13.5px;
-    font-weight: 650;
-    animation: clyra-doc-shimmer 1.35s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-}
-
-@keyframes clyra-doc-shimmer {
-    0% { background-position: 140% 0; }
-    100% { background-position: -120% 0; }
-}
-
-.clyra-doc-preparing-icon {
-    display: inline-grid;
-    height: 34px;
-    width: 34px;
-    place-items: center;
-    border-radius: 999px;
-    border: 1px solid rgba(226, 232, 240, 0.95);
-    background: rgba(248, 250, 252, 0.82);
-    color: #64748b;
-}
-
-.clyra-doc-editor:focus {
-    outline: none;
-}
-
-.clyra-doc-body-label,
-.clyra-doc-field > span {
-    display: block;
-    margin-bottom: 8px;
-    color: #94a3b8;
-    font-size: 11px;
-    font-weight: 750;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-}
-
-.clyra-doc-context-menu {
-    position: absolute;
-    z-index: 80;
-    display: grid;
-    gap: 4px;
-    min-width: 206px;
-    border: 1px solid rgba(226, 232, 240, 0.92);
-    border-radius: 18px;
-    background: rgba(255, 255, 255, 0.98);
-    padding: 6px;
-    box-shadow: 0 18px 48px rgba(15, 23, 42, 0.12);
-}
-
-.clyra-doc-context-menu button {
-    border-radius: 13px;
-    padding: 9px 11px;
-    color: #334155;
-    text-align: left;
-    font-size: 13px;
-    font-weight: 650;
-    transition:
-        background-color 160ms ease,
-        color 160ms ease,
-        transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.clyra-doc-context-menu button:hover {
-    background: rgba(241, 245, 249, 0.86);
-    color: #0f172a;
-    transform: translateX(1px);
-}
-
-.clyra-doc-autocomplete {
-    position: absolute;
-    z-index: 90;
-    pointer-events: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    border-radius: 999px;
-    border: 1px solid rgba(226, 232, 240, 0.98);
-    background: rgba(255, 255, 255, 0.98);
-    color: #0f172a;
-    box-shadow:
-        0 14px 32px rgba(15, 23, 42, 0.095),
-        inset 0 1px 0 rgba(255, 255, 255, 0.92);
-    padding: 6px 7px 6px 12px;
-    font-size: 12px;
-    font-weight: 700;
-    line-height: 1;
-    will-change: transform, opacity;
-}
-
-.clyra-code-autocomplete {
-    position: absolute;
-    z-index: 90;
-    pointer-events: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    border-radius: 999px;
-    border-color: rgba(148, 163, 184, 0.24);
-    background: rgba(2, 6, 23, 0.96);
-    color: #fff;
-    box-shadow: 0 14px 38px rgba(15, 23, 42, 0.18);
-    padding: 6px 7px 6px 12px;
-    font-size: 12px;
-    font-weight: 700;
-    line-height: 1;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-    will-change: transform, opacity;
-}
-
-.clyra-doc-autocomplete kbd {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 999px;
-    border: 1px solid rgba(226, 232, 240, 0.95);
-    background: #f8fafc;
-    padding: 3px 6px;
-    color: #64748b;
-    font-size: 9px;
-    font-weight: 850;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-}
-
-.clyra-code-autocomplete kbd {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.16);
-    padding: 3px 6px;
-    color: rgba(255, 255, 255, 0.78);
-    font-size: 9px;
-    font-weight: 800;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-}
-
-.clyra-rephrase-mark {
-    position: relative;
-    border-radius: 6px;
-    background: linear-gradient(90deg, rgba(226, 232, 240, 0.4), rgba(241, 245, 249, 0.8), rgba(226, 232, 240, 0.4));
-    background-size: 200% 100%;
-    color: inherit;
-    box-decoration-break: clone;
-    -webkit-box-decoration-break: clone;
-    padding: 0 2px;
-    animation:
-        clyra-rephrase-mark-pulse 1.8s ease-in-out infinite,
-        clyra-rephrase-thinking-sweep 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-    box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.1);
-}
-
-.clyra-rephrase-mark--block {
-    display: block;
-    margin: -2px;
-    padding: 2px;
-}
-
-.clyra-rephrase-result {
-    position: relative;
-    border-radius: 6px;
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(248, 250, 252, 0.8));
-    box-decoration-break: clone;
-    -webkit-box-decoration-break: clone;
-    padding: 0 2px;
-    box-shadow: 0 0 0 1px rgba(148, 163, 184, 0.15), 0 8px 24px rgba(15, 23, 42, 0.06);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    transition:
-        background-color 980ms cubic-bezier(0.16, 1, 0.3, 1),
-        box-shadow 980ms cubic-bezier(0.16, 1, 0.3, 1),
-        filter 980ms cubic-bezier(0.16, 1, 0.3, 1);
-    animation: clyra-rephrase-result-arrive 800ms cubic-bezier(0.22, 1, 0.36, 1) both;
-}
-
-.clyra-rephrase-result--settled {
-    background: rgba(255, 255, 255, 0);
-    box-shadow: 0 0 0 0 rgba(148, 163, 184, 0);
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-    filter: saturate(1);
-}
-
-@keyframes clyra-rephrase-result-arrive {
-    0% {
-        opacity: 0;
-        transform: translateY(8px) scale(0.99);
-        filter: blur(6px);
-    }
-    60% {
-        opacity: 1;
-        transform: translateY(-1px) scale(1.005);
-        filter: blur(0);
-    }
-    100% {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-        filter: blur(0);
-    }
-}
-
-@keyframes clyra-rephrase-thinking-sweep {
-    0% {
-        background-position: 150% 0;
-    }
-    100% {
-        background-position: -150% 0;
-    }
-}
-
-.clyra-rewrite-chip {
-    overflow: hidden;
-    color: #475569;
-    backdrop-filter: blur(14px) saturate(1.08);
-    -webkit-backdrop-filter: blur(14px) saturate(1.08);
-    background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.94)),
-        #fff;
-}
-
-.clyra-rewrite-chip-dot {
-    opacity: 0.68;
-}
-
-@keyframes clyra-rephrase-mark-pulse {
-    0%,
-    100% {
-        background-color: rgba(241, 245, 249, 0.6);
-        box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.05);
-    }
-    50% {
-        background-color: rgba(255, 255, 255, 0.9);
-        box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.15), 0 4px 12px rgba(15, 23, 42, 0.03);
-    }
-}
-
-.clyra-doc-editor span.bg-transparent {
-    transition: background-color 700ms ease;
-}
-
-.clyra-writing-suggestions {
-    position: absolute;
-    left: 18px;
-    bottom: calc(100% + 8px);
-    z-index: 45;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    border: 1px solid rgba(226, 232, 240, 0.88);
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.96);
-    padding: 5px 6px 5px 12px;
-    color: #94a3b8;
-    font-size: 12px;
-    font-weight: 650;
-    box-shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
-}
-
-.clyra-writing-suggestions button {
-    border-radius: 999px;
-    background: #f8fafc;
-    padding: 5px 10px;
-    color: #1e293b;
-    font-weight: 750;
-    transition:
-        background-color 160ms ease,
-        transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.clyra-writing-suggestions button:hover {
-    background: #eef2f7;
-    transform: translateY(-1px);
-}
-
-.clyra-doc-editor div {
-    min-height: 1.72em;
+.clyra-doc-editor h1 {
+  margin: 0 0 18px;
+  font-size: clamp(26px, 4vw, 38px);
 }
 
 .clyra-doc-editor h2 {
-    margin: 0.5rem 0 0.25rem;
-    font-size: 1.35rem;
-    font-weight: 650;
-    line-height: 1.35;
+  margin: 22px 0 10px;
+  font-size: 20px;
 }
 
 .clyra-doc-editor h3 {
-    margin: 0.45rem 0 0.2rem;
-    font-size: 1.08rem;
-    font-weight: 650;
-    line-height: 1.45;
+  margin: 16px 0 8px;
+  color: #334155;
+  font-size: 16px;
+}
+
+.clyra-doc-editor p {
+  margin: 0 0 12px;
+}
+
+.clyra-doc-editor strong {
+  color: #0f172a;
+  font-weight: 760;
+}
+
+.clyra-doc-editor hr {
+  margin: 18px 0;
+  border: 0;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(148, 163, 184, 0.34),
+    transparent
+  );
 }
 
 .clyra-doc-editor blockquote {
-    margin: 0.65rem 0;
-    border-left: 2px solid rgba(148, 163, 184, 0.48);
-    padding-left: 0.85rem;
-    color: #475569;
+  margin: 14px 0;
+  border: 1px solid rgba(226, 232, 240, 0.86);
+  border-left: 4px solid rgba(15, 23, 42, 0.28);
+  border-radius: 18px;
+  background:
+    radial-gradient(
+      circle at 8% 0%,
+      rgba(255, 255, 255, 0.96),
+      transparent 34%
+    ),
+    linear-gradient(
+      180deg,
+      rgba(248, 250, 252, 0.92),
+      rgba(255, 255, 255, 0.92)
+    );
+  padding: 13px 15px;
+  color: #475569;
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.035);
+}
+
+.clyra-doc-editor blockquote p:last-child {
+  margin-bottom: 0;
 }
 
 .clyra-doc-editor ul,
 .clyra-doc-editor ol {
-    margin: 0.65rem 0;
-    padding-left: 1.35rem;
+  margin: 8px 0 14px;
+  padding-left: 1.35rem;
+}
+
+.clyra-doc-editor li {
+  margin: 6px 0;
+  white-space: normal;
+}
+
+.clyra-doc-editor input[type="checkbox"] {
+  margin-right: 8px;
+  accent-color: #0f172a;
 }
 
 .clyra-doc-editor table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 1.5em;
-    margin-bottom: 1.5em;
-    font-size: 0.9em;
-    border-radius: 8px;
-    overflow: hidden;
-    box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.08);
+  display: block;
+  width: 100%;
+  margin: 14px 0 18px;
+  overflow-x: auto;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.045);
+  white-space: normal;
 }
 
 .clyra-doc-editor th,
 .clyra-doc-editor td {
-    border: 1px solid rgba(15, 23, 42, 0.08);
-    padding: 10px 14px;
-    text-align: left;
+  border-bottom: 1px solid rgba(226, 232, 240, 0.74);
+  padding: 10px 12px;
+  text-align: left;
+  vertical-align: top;
 }
 
 .clyra-doc-editor th {
-    background-color: #f8fafc;
-    font-weight: 600;
-    color: #0f172a;
+  background: rgba(248, 250, 252, 0.96);
+  color: #334155;
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.clyra-doc-editor tr:last-child td {
+  border-bottom: 0;
+}
+
+.clyra-doc-body {
+  flex: 1 1 auto;
+  max-height: min(58vh, 620px);
+  min-height: clamp(260px, 44vh, 480px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.35) transparent;
+}
+
+.clyra-doc-body--preparing {
+  min-height: clamp(220px, 36vh, 390px);
+}
+
+.clyra-visible-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.34) transparent;
+}
+
+.clyra-doc-body::-webkit-scrollbar,
+.clyra-visible-scrollbar::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.clyra-doc-body::-webkit-scrollbar-track,
+.clyra-visible-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.clyra-doc-body::-webkit-scrollbar-thumb,
+.clyra-visible-scrollbar::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background-clip: content-box;
+  background-color: rgba(148, 163, 184, 0.34);
+}
+
+.clyra-doc-body::-webkit-scrollbar-thumb:hover,
+.clyra-visible-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(100, 116, 139, 0.44);
+}
+
+.clyra-doc-display {
+  white-space: pre-wrap;
+  color: #1e293b;
+  font-size: 15px;
+  font-weight: 400;
+  line-height: 1.72;
+}
+
+.clyra-doc-preparing {
+  position: relative;
+  display: inline-flex;
+  min-height: 118px;
+  align-items: center;
+  gap: 13px;
+  color: #475569;
+}
+
+.clyra-doc-preparing-label {
+  display: inline-block;
+  background-image: linear-gradient(
+    100deg,
+    #64748b 0%,
+    #0f172a 38%,
+    #94a3b8 54%,
+    #475569 72%,
+    #64748b 100%
+  );
+  background-size: 260% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  font-size: 13.5px;
+  font-weight: 720;
+  letter-spacing: -0.01em;
+  animation: clyra-doc-shimmer 1.45s cubic-bezier(0.45, 0, 0.2, 1) infinite;
+}
+
+.clyra-doc-preparing-track {
+  position: relative;
+  display: block;
+  width: min(190px, 42vw);
+  height: 5px;
+  margin-top: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(226, 232, 240, 0.72);
+}
+
+.clyra-doc-preparing-track span {
+  position: absolute;
+  inset-block: 0;
+  left: -40%;
+  width: 42%;
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(15, 23, 42, 0.36),
+    transparent
+  );
+  animation: clyra-doc-track-sweep 1.35s cubic-bezier(0.45, 0, 0.2, 1) infinite;
+}
+
+@keyframes clyra-doc-shimmer {
+  0% {
+    background-position: 140% 0;
+  }
+  100% {
+    background-position: -120% 0;
+  }
+}
+
+.clyra-doc-preparing-icon {
+  position: relative;
+  display: inline-grid;
+  height: 34px;
+  width: 34px;
+  place-items: center;
+  border-radius: 999px;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  background: rgba(248, 250, 252, 0.82);
+  color: #64748b;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.055);
+}
+
+.clyra-doc-preparing-orbit {
+  position: absolute;
+  inset: -5px;
+  border-radius: inherit;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-top-color: rgba(15, 23, 42, 0.34);
+  animation: clyra-doc-orbit 1.7s linear infinite;
+}
+
+@keyframes clyra-doc-track-sweep {
+  0% {
+    transform: translateX(0);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  82% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(340%);
+    opacity: 0;
+  }
+}
+
+@keyframes clyra-doc-orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.clyra-doc-editor:focus {
+  outline: none;
+}
+
+.clyra-doc-body-label,
+.clyra-doc-field > span {
+  display: block;
+  margin-bottom: 8px;
+  color: #94a3b8;
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.clyra-doc-body-label {
+  position: sticky;
+  top: -24px;
+  z-index: 18;
+  margin: -6px -8px 12px;
+  padding: 6px 8px 8px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.98),
+    rgba(255, 255, 255, 0.9)
+  );
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.clyra-doc-context-menu {
+  position: absolute;
+  z-index: 80;
+  display: grid;
+  gap: 4px;
+  min-width: 206px;
+  border: 1px solid rgba(226, 232, 240, 0.92);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.98);
+  padding: 6px;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.12);
+}
+
+.clyra-doc-context-menu button {
+  border-radius: 13px;
+  padding: 9px 11px;
+  color: #334155;
+  text-align: left;
+  font-size: 13px;
+  font-weight: 650;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.clyra-doc-context-menu button:hover {
+  background: rgba(241, 245, 249, 0.86);
+  color: #0f172a;
+  transform: translateX(1px);
+}
+
+.clyra-doc-autocomplete {
+  position: absolute;
+  z-index: 90;
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(226, 232, 240, 0.98);
+  background: rgba(255, 255, 255, 0.98);
+  color: #0f172a;
+  box-shadow:
+    0 14px 32px rgba(15, 23, 42, 0.095),
+    inset 0 1px 0 rgba(255, 255, 255, 0.92);
+  padding: 6px 7px 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  will-change: transform, opacity;
+}
+
+.clyra-code-autocomplete {
+  position: absolute;
+  z-index: 90;
+  pointer-events: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 999px;
+  border-color: rgba(148, 163, 184, 0.24);
+  background: rgba(2, 6, 23, 0.96);
+  color: #fff;
+  box-shadow: 0 14px 38px rgba(15, 23, 42, 0.18);
+  padding: 6px 7px 6px 12px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    monospace;
+  will-change: transform, opacity;
+}
+
+.clyra-doc-autocomplete kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  border: 1px solid rgba(226, 232, 240, 0.95);
+  background: #f8fafc;
+  padding: 3px 6px;
+  color: #64748b;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.clyra-code-autocomplete kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.16);
+  padding: 3px 6px;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.clyra-rephrase-mark {
+  position: relative;
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    rgba(226, 232, 240, 0.4),
+    rgba(241, 245, 249, 0.8),
+    rgba(226, 232, 240, 0.4)
+  );
+  background-size: 200% 100%;
+  color: inherit;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  padding: 0 2px;
+  animation:
+    clyra-rephrase-mark-pulse 1.8s ease-in-out infinite,
+    clyra-rephrase-thinking-sweep 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.1);
+}
+
+.clyra-rephrase-mark--block {
+  display: block;
+  margin: -2px;
+  padding: 2px;
+}
+
+.clyra-rephrase-result {
+  position: relative;
+  border-radius: 6px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.9),
+    rgba(248, 250, 252, 0.8)
+  );
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  padding: 0 2px;
+  box-shadow:
+    0 0 0 1px rgba(148, 163, 184, 0.15),
+    0 8px 24px rgba(15, 23, 42, 0.06);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition:
+    background-color 980ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 980ms cubic-bezier(0.16, 1, 0.3, 1),
+    filter 980ms cubic-bezier(0.16, 1, 0.3, 1);
+  animation: clyra-rephrase-result-arrive 800ms cubic-bezier(0.22, 1, 0.36, 1)
+    both;
+}
+
+.clyra-rephrase-result--settled {
+  background: rgba(255, 255, 255, 0);
+  box-shadow: 0 0 0 0 rgba(148, 163, 184, 0);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  filter: saturate(1);
+}
+
+@keyframes clyra-rephrase-result-arrive {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.99);
+    filter: blur(6px);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(-1px) scale(1.005);
+    filter: blur(0);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes clyra-rephrase-thinking-sweep {
+  0% {
+    background-position: 150% 0;
+  }
+  100% {
+    background-position: -150% 0;
+  }
+}
+
+.clyra-rewrite-chip {
+  overflow: hidden;
+  color: #475569;
+  backdrop-filter: blur(14px) saturate(1.08);
+  -webkit-backdrop-filter: blur(14px) saturate(1.08);
+  background:
+    linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.98),
+      rgba(248, 250, 252, 0.94)
+    ),
+    #fff;
+}
+
+.clyra-rewrite-chip-dot {
+  opacity: 0.68;
+}
+
+@keyframes clyra-rephrase-mark-pulse {
+  0%,
+  100% {
+    background-color: rgba(241, 245, 249, 0.6);
+    box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.05);
+  }
+  50% {
+    background-color: rgba(255, 255, 255, 0.9);
+    box-shadow:
+      inset 0 0 0 1px rgba(148, 163, 184, 0.15),
+      0 4px 12px rgba(15, 23, 42, 0.03);
+  }
+}
+
+.clyra-doc-editor span.bg-transparent {
+  transition: background-color 700ms ease;
+}
+
+.clyra-writing-suggestions {
+  position: absolute;
+  left: 18px;
+  bottom: calc(100% + 8px);
+  z-index: 45;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(226, 232, 240, 0.88);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  padding: 5px 6px 5px 12px;
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 650;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.08);
+}
+
+.clyra-writing-suggestions button {
+  border-radius: 999px;
+  background: #f8fafc;
+  padding: 5px 10px;
+  color: #1e293b;
+  font-weight: 750;
+  transition:
+    background-color 160ms ease,
+    transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.clyra-writing-suggestions button:hover {
+  background: #eef2f7;
+  transform: translateY(-1px);
+}
+
+.clyra-doc-editor div {
+  min-height: 1.72em;
+}
+
+.clyra-doc-editor h2 {
+  margin: 0.5rem 0 0.25rem;
+  font-size: 1.35rem;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.clyra-doc-editor h3 {
+  margin: 0.45rem 0 0.2rem;
+  font-size: 1.08rem;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.clyra-doc-editor blockquote {
+  margin: 0.65rem 0;
+  border-left: 2px solid rgba(148, 163, 184, 0.48);
+  padding-left: 0.85rem;
+  color: #475569;
+}
+
+.clyra-doc-editor ul,
+.clyra-doc-editor ol {
+  margin: 0.65rem 0;
+  padding-left: 1.35rem;
+}
+
+.clyra-doc-editor table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1.5em;
+  margin-bottom: 1.5em;
+  font-size: 0.9em;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.08);
+}
+
+.clyra-doc-editor th,
+.clyra-doc-editor td {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  padding: 10px 14px;
+  text-align: left;
+}
+
+.clyra-doc-editor th {
+  background-color: #f8fafc;
+  font-weight: 600;
+  color: #0f172a;
 }
 
 .clyra-doc-editor tr:nth-child(even) {
-    background-color: #fcfcfd;
+  background-color: #fcfcfd;
 }
 
 .clyra-doc-editor tr:hover {
-    background-color: #f1f5f9;
+  background-color: #f1f5f9;
 }
 
 @media (max-width: 760px) {
-    .clyra-doc-toolbar {
-        grid-template-columns: 1fr;
-    }
+  .clyra-doc-toolbar {
+    grid-template-columns: 1fr;
+  }
 
-    .clyra-doc-tabbar,
-    .clyra-doc-tool-panel {
-        justify-content: flex-start;
-    }
+  .clyra-doc-tabbar,
+  .clyra-doc-tool-panel {
+    justify-content: flex-start;
+  }
 }

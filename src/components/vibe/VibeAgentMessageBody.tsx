@@ -21,6 +21,7 @@ import { VibeMiniCodeBox } from "./VibeMiniCodeBox";
 import { VibeRunBlock } from "./VibeRunBlock";
 import { VibeTextLine } from "./VibeTextLine";
 import { VibeFinalSummary, type SummaryFile } from "./VibeFinalSummary";
+import { VibeProgressChecklist } from "./VibeProgressChecklist";
 import { cn } from "@/lib/utils";
 
 type StoredVibeFlowState = {
@@ -228,6 +229,12 @@ export function VibeAgentMessageBody({
     summaryFiles.length > 0 &&
     ((!isStreaming && allStepsDone) || isStaticHistory);
 
+  useEffect(() => {
+    if (!showSummary || isStaticHistory) return;
+    const id = window.setTimeout(handleSummaryPrinted, 420);
+    return () => window.clearTimeout(id);
+  }, [handleSummaryPrinted, isStaticHistory, showSummary]);
+
   if (fallbackMarkdown) {
     return (
       <div className={cn("space-y-3", fontSizeClass)}>
@@ -252,127 +259,147 @@ export function VibeAgentMessageBody({
     );
   }
 
+  const showChecklist = blocks.length > 2 && !isStaticHistory;
+
   return (
-    <div className={cn("flex w-full flex-col gap-3", fontSizeClass)}>
-      {blocks.map((seg, i) => {
-        if (!archived && i > activeStep) return null;
-        const isActive = !archived && i === activeStep;
-        const isLastSegment = i === blocks.length - 1;
+    <div
+      className={cn(
+        "grid w-full max-w-[940px] gap-4",
+        showChecklist
+          ? "lg:grid-cols-[minmax(0,640px)_250px]"
+          : "lg:grid-cols-[minmax(0,640px)]",
+        fontSizeClass,
+      )}
+    >
+      <div className="flex min-w-0 flex-col gap-3">
+        {blocks.map((seg, i) => {
+          if (!archived && i > activeStep) return null;
+          const isActive = !archived && i === activeStep;
+          const isLastSegment = i === blocks.length - 1;
 
-        const advance = () => {
-          if (advanceTimeoutRef.current != null) {
-            window.clearTimeout(advanceTimeoutRef.current);
-            advanceTimeoutRef.current = null;
-          }
-          const next = i + 1;
-          const prevType = blocks[i]?.type;
-          const prevSeg = blocks[i];
-          const nextSeg = blocks[next];
-          const pauseBeforeNarration =
-            nextSeg?.type === "text" &&
-            (prevType === "thinking" ||
-              prevType === "code" ||
-              prevType === "run" ||
-              prevType === "analyze");
+          const advance = () => {
+            if (advanceTimeoutRef.current != null) {
+              window.clearTimeout(advanceTimeoutRef.current);
+              advanceTimeoutRef.current = null;
+            }
+            const next = i + 1;
+            const prevType = blocks[i]?.type;
+            const prevSeg = blocks[i];
+            const nextSeg = blocks[next];
+            const pauseBeforeNarration =
+              nextSeg?.type === "text" &&
+              (prevType === "thinking" ||
+                prevType === "code" ||
+                prevType === "run" ||
+                prevType === "analyze");
 
-          const go = () => {
-            setActiveStep((s) => (s === i ? next : s));
+            const go = () => {
+              setActiveStep((s) => (s === i ? next : s));
+            };
+
+            // Code blocks: when segmentComplete flips true, dwell at least 800ms
+            const codeJustFinished =
+              prevSeg?.type === "code" &&
+              prevSeg?.complete &&
+              next < blocks.length;
+
+            if (pauseBeforeNarration && next < blocks.length) {
+              advanceTimeoutRef.current = window.setTimeout(() => {
+                advanceTimeoutRef.current = null;
+                go();
+              }, 120);
+            } else if (codeJustFinished) {
+              // Code block collapsed — dwell before next step
+              advanceTimeoutRef.current = window.setTimeout(() => {
+                advanceTimeoutRef.current = null;
+                go();
+              }, 1000);
+            } else {
+              go();
+            }
           };
 
-          // Code blocks: when segmentComplete flips true, dwell at least 800ms
-          const codeJustFinished =
-            prevSeg?.type === "code" &&
-            prevSeg?.complete &&
-            next < blocks.length;
-
-          if (pauseBeforeNarration && next < blocks.length) {
-            advanceTimeoutRef.current = window.setTimeout(() => {
-              advanceTimeoutRef.current = null;
-              go();
-            }, 120);
-          } else if (codeJustFinished) {
-            // Code block collapsed — dwell before next step
-            advanceTimeoutRef.current = window.setTimeout(() => {
-              advanceTimeoutRef.current = null;
-              go();
-            }, 140);
-          } else {
-            go();
+          const key = `step-${i}-${seg.type}`;
+          switch (seg.type) {
+            case "thinking":
+              return (
+                <VibeThoughtPanel
+                  key={key}
+                  body={seg.body}
+                  complete={seg.complete}
+                  active={isActive}
+                  archived={archived}
+                  onCollapsed={archived ? undefined : advance}
+                />
+              );
+            case "analyze": {
+              return (
+                <VibeAnalysingBanner
+                  key={key}
+                  path={seg.path}
+                  active={isActive}
+                  archived={archived}
+                  onCompleted={archived ? undefined : advance}
+                />
+              );
+            }
+            case "code":
+              return (
+                <VibeMiniCodeBox
+                  key={key}
+                  file={seg.file}
+                  added={seg.added}
+                  removed={seg.removed}
+                  code={seg.body}
+                  segmentComplete={seg.complete}
+                  active={isActive}
+                  archived={archived}
+                  onCollapsed={archived ? undefined : advance}
+                />
+              );
+            case "run":
+              return (
+                <VibeRunBlock
+                  key={key}
+                  body={seg.body}
+                  segmentComplete={seg.complete}
+                  active={isActive}
+                  archived={archived}
+                  onCollapsed={archived ? undefined : advance}
+                />
+              );
+            case "text": {
+              const textComplete = !isLastSegment || !isStreaming;
+              return (
+                <VibeTextLine
+                  key={key}
+                  body={seg.body.trim()}
+                  complete={textComplete}
+                  active={isActive}
+                  archived={archived}
+                  onCompleted={archived ? undefined : advance}
+                />
+              );
+            }
+            default:
+              return null;
           }
-        };
+        })}
 
-        const key = `step-${i}-${seg.type}`;
-        switch (seg.type) {
-          case "thinking":
-            return (
-              <VibeThoughtPanel
-                key={key}
-                body={seg.body}
-                complete={seg.complete}
-                active={isActive}
-                archived={archived}
-                onCollapsed={archived ? undefined : advance}
-              />
-            );
-          case "analyze": {
-            return (
-              <VibeAnalysingBanner
-                key={key}
-                path={seg.path}
-                active={isActive}
-                archived={archived}
-                onCompleted={archived ? undefined : advance}
-              />
-            );
-          }
-          case "code":
-            return (
-              <VibeMiniCodeBox
-                key={key}
-                file={seg.file}
-                added={seg.added}
-                removed={seg.removed}
-                code={seg.body}
-                segmentComplete={seg.complete}
-                active={isActive}
-                archived={archived}
-                onCollapsed={archived ? undefined : advance}
-              />
-            );
-          case "run":
-            return (
-              <VibeRunBlock
-                key={key}
-                body={seg.body}
-                segmentComplete={seg.complete}
-                active={isActive}
-                archived={archived}
-                onCollapsed={archived ? undefined : advance}
-              />
-            );
-          case "text": {
-            const textComplete = !isLastSegment || !isStreaming;
-            return (
-              <VibeTextLine
-                key={key}
-                body={seg.body.trim()}
-                complete={textComplete}
-                active={isActive}
-                archived={archived}
-                onCompleted={archived ? undefined : advance}
-              />
-            );
-          }
-          default:
-            return null;
-        }
-      })}
+        {showSummary ? (
+          <VibeFinalSummary
+            files={summaryFiles}
+            skipTyping={isStaticHistory}
+            onFullyPrinted={isLastAssistant ? handleSummaryPrinted : undefined}
+          />
+        ) : null}
+      </div>
 
-      {showSummary ? (
-        <VibeFinalSummary
-          files={summaryFiles}
-          skipTyping={isStaticHistory}
-          onFullyPrinted={isLastAssistant ? handleSummaryPrinted : undefined}
+      {showChecklist ? (
+        <VibeProgressChecklist
+          segments={blocks}
+          activeStep={activeStep}
+          archived={archived}
         />
       ) : null}
     </div>

@@ -17,7 +17,7 @@ const VISIBLE_LINES_TYPING = 4;
 const VISIBLE_LINES_REOPENED = 4;
 const MAX_CODE_H_TYPING = LINE_PX * VISIBLE_LINES_TYPING;
 const MAX_CODE_H_REOPENED = LINE_PX * VISIBLE_LINES_REOPENED;
-const COLLAPSE_HOLD_MS = 520;
+const COLLAPSE_HOLD_MS = 900;
 const COUNTER_FONT_SIZE = 12;
 const COUNTER_HEIGHT = COUNTER_FONT_SIZE + 3;
 
@@ -171,7 +171,7 @@ export function VibeMiniCodeBox({
     if (revealed < code.length) {
       const left = code.length - revealed;
       const step =
-        left > 8000 ? 9000 : left > 3500 ? 5200 : left > 1500 ? 2600 : 920;
+        left > 8000 ? 920 : left > 3500 ? 620 : left > 1500 ? 360 : 150;
       rafRef.current = window.requestAnimationFrame(() => {
         setRevealed((r) => Math.min(r + step, code.length));
       });
