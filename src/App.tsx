@@ -148,6 +148,7 @@ const AnimatedMessage = ({
   isLastAssistant,
   onVibePreviewReady,
   onDocumentRewriteRequest,
+  onContentChange,
 }: {
   messageId?: string;
   content: string;
@@ -1955,7 +1956,9 @@ Please analyze the code you just wrote and fix this error.`;
             ? systemPrompt.trim()
             : "Your name is Clyra, an AI assistant. Give helpful and appropriately detailed responses.";
             
-          const finalPrompt = basePrompt + "\n\nWhen generating notes or research, ALWAYS use a highly engaging, clear, and easy-to-read layout. Use clear headings, short dot points (use actual bullet points '•' or Markdown '*', NEVER use hyphens '-'), bold text for emphasis, and if comparing data, output cleanly formatted Markdown tables. NEVER be overly lengthy or unorganized.";
+          const notesFormatInstruction = `\n\nCreate clean, easy-to-read notes on this topic. Use clear formatting like bold text for emphasis, bullet points, headers, checklists, and tables where appropriate to organise the information logically. Make the layout structured and visually appealing, adapting it based on the topic provided.`;
+
+          const finalPrompt = basePrompt + notesFormatInstruction;
 
           await streamOpenAI(
             finalPrompt,
@@ -3260,7 +3263,6 @@ Please analyze the code you just wrote and fix this error.`;
                                         }
                                         onDocumentRewriteRequest={(request) =>
                                           handleDocumentRewriteRequest(
-                                            message.id,
                                             request,
                                           )
                                         }

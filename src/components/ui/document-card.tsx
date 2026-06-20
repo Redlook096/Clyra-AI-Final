@@ -284,6 +284,23 @@ export function DocumentCardUI({
   const [hoveredSize, setHoveredSize] = React.useState<string | null>(null);
   const [tabDirection, setTabDirection] = React.useState(1);
 
+  const headerSentinelRef = React.useRef<HTMLDivElement>(null);
+  const [isHeaderSticky, setIsHeaderSticky] = React.useState(false);
+
+  React.useEffect(() => {
+    const sentinel = headerSentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        setIsHeaderSticky(!entry.isIntersecting);
+      },
+      { rootMargin: "-16px 0px 0px 0px", threshold: [1] }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, []);
+
   const toolTabsMouseX = useMotionValue(0);
   const toolTabsMagneticX = useTransform(toolTabsMouseX, (mouseX) => {
     const padding = 3;
@@ -916,14 +933,22 @@ export function DocumentCardUI({
     <motion.div
       ref={cardRef}
       className={cn(
-        "clyra-document-card w-full max-w-4xl mx-auto bg-white rounded-3xl border border-slate-200/80 shadow-[0_4px_24px_rgba(15,23,42,0.04)] overflow-hidden flex flex-col",
+        "clyra-document-card w-full max-w-4xl mx-auto bg-white rounded-3xl border border-slate-200/80 shadow-[0_4px_24px_rgba(15,23,42,0.04)] flex flex-col relative",
         className,
       )}
       initial={{ opacity: 0, y: 20, filter: "blur(6px)" }}
       animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
       transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
     >
-      <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-slate-100 relative">
+      <div ref={headerSentinelRef} className="absolute top-0 left-0 right-0 h-[1px] pointer-events-none opacity-0" />
+      <div 
+        className={cn(
+          "flex flex-wrap items-center justify-between gap-3 px-5 py-4 transition-all duration-300 z-[100]",
+          isHeaderSticky 
+            ? "sticky top-4 mx-4 mt-4 bg-white/95 backdrop-blur-xl rounded-2xl shadow-sm border border-slate-200/70"
+            : "border-b border-slate-100 bg-white rounded-t-3xl"
+        )}
+      >
         <button
           type="button"
           onClick={handleToggleEditing}
@@ -1192,7 +1217,7 @@ export function DocumentCardUI({
                         <div
                           className="clyra-doc-size-options relative"
                           aria-label="Text size"
-                          onMouseEnter={() => setHoveredSize(true)}
+                          onMouseEnter={() => setHoveredSize("container")}
                         >
                           <div
                             className="clyra-workflow-tabs relative transition-opacity duration-700 opacity-100 ml-auto"
@@ -1294,7 +1319,12 @@ export function DocumentCardUI({
       <AnimatePresence initial={false}>
         {!isStreaming && isEmail && (
           <motion.div
-            className="px-6 sm:px-8 py-4 border-b border-slate-100"
+            className={cn(
+              "transition-all duration-300 z-[90]",
+              isHeaderSticky
+                ? "sticky top-[84px] mx-4 mt-2 px-6 sm:px-8 py-4 bg-white/95 backdrop-blur-xl rounded-2xl shadow-sm border border-slate-200/70"
+                : "px-6 sm:px-8 py-4 border-b border-slate-100 bg-white"
+            )}
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
