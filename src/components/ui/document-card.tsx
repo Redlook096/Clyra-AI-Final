@@ -1,6 +1,13 @@
 import * as React from "react";
 import { marked } from "marked";
-import { AnimatePresence, motion, useMotionValue, useTransform, useSpring, useVelocity } from "motion/react";
+import {
+  AnimatePresence,
+  motion,
+  useMotionValue,
+  useTransform,
+  useSpring,
+  useVelocity,
+} from "motion/react";
 import {
   AlignCenter,
   AlignLeft,
@@ -9,7 +16,6 @@ import {
   Check,
   Copy,
   Edit2,
-  Eraser,
   IndentDecrease,
   IndentIncrease,
   Italic,
@@ -29,9 +35,6 @@ import {
   Download,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ShiningText } from "../ShiningText";
-
-
 
 export type DocumentRewriteMode = "rephrase" | "fix";
 
@@ -85,6 +88,18 @@ function cleanDocumentText(text: string): string {
     .trim();
 }
 
+function cleanNotesMarkdown(text: string): string {
+  return text
+    .replace(/\r\n/g, "\n")
+    .replace(/```[\s\S]*?```/g, (block) =>
+      block.replace(/```[a-z]*\n?/gi, "").replace(/```/g, ""),
+    )
+    .replace(/^\s*--+\s*$/gm, "---")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{4,}/g, "\n\n\n")
+    .trim();
+}
+
 function cleanEmailBody(body: string): string {
   let cleaned = cleanDocumentText(body);
   cleaned = cleaned.replace(
@@ -126,15 +141,20 @@ function normaliseEditorText(text: string): string {
   );
 }
 
-function getEditableTextTarget(editor: HTMLElement, node: Node | null, offset: number) {
+function getEditableTextTarget(
+  editor: HTMLElement,
+  node: Node | null,
+  offset: number,
+) {
   if (node?.nodeType === Node.TEXT_NODE) {
     return { node: node as Text, offset };
   }
 
   const searchRoot =
     node && editor.contains(node) && node.nodeType === Node.ELEMENT_NODE
-      ? ((node as Element).childNodes[Math.max(0, offset - 1)] as Node | undefined) ||
-        node
+      ? ((node as Element).childNodes[Math.max(0, offset - 1)] as
+          | Node
+          | undefined) || node
       : editor;
   if (searchRoot.nodeType === Node.TEXT_NODE) {
     const textNode = searchRoot as Text;
@@ -192,7 +212,9 @@ function parseDocumentContent(content: string, isEmail?: boolean) {
       }
     }
   } else {
-    const headingMatch = content.match(/#+\s*(?:Notes?|Meeting Notes?|Summary)/i);
+    const headingMatch = content.match(
+      /#+\s*(?:Notes?|Meeting Notes?|Summary)/i,
+    );
     if (headingMatch) {
       bodyContent = content.substring(headingMatch.index!).trim();
     }
@@ -200,37 +222,33 @@ function parseDocumentContent(content: string, isEmail?: boolean) {
 
   return {
     subject,
-    body: isEmail ? cleanEmailBody(bodyContent) : cleanDocumentText(bodyContent),
+    body: isEmail
+      ? cleanEmailBody(bodyContent)
+      : cleanNotesMarkdown(bodyContent),
   };
-}
-
-function ProviderGlyph({ label }: { label: string }) {
-  return (
-    <span
-      aria-hidden="true"
-      className="grid h-7 w-7 place-items-center rounded-full border border-slate-200 bg-white text-[11px] font-semibold text-slate-500"
-    >
-      {label.slice(0, 1)}
-    </span>
-  );
 }
 
 function DocumentPreparingState({ isEmail }: { isEmail?: boolean }) {
   const Icon = isEmail ? Mail : FileText;
+  const label = isEmail ? "Preparing email" : "Preparing notes";
   return (
     <motion.div
       key="preparing"
-      initial={{ opacity: 0, y: 15, filter: "blur(4px)" }}
-      animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-      exit={{ opacity: 0, y: -10, filter: "blur(2px)" }}
-      transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-      className="clyra-doc-preparing flex items-center gap-3"
+      initial={{ opacity: 0, y: 18, scale: 0.985 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -10, scale: 0.99 }}
+      transition={{ duration: 0.62, ease: [0.16, 1, 0.3, 1] }}
+      className="clyra-doc-preparing"
     >
-      <span className="clyra-doc-preparing-icon flex items-center justify-center bg-slate-100 text-slate-500 rounded-lg w-8 h-8 shadow-sm border border-slate-200">
-        <Icon className="h-4 w-4" />
+      <span className="clyra-doc-preparing-icon" aria-hidden="true">
+        <span className="clyra-doc-preparing-orbit" />
+        <Icon className="relative z-10 h-4 w-4" />
       </span>
-      <span className="text-[14px] font-[500] tracking-wide bg-gradient-to-r from-slate-500 via-slate-400 to-slate-500 bg-[length:200%_auto] animate-[shimmer_2s_linear_infinite] bg-clip-text text-transparent leading-none">
-        {isEmail ? "Drafting email..." : "Preparing document..."}
+      <span className="min-w-0">
+        <span className="clyra-doc-preparing-label">{label}</span>
+        <span className="clyra-doc-preparing-track" aria-hidden="true">
+          <span />
+        </span>
       </span>
     </motion.div>
   );
@@ -258,7 +276,7 @@ export function DocumentCardUI({
   );
   const [copied, setCopied] = React.useState(false);
   const [showDropdown, setShowDropdown] = React.useState(false);
-  const [isEditing, setIsEditing] = React.useState(!isEmail && !isStreaming);
+  const [isEditing, setIsEditing] = React.useState(false);
   const [subject, setSubject] = React.useState(parsed.subject);
   const [documentText, setDocumentText] = React.useState(parsed.body);
   const initialHtmlRef = React.useRef(textToEditorHtml(parsed.body));
@@ -268,7 +286,9 @@ export function DocumentCardUI({
   const [textColour, setTextColour] = React.useState("#1e293b");
   const [highlightColour, setHighlightColour] = React.useState("#ffffff");
   const attachmentInputRef = React.useRef<HTMLInputElement>(null);
-  const [documentAttachments, setDocumentAttachments] = React.useState<string[]>([]);
+  const [documentAttachments, setDocumentAttachments] = React.useState<
+    string[]
+  >([]);
   const [activeToolTab, setActiveToolTab] = React.useState<ToolTab>("write");
   const [contextMenu, setContextMenu] = React.useState<{
     x: number;
@@ -280,26 +300,11 @@ export function DocumentCardUI({
   const [showDownloadModal, setShowDownloadModal] = React.useState(false);
   const [downloadFilename, setDownloadFilename] = React.useState("");
   const [isDownloading, setIsDownloading] = React.useState(false);
-  const [hoveredToolTab, setHoveredToolTab] = React.useState<string | null>(null);
+  const [hoveredToolTab, setHoveredToolTab] = React.useState<string | null>(
+    null,
+  );
   const [hoveredSize, setHoveredSize] = React.useState<string | null>(null);
   const [tabDirection, setTabDirection] = React.useState(1);
-
-  const headerSentinelRef = React.useRef<HTMLDivElement>(null);
-  const [isHeaderSticky, setIsHeaderSticky] = React.useState(false);
-
-  React.useEffect(() => {
-    const sentinel = headerSentinelRef.current;
-    if (!sentinel) return;
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        setIsHeaderSticky(!entry.isIntersecting);
-      },
-      { rootMargin: "-16px 0px 0px 0px", threshold: [1] }
-    );
-    observer.observe(sentinel);
-    return () => observer.disconnect();
-  }, []);
 
   const toolTabsMouseX = useMotionValue(0);
   const toolTabsMagneticX = useTransform(toolTabsMouseX, (mouseX) => {
@@ -322,23 +327,35 @@ export function DocumentCardUI({
     }
     return mouseX;
   });
-  const toolTabsSpringX = useSpring(toolTabsMagneticX, { stiffness: 400, damping: 30, mass: 0.3 });
+  const toolTabsSpringX = useSpring(toolTabsMagneticX, {
+    stiffness: 400,
+    damping: 30,
+    mass: 0.3,
+  });
   const toolTabsVelocityX = useVelocity(toolTabsSpringX);
-  const toolTabsHoverScaleX = useTransform(toolTabsVelocityX, [-1500, 0, 1500], [1.06, 1, 1.06]);
-  const toolTabsHoverOrigin = useTransform(toolTabsVelocityX, [-1500, 0, 1500], ["100% 50%", "50% 50%", "0% 50%"]);
+  const toolTabsHoverScaleX = useTransform(
+    toolTabsVelocityX,
+    [-1500, 0, 1500],
+    [1.06, 1, 1.06],
+  );
+  const toolTabsHoverOrigin = useTransform(
+    toolTabsVelocityX,
+    [-1500, 0, 1500],
+    ["100% 50%", "50% 50%", "0% 50%"],
+  );
   const toolTabsHoverPillX = useTransform(() => toolTabsSpringX.get() - 32);
 
   const sizesMouseX = useMotionValue(0);
   const sizesMagneticX = useTransform(sizesMouseX, (mouseX) => {
     const padding = 2;
-    const offsetStep = 33;
+    const offsetStep = 25;
     const rawIndex = (mouseX - padding) / offsetStep;
     const closestIndex = Math.max(0, Math.min(3, Math.round(rawIndex)));
-    const closestCenter = padding + closestIndex * offsetStep + 16;
+    const closestCenter = padding + closestIndex * offsetStep + 12;
 
     const minDistance = Math.abs(mouseX - closestCenter);
-    const snapZone = 8;
-    const releaseZone = 14;
+    const snapZone = 6;
+    const releaseZone = 11;
 
     if (minDistance < snapZone) {
       return closestCenter;
@@ -349,11 +366,23 @@ export function DocumentCardUI({
     }
     return mouseX;
   });
-  const sizesSpringX = useSpring(sizesMagneticX, { stiffness: 400, damping: 30, mass: 0.3 });
+  const sizesSpringX = useSpring(sizesMagneticX, {
+    stiffness: 400,
+    damping: 30,
+    mass: 0.3,
+  });
   const sizesVelocityX = useVelocity(sizesSpringX);
-  const sizesHoverScaleX = useTransform(sizesVelocityX, [-1500, 0, 1500], [1.06, 1, 1.06]);
-  const sizesHoverOrigin = useTransform(sizesVelocityX, [-1500, 0, 1500], ["100% 50%", "50% 50%", "0% 50%"]);
-  const sizesHoverPillX = useTransform(() => sizesSpringX.get() - 16);
+  const sizesHoverScaleX = useTransform(
+    sizesVelocityX,
+    [-1500, 0, 1500],
+    [1.06, 1, 1.06],
+  );
+  const sizesHoverOrigin = useTransform(
+    sizesVelocityX,
+    [-1500, 0, 1500],
+    ["100% 50%", "50% 50%", "0% 50%"],
+  );
+  const sizesHoverPillX = useTransform(() => sizesSpringX.get() - 12);
 
   const fontSizes = [
     { label: "S", size: "2" },
@@ -362,32 +391,36 @@ export function DocumentCardUI({
     { label: "XL", size: "5" },
   ];
 
-  const handleToolTabChange = React.useCallback((newTab: ToolTab, tabs: Array<{ id: ToolTab; label: string }>) => {
-    const currentIndex = tabs.findIndex(t => t.id === activeToolTab);
-    const nextIndex = tabs.findIndex(t => t.id === newTab);
-    setTabDirection(nextIndex > currentIndex ? 1 : -1);
-    setActiveToolTab(newTab);
-  }, [activeToolTab]);
+  const handleToolTabChange = React.useCallback(
+    (newTab: ToolTab, tabs: Array<{ id: ToolTab; label: string }>) => {
+      const currentIndex = tabs.findIndex((t) => t.id === activeToolTab);
+      const nextIndex = tabs.findIndex((t) => t.id === newTab);
+      setTabDirection(nextIndex > currentIndex ? 1 : -1);
+      setActiveToolTab(newTab);
+    },
+    [activeToolTab],
+  );
 
   const handleDownload = React.useCallback(async () => {
     if (!editorRef.current) return;
     setIsDownloading(true);
-    await new Promise(r => setTimeout(r, 600)); // Fake loading delay for UX
+    await new Promise((r) => setTimeout(r, 600)); // Fake loading delay for UX
 
     let plain = editorRef.current.innerText || "";
     if (!plain) {
       plain = documentText;
     }
-    
+
     const format = isEmail ? "eml" : "md";
-    const finalName = downloadFilename.trim() || (isEmail ? "Email Draft" : "Document");
+    const finalName =
+      downloadFilename.trim() || (isEmail ? "Email Draft" : "Document");
     const contentToDownload = isEmail
       ? `Subject: ${subject}\n\n${plain}`
       : plain;
 
-    const blob = new Blob([contentToDownload], { type: 'text/plain' });
+    const blob = new Blob([contentToDownload], { type: "text/plain" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
+    const a = document.createElement("a");
     a.href = url;
     a.download = `${finalName}.${format}`;
     document.body.appendChild(a);
@@ -411,6 +444,14 @@ export function DocumentCardUI({
     checkScroll();
   }, [documentText, isEditing, checkScroll]);
 
+  React.useEffect(() => {
+    const el = editorRef.current?.parentElement;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => checkScroll());
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [checkScroll, isEditing]);
+
   const setEditorElement = React.useCallback((node: HTMLDivElement | null) => {
     editorRef.current = node;
     if (node && node.innerHTML !== initialHtmlRef.current) {
@@ -425,11 +466,7 @@ export function DocumentCardUI({
     initialHtmlRef.current = textToEditorHtml(parsed.body);
   }, [isEditing, parsed.body, parsed.subject]);
 
-  React.useEffect(() => {
-    if (!isStreaming && !isEmail) {
-      setIsEditing(true);
-    }
-  }, [isEmail, isStreaming]);
+  // Auto-editing on load has been removed to require user interaction.
 
   React.useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -487,13 +524,16 @@ export function DocumentCardUI({
     [onContentChange, isEmail, subject, saveSelection],
   );
 
-  const handleSubjectEdit = React.useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const newSubject = e.target.value;
-    setSubject(newSubject);
-    if (onContentChange && isEmail) {
-      onContentChange(`Subject: ${newSubject}\n\n${documentText}`);
-    }
-  }, [onContentChange, documentText, isEmail]);
+  const handleSubjectEdit = React.useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const newSubject = e.target.value;
+      setSubject(newSubject);
+      if (onContentChange && isEmail) {
+        onContentChange(`Subject: ${newSubject}\n\n${documentText}`);
+      }
+    },
+    [onContentChange, documentText, isEmail],
+  );
 
   React.useEffect(() => {
     if (!isEditing) return;
@@ -503,7 +543,8 @@ export function DocumentCardUI({
     };
 
     document.addEventListener("selectionchange", handleSelectionChange);
-    return () => document.removeEventListener("selectionchange", handleSelectionChange);
+    return () =>
+      document.removeEventListener("selectionchange", handleSelectionChange);
   }, [isEditing, saveSelection]);
 
   const restoreSelection = React.useCallback(() => {
@@ -544,7 +585,8 @@ export function DocumentCardUI({
     if (isEditing) {
       const nextText = readPlainText();
       setDocumentText(nextText);
-      initialHtmlRef.current = editorRef.current?.innerHTML ?? textToEditorHtml(nextText);
+      initialHtmlRef.current =
+        editorRef.current?.innerHTML ?? textToEditorHtml(nextText);
       setIsEditing(false);
       return;
     }
@@ -597,7 +639,12 @@ export function DocumentCardUI({
         return true;
       };
 
-      if ((!range || range.collapsed || !editor.contains(range.commonAncestorContainer)) && selectedText) {
+      if (
+        (!range ||
+          range.collapsed ||
+          !editor.contains(range.commonAncestorContainer)) &&
+        selectedText
+      ) {
         const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
         let current: Text | null = null;
         while ((current = walker.nextNode() as Text | null)) {
@@ -617,7 +664,9 @@ export function DocumentCardUI({
       const commonAncestor = range.commonAncestorContainer;
       if (!editor.contains(commonAncestor)) return applyToEditorContents();
 
-      const selectedNormalised = normaliseEditorText(selectedText || range.cloneContents().textContent || "");
+      const selectedNormalised = normaliseEditorText(
+        selectedText || range.cloneContents().textContent || "",
+      );
       const editorNormalised = normaliseEditorText(editor.innerText);
       if (selectedNormalised && selectedNormalised === editorNormalised) {
         return applyToEditorContents();
@@ -650,14 +699,31 @@ export function DocumentCardUI({
 
   const runValueCommand = React.useCallback(
     (
-      command: "fontName" | "fontSize" | "foreColor" | "hiliteColor" | "formatBlock",
+      command:
+        | "fontName"
+        | "fontSize"
+        | "foreColor"
+        | "hiliteColor"
+        | "formatBlock",
       value: string,
     ) => {
       setIsEditing(true);
       window.requestAnimationFrame(() => {
-        if (command === "fontName" && wrapSavedRangeWithStyle({ fontFamily: value })) return;
-        if (command === "foreColor" && wrapSavedRangeWithStyle({ color: value })) return;
-        if (command === "hiliteColor" && wrapSavedRangeWithStyle({ backgroundColor: value })) return;
+        if (
+          command === "fontName" &&
+          wrapSavedRangeWithStyle({ fontFamily: value })
+        )
+          return;
+        if (
+          command === "foreColor" &&
+          wrapSavedRangeWithStyle({ color: value })
+        )
+          return;
+        if (
+          command === "hiliteColor" &&
+          wrapSavedRangeWithStyle({ backgroundColor: value })
+        )
+          return;
         if (command === "fontSize") {
           const pxByCommandSize: Record<string, string> = {
             "2": "13px",
@@ -665,7 +731,12 @@ export function DocumentCardUI({
             "4": "20px",
             "5": "28px",
           };
-          if (wrapSavedRangeWithStyle({ fontSize: pxByCommandSize[value] ?? "16px" })) return;
+          if (
+            wrapSavedRangeWithStyle({
+              fontSize: pxByCommandSize[value] ?? "16px",
+            })
+          )
+            return;
         }
         restoreSelection();
         const didApply = document.execCommand(command, false, value);
@@ -702,11 +773,14 @@ export function DocumentCardUI({
         if (!editor) return;
         const markerId = rewriteMarkerIdRef.current;
         const marker = markerId
-          ? editor.querySelector<HTMLElement>(`[data-clyra-rewrite-marker="${markerId}"]`)
+          ? editor.querySelector<HTMLElement>(
+              `[data-clyra-rewrite-marker="${markerId}"]`,
+            )
           : null;
         const selection = window.getSelection();
         const didRestore = marker ? false : restoreSelection();
-        const range = didRestore && selection?.rangeCount ? selection.getRangeAt(0) : null;
+        const range =
+          didRestore && selection?.rangeCount ? selection.getRangeAt(0) : null;
         if (!marker && !range) return;
 
         const lines = replacement.trim().split("\n");
@@ -760,7 +834,8 @@ export function DocumentCardUI({
       saveSelection();
       const liveSelectionText = window.getSelection()?.toString().trim() ?? "";
       const storedSelectionText =
-        lastNonCollapsedRangeRef.current?.cloneContents().textContent?.trim() ?? "";
+        lastNonCollapsedRangeRef.current?.cloneContents().textContent?.trim() ??
+        "";
       const selectionText = liveSelectionText || storedSelectionText;
       if (!selectionText) return;
       event.preventDefault();
@@ -783,7 +858,8 @@ export function DocumentCardUI({
 
       const editor = editorRef.current;
       const selection = window.getSelection();
-      const selectedRange = lastNonCollapsedRangeRef.current ?? savedRangeRef.current;
+      const selectedRange =
+        lastNonCollapsedRangeRef.current ?? savedRangeRef.current;
 
       const markEditorContents = () => {
         if (!editor) return false;
@@ -849,7 +925,10 @@ export function DocumentCardUI({
         if (normalisedSelection && normalisedSelection === normalisedEditor) {
           didMark = markEditorContents();
         } else {
-          const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT);
+          const walker = document.createTreeWalker(
+            editor,
+            NodeFilter.SHOW_TEXT,
+          );
           let current: Text | null = null;
           while ((current = walker.nextNode() as Text | null)) {
             const index = (current.textContent ?? "").indexOf(selectedText);
@@ -933,22 +1012,14 @@ export function DocumentCardUI({
     <motion.div
       ref={cardRef}
       className={cn(
-        "clyra-document-card w-full max-w-4xl mx-auto bg-white rounded-3xl border border-slate-200/80 shadow-[0_4px_24px_rgba(15,23,42,0.04)] flex flex-col relative",
+        "clyra-document-card w-full max-w-4xl mx-auto bg-white rounded-3xl border border-slate-200/80 shadow-[0_4px_24px_rgba(15,23,42,0.04)] overflow-hidden flex flex-col",
         className,
       )}
       initial={{ opacity: 0, y: 20, filter: "blur(6px)" }}
       animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
       transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
     >
-      <div ref={headerSentinelRef} className="absolute top-0 left-0 right-0 h-[1px] pointer-events-none opacity-0" />
-      <div 
-        className={cn(
-          "flex flex-wrap items-center justify-between gap-3 px-5 py-4 transition-all duration-300 z-[100]",
-          isHeaderSticky 
-            ? "sticky top-4 mx-4 mt-4 bg-white/95 backdrop-blur-xl rounded-2xl shadow-sm border border-slate-200/70"
-            : "border-b border-slate-100 bg-white rounded-t-3xl"
-        )}
-      >
+      <div className="clyra-doc-header flex flex-wrap items-center justify-between gap-3 px-5 py-4 border-b border-slate-100 relative">
         <button
           type="button"
           onClick={handleToggleEditing}
@@ -958,7 +1029,11 @@ export function DocumentCardUI({
             isEditing && "clyra-doc-action--active",
           )}
         >
-          {isEditing ? <Check className="w-4 h-4" /> : <Edit2 className="w-4 h-4" />}
+          {isEditing ? (
+            <Check className="w-4 h-4" />
+          ) : (
+            <Edit2 className="w-4 h-4" />
+          )}
           {isEditing ? "Done" : "Edit"}
         </button>
 
@@ -972,7 +1047,11 @@ export function DocumentCardUI({
             className="clyra-doc-icon-button"
             aria-label="Copy document"
           >
-            {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+            {copied ? (
+              <Check className="w-4 h-4" />
+            ) : (
+              <Copy className="w-4 h-4" />
+            )}
           </motion.button>
 
           {isEmail ? (
@@ -1003,7 +1082,11 @@ export function DocumentCardUI({
                       onClick={openGmail}
                       className="clyra-doc-provider-button"
                     >
-                      <img src="/icons/gmail.svg" alt="Gmail" className="w-5 h-5 rounded-sm object-contain" />
+                      <img
+                        src="/icons/gmail.svg"
+                        alt="Gmail"
+                        className="w-5 h-5 rounded-sm object-contain"
+                      />
                       <span>Gmail</span>
                     </button>
                     <button
@@ -1011,7 +1094,11 @@ export function DocumentCardUI({
                       onClick={openOutlook}
                       className="clyra-doc-provider-button"
                     >
-                      <img src="/icons/outlook.svg" alt="Outlook" className="w-5 h-5 rounded-sm object-contain" />
+                      <img
+                        src="/icons/outlook.svg"
+                        alt="Outlook"
+                        className="w-5 h-5 rounded-sm object-contain"
+                      />
                       <span>Outlook</span>
                     </button>
                   </motion.div>
@@ -1065,7 +1152,11 @@ export function DocumentCardUI({
                     className="clyra-workflow-tab__hover absolute pointer-events-none"
                     initial={{ opacity: 0, scale: 0.85 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.15 } }}
+                    exit={{
+                      opacity: 0,
+                      scale: 0.95,
+                      transition: { duration: 0.15 },
+                    }}
                     style={{
                       x: toolTabsHoverPillX,
                       width: 68,
@@ -1074,7 +1165,7 @@ export function DocumentCardUI({
                       height: "auto",
                       translate: "none",
                       scaleX: toolTabsHoverScaleX,
-                      transformOrigin: toolTabsHoverOrigin as any
+                      transformOrigin: toolTabsHoverOrigin as any,
                     }}
                     transition={{
                       type: "spring",
@@ -1141,7 +1232,10 @@ export function DocumentCardUI({
                             onFocus={saveSelection}
                             onChange={(event) => {
                               setBlockStyle(event.target.value);
-                              runValueCommand("formatBlock", event.target.value);
+                              runValueCommand(
+                                "formatBlock",
+                                event.target.value,
+                              );
                             }}
                           >
                             <option value="P">Paragraph</option>
@@ -1153,10 +1247,20 @@ export function DocumentCardUI({
                       </div>
                     )}
                     <div className="clyra-doc-tool-group">
-                      <button type="button" className="clyra-doc-tool-button" onPointerDown={handleToolPointerDown} onClick={() => runCommand("undo")}>
+                      <button
+                        type="button"
+                        className="clyra-doc-tool-button"
+                        onPointerDown={handleToolPointerDown}
+                        onClick={() => runCommand("undo")}
+                      >
                         <Undo2 className="h-4 w-4" />
                       </button>
-                      <button type="button" className="clyra-doc-tool-button" onPointerDown={handleToolPointerDown} onClick={() => runCommand("redo")}>
+                      <button
+                        type="button"
+                        className="clyra-doc-tool-button"
+                        onPointerDown={handleToolPointerDown}
+                        onClick={() => runCommand("redo")}
+                      >
                         <Redo2 className="h-4 w-4" />
                       </button>
                     </div>
@@ -1165,18 +1269,45 @@ export function DocumentCardUI({
 
                 {activeToolTab === "style" && (
                   <div className="flex items-center justify-center gap-1 sm:gap-1.5 py-1 flex-nowrap overflow-x-auto scrollbar-none w-full">
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button type="button" className="clyra-doc-tool-button" onPointerDown={handleToolPointerDown} onClick={() => runCommand("bold")} aria-label="Bold">
-                        <Bold className="h-4 w-4" />
+                    <div className="flex items-center gap-0.5 shrink-0">
+                      <button
+                        type="button"
+                        className="clyra-doc-tool-button !h-7 !w-7"
+                        onPointerDown={handleToolPointerDown}
+                        onClick={() => runCommand("bold")}
+                        aria-label="Bold"
+                      >
+                        <Bold className="h-3.5 w-3.5" />
                       </button>
-                      <button type="button" className="clyra-doc-tool-button" onPointerDown={handleToolPointerDown} onClick={() => runCommand("italic")} aria-label="Italic">
-                        <Italic className="h-4 w-4" />
+                      <button
+                        type="button"
+                        className="clyra-doc-tool-button"
+                        style={{ height: 28, width: 28 }}
+                        onPointerDown={handleToolPointerDown}
+                        onClick={() => runCommand("italic")}
+                        aria-label="Italic"
+                      >
+                        <Italic className="h-3.5 w-3.5" />
                       </button>
-                      <button type="button" className="clyra-doc-tool-button" onPointerDown={handleToolPointerDown} onClick={() => runCommand("underline")} aria-label="Underline">
-                        <Underline className="h-4 w-4" />
+                      <button
+                        type="button"
+                        className="clyra-doc-tool-button"
+                        style={{ height: 28, width: 28 }}
+                        onPointerDown={handleToolPointerDown}
+                        onClick={() => runCommand("underline")}
+                        aria-label="Underline"
+                      >
+                        <Underline className="h-3.5 w-3.5" />
                       </button>
-                      <button type="button" className="clyra-doc-tool-button" onPointerDown={handleToolPointerDown} onClick={() => runCommand("strikeThrough")} aria-label="Strikethrough">
-                        <Strikethrough className="h-4 w-4" />
+                      <button
+                        type="button"
+                        className="clyra-doc-tool-button"
+                        style={{ height: 28, width: 28 }}
+                        onPointerDown={handleToolPointerDown}
+                        onClick={() => runCommand("strikeThrough")}
+                        aria-label="Strikethrough"
+                      >
+                        <Strikethrough className="h-3.5 w-3.5" />
                       </button>
                     </div>
 
@@ -1184,52 +1315,95 @@ export function DocumentCardUI({
                       <>
                         <div className="w-[1px] h-4 bg-slate-200/80 mx-0.5 shrink-0" />
                         <div className="flex items-center gap-1 shrink-0">
-                          <label className="clyra-doc-colour clyra-doc-colour--compact" title="Text Color">
-                            <Palette className="h-[14px] w-[14px]" />
+                          <label
+                            className="relative flex items-center justify-center h-7 w-7 rounded-full hover:bg-slate-100/80 cursor-pointer border border-slate-200 bg-white/50"
+                            title="Text Color"
+                          >
+                            <span className="flex flex-col items-center">
+                              <span className="text-[10px] font-bold leading-none text-slate-700">
+                                A
+                              </span>
+                              <span
+                                className="h-[2px] w-3 mt-0.5 rounded-full"
+                                style={{ backgroundColor: textColour }}
+                              />
+                            </span>
                             <input
                               type="color"
                               value={textColour}
+                              className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                               onPointerDown={saveSelection}
                               onFocus={saveSelection}
                               onChange={(event) => {
                                 setTextColour(event.target.value);
-                                runValueCommand("foreColor", event.target.value);
+                                runValueCommand(
+                                  "foreColor",
+                                  event.target.value,
+                                );
                               }}
                             />
                           </label>
-                          <label className="clyra-doc-colour clyra-doc-colour--compact" title="Highlight Color">
-                            <span className="h-[14px] w-[14px] rounded-[3px] border border-slate-300 bg-white" />
+                          <label
+                            className="relative flex items-center justify-center h-7 w-7 rounded-full hover:bg-slate-100/80 cursor-pointer border border-slate-200 bg-white/50"
+                            title="Highlight Color"
+                          >
+                            <span className="flex flex-col items-center">
+                              <Palette className="h-3 w-3 text-slate-600" />
+                              <span
+                                className="h-[2px] w-3 mt-0.5 rounded-full"
+                                style={{
+                                  backgroundColor:
+                                    highlightColour === "#ffffff"
+                                      ? "#cbd5e1"
+                                      : highlightColour,
+                                }}
+                              />
+                            </span>
                             <input
                               type="color"
                               value={highlightColour}
+                              className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
                               onPointerDown={saveSelection}
                               onFocus={saveSelection}
                               onChange={(event) => {
                                 setHighlightColour(event.target.value);
-                                runValueCommand("hiliteColor", event.target.value);
+                                runValueCommand(
+                                  "hiliteColor",
+                                  event.target.value,
+                                );
                               }}
                             />
                           </label>
                         </div>
-                        
+
                         <div className="w-[1px] h-4 bg-slate-200/80 mx-0.5 shrink-0" />
-                        
+
                         <div
-                          className="clyra-doc-size-options relative"
+                          className="clyra-doc-size-options relative flex items-center"
                           aria-label="Text size"
-                          onMouseEnter={() => setHoveredSize("container")}
+                          onMouseEnter={() => setHoveredSize(fontSize)}
+                          style={{
+                            height: 32,
+                            padding: "2px 4px",
+                            borderRadius: 999,
+                          }}
                         >
                           <div
-                            className="clyra-workflow-tabs relative transition-opacity duration-700 opacity-100 ml-auto"
+                            className="relative flex items-center transition-opacity duration-700 opacity-100 ml-auto"
                             role="tablist"
-                            style={{ padding: 4, zIndex: 0 }}
+                            style={{ padding: 2, zIndex: 0, gap: 1 }}
                             onPointerMove={(e) => {
-                              const rect = e.currentTarget.getBoundingClientRect();
+                              const rect =
+                                e.currentTarget.getBoundingClientRect();
                               sizesMouseX.set(e.clientX - rect.left);
                             }}
                             onMouseLeave={() => setHoveredSize(null)}
                             onBlur={(e) => {
-                              if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+                              if (
+                                !e.currentTarget.contains(
+                                  e.relatedTarget as Node | null,
+                                )
+                              ) {
                                 setHoveredSize(null);
                               }
                             }}
@@ -1237,19 +1411,23 @@ export function DocumentCardUI({
                             <AnimatePresence>
                               {hoveredSize && (
                                 <motion.div
-                                  className="clyra-workflow-tab__hover absolute pointer-events-none"
+                                  className="absolute bg-slate-100 border border-slate-200/50 rounded-full pointer-events-none"
                                   initial={{ opacity: 0, scale: 0.85 }}
                                   animate={{ opacity: 1, scale: 1 }}
-                                  exit={{ opacity: 0, scale: 0.95, transition: { duration: 0.15 } }}
+                                  exit={{
+                                    opacity: 0,
+                                    scale: 0.95,
+                                    transition: { duration: 0.15 },
+                                  }}
                                   style={{
                                     x: sizesHoverPillX,
-                                    width: 28,
-                                    top: 4,
-                                    bottom: 4,
+                                    width: 20,
+                                    top: 2,
+                                    bottom: 2,
                                     height: "auto",
                                     translate: "none",
                                     scaleX: sizesHoverScaleX,
-                                    transformOrigin: sizesHoverOrigin as any
+                                    transformOrigin: sizesHoverOrigin as any,
                                   }}
                                   transition={{
                                     type: "spring",
@@ -1259,21 +1437,26 @@ export function DocumentCardUI({
                                 />
                               )}
                             </AnimatePresence>
-                            {fontSizes.map(({ label, size: s }) => (
-                              <button
-                                key={label}
-                                type="button"
-                                className={cn(
-                                  "clyra-workflow-tab w-[32px] justify-center",
-                                  fontSize === s && "clyra-workflow-tab--active",
-                                )}
-                                onClick={() => applyNamedFontSize(s)}
-                                onMouseEnter={() => setHoveredSize(s)}
-                                onFocus={() => setHoveredSize(s)}
-                              >
-                                <span className="relative z-10">{label}</span>
-                              </button>
-                            ))}
+                            {fontSizes.map(({ label, size: s }) => {
+                              const isActive = fontSize === s;
+                              return (
+                                <button
+                                  key={label}
+                                  type="button"
+                                  className={cn(
+                                    "w-6 h-6 justify-center flex items-center rounded-full text-[10.5px] font-bold transition-all relative z-10",
+                                    isActive
+                                      ? "text-slate-900 bg-white shadow-[0_1px_3px_rgba(0,0,0,0.1)] border border-slate-200/60"
+                                      : "text-slate-500 hover:text-slate-800",
+                                  )}
+                                  onClick={() => applyNamedFontSize(s)}
+                                  onMouseEnter={() => setHoveredSize(s)}
+                                  onFocus={() => setHoveredSize(s)}
+                                >
+                                  <span>{label}</span>
+                                </button>
+                              );
+                            })}
                           </div>
                         </div>
                       </>
@@ -1284,27 +1467,62 @@ export function DocumentCardUI({
                 {activeToolTab === "layout" && (
                   <div className="flex items-center justify-center gap-4 w-full flex-wrap">
                     <div className="clyra-doc-tool-group">
-                      <button type="button" className="clyra-doc-tool-button" onPointerDown={handleToolPointerDown} onClick={() => runCommand("insertUnorderedList")}>
+                      <button
+                        type="button"
+                        className="clyra-doc-tool-button"
+                        onPointerDown={handleToolPointerDown}
+                        onClick={() => runCommand("insertUnorderedList")}
+                      >
                         <List className="h-4 w-4" />
                       </button>
-                      <button type="button" className="clyra-doc-tool-button" onPointerDown={handleToolPointerDown} onClick={() => runCommand("insertOrderedList")}>
+                      <button
+                        type="button"
+                        className="clyra-doc-tool-button"
+                        onPointerDown={handleToolPointerDown}
+                        onClick={() => runCommand("insertOrderedList")}
+                      >
                         <ListOrdered className="h-4 w-4" />
                       </button>
-                      <button type="button" className="clyra-doc-tool-button" onPointerDown={handleToolPointerDown} onClick={() => runCommand("outdent")}>
+                      <button
+                        type="button"
+                        className="clyra-doc-tool-button"
+                        onPointerDown={handleToolPointerDown}
+                        onClick={() => runCommand("outdent")}
+                      >
                         <IndentDecrease className="h-4 w-4" />
                       </button>
-                      <button type="button" className="clyra-doc-tool-button" onPointerDown={handleToolPointerDown} onClick={() => runCommand("indent")}>
+                      <button
+                        type="button"
+                        className="clyra-doc-tool-button"
+                        onPointerDown={handleToolPointerDown}
+                        onClick={() => runCommand("indent")}
+                      >
                         <IndentIncrease className="h-4 w-4" />
                       </button>
                     </div>
                     <div className="clyra-doc-tool-group">
-                      <button type="button" className="clyra-doc-tool-button" onPointerDown={handleToolPointerDown} onClick={() => runCommand("justifyLeft")}>
+                      <button
+                        type="button"
+                        className="clyra-doc-tool-button"
+                        onPointerDown={handleToolPointerDown}
+                        onClick={() => runCommand("justifyLeft")}
+                      >
                         <AlignLeft className="h-4 w-4" />
                       </button>
-                      <button type="button" className="clyra-doc-tool-button" onPointerDown={handleToolPointerDown} onClick={() => runCommand("justifyCenter")}>
+                      <button
+                        type="button"
+                        className="clyra-doc-tool-button"
+                        onPointerDown={handleToolPointerDown}
+                        onClick={() => runCommand("justifyCenter")}
+                      >
                         <AlignCenter className="h-4 w-4" />
                       </button>
-                      <button type="button" className="clyra-doc-tool-button" onPointerDown={handleToolPointerDown} onClick={() => runCommand("justifyRight")}>
+                      <button
+                        type="button"
+                        className="clyra-doc-tool-button"
+                        onPointerDown={handleToolPointerDown}
+                        onClick={() => runCommand("justifyRight")}
+                      >
                         <AlignRight className="h-4 w-4" />
                       </button>
                     </div>
@@ -1319,12 +1537,7 @@ export function DocumentCardUI({
       <AnimatePresence initial={false}>
         {!isStreaming && isEmail && (
           <motion.div
-            className={cn(
-              "transition-all duration-300 z-[90]",
-              isHeaderSticky
-                ? "sticky top-[84px] mx-4 mt-2 px-6 sm:px-8 py-4 bg-white/95 backdrop-blur-xl rounded-2xl shadow-sm border border-slate-200/70"
-                : "px-6 sm:px-8 py-4 border-b border-slate-100 bg-white"
-            )}
+            className="clyra-doc-subject px-6 sm:px-8 py-4 border-b border-slate-100"
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -6 }}
@@ -1344,7 +1557,7 @@ export function DocumentCardUI({
               <div className="clyra-doc-field">
                 <span>Subject</span>
                 <div className="text-slate-800 font-medium text-lg">
-                {subject || "(Subject)"}
+                  {subject || "(Subject)"}
                 </div>
               </div>
             )}
@@ -1377,65 +1590,82 @@ export function DocumentCardUI({
             transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
             onScroll={() => window.requestAnimationFrame(checkScroll)}
           >
-            <div className="clyra-doc-body-label">{isEmail ? "Message" : "Notes"}</div>
+            <div className="clyra-doc-body-label">
+              {isEmail ? "Message" : "Notes"}
+            </div>
             <div
-                ref={setEditorElement}
-                className={cn("clyra-doc-editor", !isEditing && "clyra-doc-editor--reading")}
-                contentEditable={isEditing}
-                suppressContentEditableWarning
-                spellCheck
-                onMouseUp={saveSelection}
-                onInput={handleContentEdit}
-                onKeyDown={acceptAutocomplete}
-                onKeyUp={(e) => {
-                  saveSelection();
-                  if (contextMenu) setContextMenu(null);
+              ref={setEditorElement}
+              className={cn(
+                "clyra-doc-editor",
+                !isEditing && "clyra-doc-editor--reading",
+              )}
+              contentEditable={isEditing}
+              suppressContentEditableWarning
+              spellCheck
+              onMouseUp={saveSelection}
+              onInput={handleContentEdit}
+              onKeyDown={acceptAutocomplete}
+              onKeyUp={(e) => {
+                saveSelection();
+                if (contextMenu) setContextMenu(null);
 
-                  if (e.key === " " || e.key === "Enter") {
-                    const selection = window.getSelection();
-                    if (!selection || selection.rangeCount === 0) return;
-                    const editor = editorRef.current;
-                    if (!editor) return;
-                    const target = getEditableTextTarget(editor, selection.focusNode, selection.focusOffset);
-                    if (!target) return;
-                    const text = target.node.textContent || "";
-                    const offset = e.key === " " ? target.offset - 1 : target.offset;
-                    const textBefore = text.slice(0, offset);
-                    const urlMatch = textBefore.match(/(https?:\/\/[^\s]+|www\.[^\s]+)$/i);
-                    
-                    if (urlMatch) {
-                      const url = urlMatch[1];
-                      const actualUrl = url.toLowerCase().startsWith('www.') ? 'https://' + url : url;
-                      
-                      const newRange = document.createRange();
-                      newRange.setStart(target.node, offset - url.length);
-                      newRange.setEnd(target.node, offset);
-                      
+                if (e.key === " " || e.key === "Enter") {
+                  const selection = window.getSelection();
+                  if (!selection || selection.rangeCount === 0) return;
+                  const editor = editorRef.current;
+                  if (!editor) return;
+                  const target = getEditableTextTarget(
+                    editor,
+                    selection.focusNode,
+                    selection.focusOffset,
+                  );
+                  if (!target) return;
+                  const text = target.node.textContent || "";
+                  const offset =
+                    e.key === " " ? target.offset - 1 : target.offset;
+                  const textBefore = text.slice(0, offset);
+                  const urlMatch = textBefore.match(
+                    /(https?:\/\/[^\s]+|www\.[^\s]+)$/i,
+                  );
+
+                  if (urlMatch) {
+                    const url = urlMatch[1];
+                    const actualUrl = url.toLowerCase().startsWith("www.")
+                      ? "https://" + url
+                      : url;
+
+                    const newRange = document.createRange();
+                    newRange.setStart(target.node, offset - url.length);
+                    newRange.setEnd(target.node, offset);
+
+                    selection.removeAllRanges();
+                    selection.addRange(newRange);
+
+                    document.execCommand("createLink", false, actualUrl);
+
+                    newRange.collapse(false);
+                    if (e.key === " ") {
                       selection.removeAllRanges();
-                      selection.addRange(newRange);
-                      
-                      document.execCommand("createLink", false, actualUrl);
-                      
-                      newRange.collapse(false);
-                      if (e.key === " ") {
-                        selection.removeAllRanges();
-                        const nextNode = getEditableTextTarget(editor, selection.focusNode, selection.focusOffset);
-                        if (nextNode && nextNode.node) {
-                          const endRange = document.createRange();
-                          endRange.setStart(nextNode.node, nextNode.offset);
-                          endRange.collapse(true);
-                          selection.addRange(endRange);
-                        }
+                      const nextNode = getEditableTextTarget(
+                        editor,
+                        selection.focusNode,
+                        selection.focusOffset,
+                      );
+                      if (nextNode && nextNode.node) {
+                        const endRange = document.createRange();
+                        endRange.setStart(nextNode.node, nextNode.offset);
+                        endRange.collapse(true);
+                        selection.addRange(endRange);
                       }
-                      syncEditorState();
                     }
+                    syncEditorState();
                   }
-                }}
-                onFocus={saveSelection}
-	                onContextMenu={handleContextMenu}
-                aria-label={isEmail ? "Editable email body" : "Editable notes"}
-              />
-
+                }
+              }}
+              onFocus={saveSelection}
+              onContextMenu={handleContextMenu}
+              aria-label={isEmail ? "Editable email body" : "Editable notes"}
+            />
           </motion.div>
         )}
       </AnimatePresence>
@@ -1449,10 +1679,7 @@ export function DocumentCardUI({
             exit={{ opacity: 0, y: 8, scale: 0.96 }}
             transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
           >
-            <button
-              type="button"
-              onClick={() => requestRewrite("rephrase")}
-            >
+            <button type="button" onClick={() => requestRewrite("rephrase")}>
               Rephrase selection
             </button>
           </motion.div>
@@ -1518,7 +1745,6 @@ export function DocumentCardUI({
           </>
         )}
       </AnimatePresence>
-
     </motion.div>
   );
 }

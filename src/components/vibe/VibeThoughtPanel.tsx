@@ -6,7 +6,7 @@ import { ChevronRight } from "lucide-react";
 import { ShiningText } from "@/components/ShiningText";
 import { cn } from "@/lib/utils";
 
-const HOLD_MS = 320;
+const HOLD_MS = 620;
 const MAX_BODY_PX = 168;
 
 /**
@@ -173,7 +173,11 @@ export function VibeThoughtPanel({
             >
               <ChevronRight className="h-4 w-4" aria-hidden />
             </motion.span>
-            <ShiningText text="Mapping approach" preset="thinkingChat" />
+            <ShiningText
+              text="Mapping approach"
+              preset="thinkingChat"
+              className="text-[13px] font-medium"
+            />
           </>
         ) : (
           <button
