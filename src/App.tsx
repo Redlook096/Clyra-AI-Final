@@ -52,6 +52,7 @@ import {
 } from "./components/ui/document-card";
 import { GradientWaveText } from "./components/GradientWaveText";
 import AIClipper from "./components/AIClipper";
+import VibeCoderWorkspace from "./components/VibeCoderWorkspace";
 import { AiOrb, type OrbColorTheme } from "./components/AiOrb";
 import { VibeAgentMessageBody } from "./components/vibe/VibeAgentMessageBody";
 import { VibeLivePreviewPanel } from "./components/vibe/VibeLivePreviewPanel";
@@ -324,12 +325,16 @@ function useAutoResizeTextarea({
       if (!textarea) return;
 
       if (reset) {
-        textarea.style.height = `${minHeight}px`;
-        return;
+        textarea.style.height = "auto";
       }
 
       window.requestAnimationFrame(() => {
-        textarea.style.height = `${minHeight}px`;
+        textarea.style.height = "auto";
+        if (textarea.value.length === 0) {
+          textarea.style.height = `${minHeight}px`;
+          textarea.style.overflowY = "hidden";
+          return;
+        }
         const newHeight = Math.max(
           minHeight,
           Math.min(
@@ -338,6 +343,8 @@ function useAutoResizeTextarea({
           ),
         );
         textarea.style.height = `${newHeight}px`;
+        textarea.style.overflowY =
+          maxHeight && textarea.scrollHeight > maxHeight ? "auto" : "hidden";
       });
     },
     [minHeight, maxHeight],
@@ -652,8 +659,13 @@ export default function App() {
 
   const { textareaRef, adjustHeight } = useAutoResizeTextarea({
     minHeight: 40,
-    maxHeight: 292,
+    maxHeight: 96,
   });
+
+  useEffect(() => {
+    adjustHeight();
+  }, [adjustHeight, isExpanded, value]);
+
   const pendingDocumentRewriteRef = useRef<DocumentRewriteRequest | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isRephrasingMode, setIsRephrasingMode] = useState(false);
@@ -722,13 +734,17 @@ export default function App() {
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "f") {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "f") {
         e.preventDefault();
         setIsSearchModalOpen(true);
       }
     };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener("keydown", handleKeyDown, { capture: true });
+    document.addEventListener("keydown", handleKeyDown, { capture: true });
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, { capture: true });
+      document.removeEventListener("keydown", handleKeyDown, { capture: true });
+    };
   }, []);
 
   const lastAssistantId = useMemo(() => {
@@ -2203,6 +2219,7 @@ ${userText}`;
   const isClipWorkspace =
     activeWorkspaceTab === "browser" || selectedCommand?.id === "clip";
   const isVibeWorkspace = activeWorkspaceTab === "vibe" && !isClipWorkspace;
+  const showSidebarControls = activeWorkspaceTab === "chat" && !isClipWorkspace;
   const rawShowWorkspaceLivePreview = isVibeWorkspace && showVibeLivePreview;
   const [workspacePreviewLayoutVisible, setWorkspacePreviewLayoutVisible] =
     useState(rawShowWorkspaceLivePreview);
@@ -2251,24 +2268,35 @@ ${userText}`;
   ];
   const sidebarWidthPx = 272;
   const sidebarClearancePx = sidebarWidthPx + 24;
+  const effectiveWorkspaceViewport =
+    isSidebarOpen && showSidebarControls && viewportWidth >= 760
+      ? Math.max(420, viewportWidth - sidebarClearancePx)
+      : viewportWidth;
   const centeredContentWidth = isClipWorkspace
-    ? Math.min(940, Math.max(0, viewportWidth - 32))
+    ? Math.min(940, Math.max(0, effectiveWorkspaceViewport - 32))
     : showWorkspaceLivePreview
-      ? Math.min(viewportWidth, 1180)
-      : Math.min(768, Math.max(0, viewportWidth - 32));
+      ? Math.min(effectiveWorkspaceViewport, 1180)
+      : Math.min(768, Math.max(0, effectiveWorkspaceViewport - 32));
   const naturalContentGap = Math.max(
     0,
     (viewportWidth - centeredContentWidth) / 2,
   );
   const sidebarAvoidShift =
     isSidebarOpen &&
+    showSidebarControls &&
     viewportWidth >= 760 &&
     naturalContentGap < sidebarClearancePx
       ? Math.min(
           sidebarClearancePx - naturalContentGap,
-          Math.max(0, naturalContentGap - 24),
+          sidebarWidthPx * 0.52,
         )
       : 0;
+
+  useEffect(() => {
+    if (!showSidebarControls) {
+      setIsSidebarOpen(false);
+    }
+  }, [showSidebarControls]);
   const workspaceSwipeTravelPx = Math.min(
     Math.max(360, viewportWidth - 16),
     Math.max(360, centeredContentWidth) + 8,
@@ -2520,6 +2548,7 @@ ${userText}`;
         animate={{ opacity: 1, scale: 1, filter: "blur(0px)", y: 0 }}
         transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1], delay: 0.05 }}
       >
+        {showSidebarControls && (
         <motion.aside
           aria-hidden={!isSidebarOpen}
           initial={false}
@@ -2959,10 +2988,11 @@ ${userText}`;
             </button>
           </div>
         </motion.aside>
+        )}
 
         <div className="clyra-main-surface relative z-10 flex min-h-0 min-w-0 flex-1 flex-col bg-white sm:border-transparent">
           <AnimatePresence>
-            {!isSidebarOpen && (
+            {showSidebarControls && !isSidebarOpen && (
               <motion.button
                 type="button"
                 onClick={() => setIsSidebarOpen(true)}
@@ -3184,7 +3214,9 @@ ${userText}`;
                         willChange: "transform",
                       }}
                     >
-                      {isClipWorkspace ? (
+                      {isVibeWorkspace ? (
+                        <VibeCoderWorkspace orbColorTheme={orbColorTheme} />
+                      ) : isClipWorkspace ? (
                         <AIClipper
                           embedded
                           initialUrl={clipInitialUrl}
@@ -3453,7 +3485,7 @@ ${userText}`;
                         </div>
                       )}
                       <AnimatePresence initial={false}>
-                        {!isFullscreen && !isClipWorkspace && (
+                        {!isFullscreen && !isClipWorkspace && !isVibeWorkspace && (
                           <motion.div
                             key="composer"
                             ref={inputContainerRef}
@@ -3873,10 +3905,20 @@ ${userText}`;
                                       isRephrasingMode ? "" : activeSkeletonText
                                     }
                                     onChange={(e) => {
-                                      setValue(e.target.value);
+                                      const nextValue = e.target.value;
+                                      setValue(nextValue);
+                                      if (
+                                        !isVibeWorkspace &&
+                                        !selectedCommand &&
+                                        attachments.length === 0
+                                      ) {
+                                        setIsInputExpanded(
+                                          nextValue.trim().length > 0,
+                                        );
+                                      }
                                       if (
                                         activeSkeletonText &&
-                                        !e.target.value.includes(
+                                        !nextValue.includes(
                                           activeSkeletonText,
                                         )
                                       ) {
@@ -3905,16 +3947,16 @@ ${userText}`;
                                         ? "placeholder:text-slate-500"
                                         : "placeholder:text-slate-400",
                                       isExpanded
-                                        ? "min-h-[50px] max-h-[35vh] py-3 px-1"
-                                        : "min-h-[40px] max-h-[35vh] py-2 px-1",
-                                      "clyra-visible-scrollbar transition-[min-height,max-height,padding,opacity,transform] duration-[400ms] ease-[cubic-bezier(0.16,1,0.3,1)]",
+                                        ? "min-h-[50px] max-h-[96px] py-3 px-1"
+                                        : "min-h-[40px] max-h-[96px] py-2 px-1",
+                                      "clyra-visible-scrollbar transition-[height,min-height,max-height,padding,opacity,transform] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)]",
                                       isFadingInText
                                         ? "opacity-0 translate-y-1 scale-[0.99]"
                                         : introState !== "complete"
                                           ? "opacity-0 translate-y-2 scale-[0.98]"
                                           : "opacity-100 translate-y-0 scale-100",
                                     )}
-                                    style={{ maxHeight: "16.25em" }}
+                                    style={{ maxHeight: "96px" }}
                                   />
                                   {!isExpanded && (
                                     <motion.button
@@ -4115,7 +4157,7 @@ ${userText}`;
                         )}
                       </AnimatePresence>
                       <AnimatePresence>
-                        {isVibeWorkspace && messages.length === 0 && (
+                        {false && isVibeWorkspace && messages.length === 0 && (
                           <motion.div
                             key="vibe-recent-projects"
                             initial={{ opacity: 0, y: 14, scale: 0.985 }}

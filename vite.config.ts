@@ -38,7 +38,11 @@ export default defineConfig(() => {
         clientPort: hmrPort,
       },
       watch: {
-        ignored: ['**/vibe-sandbox/**', '**/.agentic-browser-profile/**'],
+        ignored: [
+          '**/vibe-sandbox/**',
+          '**/projects/**',
+          '**/.agentic-browser-profile/**',
+        ],
       },
     },
   };

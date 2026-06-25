@@ -17,7 +17,8 @@ const VISIBLE_LINES_TYPING = 4;
 const VISIBLE_LINES_REOPENED = 4;
 const MAX_CODE_H_TYPING = LINE_PX * VISIBLE_LINES_TYPING;
 const MAX_CODE_H_REOPENED = LINE_PX * VISIBLE_LINES_REOPENED;
-const COLLAPSE_HOLD_MS = 900;
+const START_HOLD_MS = 500;
+const COLLAPSE_HOLD_MS = 500;
 const COUNTER_FONT_SIZE = 12;
 const COUNTER_HEIGHT = COUNTER_FONT_SIZE + 3;
 
@@ -62,7 +63,7 @@ function CounterPill({
   return (
     <span
       className={cn(
-        "inline-flex h-[18px] shrink-0 items-center gap-[1px] rounded-full px-1.5 font-mono text-[12px] font-semibold leading-none tabular-nums",
+        "inline-flex h-[18px] min-w-[30px] shrink-0 items-center gap-[1px] rounded-full px-1 font-mono text-[12px] font-semibold leading-none tabular-nums",
         className,
       )}
     >
@@ -155,6 +156,7 @@ export function VibeMiniCodeBox({
 }) {
   const [revealed, setRevealed] = useState(() => (archived ? code.length : 0));
   const [collapsed, setCollapsed] = useState(() => !!archived);
+  const [started, setStarted] = useState(() => !!archived);
   const [manuallyOpen, setManuallyOpen] = useState(false);
   const collapsedNotifiedRef = useRef(!!archived);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -164,14 +166,19 @@ export function VibeMiniCodeBox({
     if (archived) {
       setRevealed(code.length);
       setCollapsed(true);
+      setStarted(true);
       collapsedNotifiedRef.current = true;
       return;
     }
     if (!active || collapsed) return;
+    if (!started) {
+      const id = window.setTimeout(() => setStarted(true), START_HOLD_MS);
+      return () => window.clearTimeout(id);
+    }
     if (revealed < code.length) {
       const left = code.length - revealed;
       const step =
-        left > 8000 ? 920 : left > 3500 ? 620 : left > 1500 ? 360 : 150;
+        left > 8000 ? 260 : left > 3500 ? 150 : left > 1500 ? 82 : 34;
       rafRef.current = window.requestAnimationFrame(() => {
         setRevealed((r) => Math.min(r + step, code.length));
       });
@@ -183,7 +190,7 @@ export function VibeMiniCodeBox({
     if (!segmentComplete) return;
     const id = window.setTimeout(() => setCollapsed(true), COLLAPSE_HOLD_MS);
     return () => window.clearTimeout(id);
-  }, [archived, active, collapsed, revealed, code.length, segmentComplete]);
+  }, [archived, active, collapsed, revealed, code.length, segmentComplete, started]);
 
   useEffect(() => {
     if (archived) return;
@@ -273,9 +280,9 @@ export function VibeMiniCodeBox({
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 10, scale: 0.992 }}
-      animate={{ opacity: active || archived ? 1 : 0.76, y: 0 }}
-      transition={{ duration: 0.36, ease: [0.22, 1, 0.36, 1] }}
+      initial={{ opacity: 0, y: 12, scale: 0.988 }}
+      animate={{ opacity: active || archived ? 1 : 0.76, y: 0, scale: 1 }}
+      transition={{ duration: 0.48, ease: [0.16, 1, 0.3, 1] }}
       className="w-full max-w-[640px]"
     >
       <motion.div
@@ -326,12 +333,12 @@ export function VibeMiniCodeBox({
             <CounterPill
               sign="+"
               value={displayAdded}
-              className="bg-emerald-50/90 text-emerald-700"
+              className="text-emerald-600"
             />
             <CounterPill
               sign="-"
               value={displayRemoved}
-              className="bg-rose-50/90 text-rose-600"
+              className="text-rose-500"
             />
           </span>
           {headerInteractive ? (
