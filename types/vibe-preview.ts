@@ -42,3 +42,20 @@ export type PreviewLogLine = {
   level: "info" | "warn" | "error";
   message: string;
 };
+
+export interface VibePreviewState {
+  status: "idle" | "starting" | "installing" | "compiling" | "running" | "ready" | "refreshing" | "runtime_error" | "build_failed" | "server_crashed" | "restarting" | "stopped";
+  url: string;
+  port: number;
+  packageManager: string;
+  devCommand: string;
+  runtimeErrors: string[];
+  healthCheckPassed: boolean;
+}
+
+export interface VibePreviewHealth {
+  state: "idle" | "starting" | "ready" | "error";
+  localUrl: string;
+  runtimeErrors: string[];
+  lastCheckMs: number;
+}

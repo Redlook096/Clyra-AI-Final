@@ -15,6 +15,10 @@ export default defineConfig(() => {
     build: {
       chunkSizeWarningLimit: 900,
       rollupOptions: {
+        input: {
+          main: path.resolve(__dirname, 'index.html'),
+          todo: path.resolve(__dirname, 'todo.html'),
+        },
         output: {
           manualChunks(id) {
             if (id.includes('node_modules/react-syntax-highlighter')) return 'syntax-highlighter';
@@ -27,11 +31,9 @@ export default defineConfig(() => {
       },
     },
     optimizeDeps: {
-      entries: ['index.html'],
+      entries: ['index.html', 'todo.html'],
     },
     server: {
-      // The Vibe sandbox runs its own Vite middleware; keep the shell HMR port
-      // explicit so the two live preview channels never collide.
       hmr: {
         host: 'localhost',
         port: hmrPort,

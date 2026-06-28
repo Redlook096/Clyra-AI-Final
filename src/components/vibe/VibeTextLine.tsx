@@ -98,7 +98,7 @@ export function VibeTextLine({
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
-      className="clyra-vibe-agent-line max-w-[640px] whitespace-pre-wrap text-[14px] leading-[1.55] text-slate-600"
+      className="clyra-vibe-agent-line max-w-[640px] whitespace-pre-wrap text-[15px] sm:text-[16px] font-medium leading-[1.65] text-slate-600"
     >
       {body.slice(0, revealed)}
     </motion.p>

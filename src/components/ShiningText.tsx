@@ -4,24 +4,31 @@ import { cn } from "../lib/utils";
 
 type ShiningPreset = "default" | "thinkingChat";
 
-/** Minimal brain stroke; same 2s linear cadence as `thinkingChat` text (aligned greys / highlight). */
 export function ShiningBrainIcon({ className }: { className?: string }) {
   return (
-    <motion.span
-      className={cn("inline-flex items-center justify-center text-[#404040]", className)}
-      aria-hidden
-      animate={{
-        color: ["#404040", "#ffffff", "#404040"],
-      }}
-      transition={{
-        repeat: Infinity,
-        duration: 2,
-        ease: "linear",
-        times: [0, 0.5, 1],
-      }}
-    >
-      <Brain className="h-[15px] w-[15px] shrink-0" strokeWidth={1.5} />
-    </motion.span>
+    <span className={cn("relative inline-flex items-center justify-center", className)} aria-hidden>
+      <svg width="0" height="0" className="absolute">
+        <defs>
+          <motion.linearGradient
+            id="brain-shimmer"
+            initial={{ x1: "200%", y1: "0%", x2: "300%", y2: "0%" }}
+            animate={{ x1: "-100%", y1: "0%", x2: "0%", y2: "0%" }}
+            transition={{
+              repeat: Infinity,
+              duration: 2.5,
+              ease: "linear",
+            }}
+          >
+            <stop offset="0%" stopColor="#606060" />
+            <stop offset="35%" stopColor="#606060" />
+            <stop offset="50%" stopColor="#b0b0b0" />
+            <stop offset="75%" stopColor="#606060" />
+            <stop offset="100%" stopColor="#606060" />
+          </motion.linearGradient>
+        </defs>
+      </svg>
+      <Brain className="h-[15px] w-[15px] shrink-0" stroke="url(#brain-shimmer)" strokeWidth={1.5} />
+    </span>
   );
 }
 
@@ -43,7 +50,7 @@ export function ShiningText({
         className={cn(
           "inline-block",
           preset === "thinkingChat"
-            ? "text-[13px] font-normal text-slate-700"
+            ? "text-[15px] sm:text-[16px] font-medium text-slate-700"
             : "font-medium text-slate-800",
           className,
         )}
@@ -55,9 +62,9 @@ export function ShiningText({
 
   if (preset === "thinkingChat") {
     return (
-      <motion.h1
+      <motion.span
         className={cn(
-          "bg-[linear-gradient(110deg,#404040,35%,#fff,50%,#404040,75%,#404040)] bg-[length:200%_100%] bg-clip-text text-base font-regular text-transparent inline-block",
+          "bg-[linear-gradient(110deg,#606060,35%,#b0b0b0,50%,#606060,75%,#606060)] bg-[length:200%_100%] bg-clip-text text-[15px] sm:text-[16px] font-medium text-transparent inline-block leading-none",
           className,
         )}
         initial={{ backgroundPosition: "200% 0" }}
@@ -69,7 +76,7 @@ export function ShiningText({
         }}
       >
         {text}
-      </motion.h1>
+      </motion.span>
     );
   }
 

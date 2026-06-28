@@ -15,6 +15,7 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@cline/sdk": "^0.0.52",
     "@monaco-editor/react": "^4.7.0",
     "@playwright/test": "^1.59.1",
     "@radix-ui/react-dropdown-menu": "^2.1.17",
@@ -23,6 +24,7 @@
     "@tailwindcss/vite": "^4.1.14",
     "@types/react-syntax-highlighter": "^15.5.13",
     "@vitejs/plugin-react": "^5.0.4",
+    "cline": "^3.0.30",
     "clsx": "^2.1.1",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
@@ -50,5 +52,21 @@
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
-  }
+  },
+  "description": "<div align=\"center\"> <img width=\"1200\" height=\"475\" alt=\"GHBanner\" src=\"https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6\" /> </div>",
+  "main": "fix-test.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Redlook096/Clyra-AI-Final.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Redlook096/Clyra-AI-Final/issues"
+  },
+  "homepage": "https://github.com/Redlook096/Clyra-AI-Final#readme"
 }

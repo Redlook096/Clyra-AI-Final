@@ -2,15 +2,30 @@ import { AnimatePresence, motion } from "framer-motion";
 import { AlertTriangle, RotateCcw, Wand2 } from "lucide-react";
 import type { PreviewError } from "../../../../types/vibe-preview";
 
+import { useState, useEffect } from "react";
+
 export function PreviewErrorOverlay({
   error,
   onRestart,
   onOpenLogs,
+  onAutoFix,
 }: {
   error?: PreviewError;
   onRestart: () => void;
   onOpenLogs: () => void;
+  onAutoFix?: () => void;
 }) {
+  const [autoFixing, setAutoFixing] = useState(false);
+
+  useEffect(() => {
+    if (error && onAutoFix && !autoFixing) {
+      const t = setTimeout(() => {
+        setAutoFixing(true);
+        onAutoFix();
+      }, 1500);
+      return () => clearTimeout(t);
+    }
+  }, [error, onAutoFix, autoFixing]);
   return (
     <AnimatePresence>
       {error && (
@@ -47,9 +62,12 @@ export function PreviewErrorOverlay({
               </div>
             </div>
             <div className="mt-5 flex flex-wrap gap-2">
-              <button className="inline-flex items-center gap-2 rounded-full bg-slate-950 px-4 py-2.5 text-[12px] font-bold text-white">
+              <button
+                onClick={() => { setAutoFixing(true); onAutoFix?.(); }}
+                className="inline-flex items-center gap-2 rounded-full bg-slate-950 px-4 py-2.5 text-[12px] font-bold text-white"
+              >
                 <Wand2 className="h-3.5 w-3.5" />
-                Ask AI to fix
+                {autoFixing ? "Auto-fixing..." : "Ask AI to fix"}
               </button>
               <button
                 onClick={onRestart}

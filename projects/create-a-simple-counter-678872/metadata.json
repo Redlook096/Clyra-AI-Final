@@ -1,0 +1,12 @@
+{
+  "id": "create-a-simple-counter-678872",
+  "name": "Create a simple counter",
+  "prompt": "Create a simple counter",
+  "mode": "plan",
+  "status": "Ready",
+  "createdAt": "2026-06-25T03:06:32.576Z",
+  "updatedAt": "2026-06-25T03:06:33.108Z",
+  "smartRoute": "Tiny edit",
+  "lastBuildStatus": "ready",
+  "lastReviewStatus": "passed"
+}

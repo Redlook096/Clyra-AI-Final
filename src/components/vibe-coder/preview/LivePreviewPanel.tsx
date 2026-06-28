@@ -14,6 +14,7 @@ import { PreviewEmptyState } from "./PreviewEmptyState";
 import { PreviewErrorOverlay } from "./PreviewErrorOverlay";
 import { PreviewIframe } from "./PreviewIframe";
 import { PreviewStatusOverlay } from "./PreviewStatusOverlay";
+import { PreviewHealthStatus } from "./PreviewHealthStatus";
 
 interface VibeProjectPreviewTarget {
   id: string;
@@ -49,9 +50,11 @@ function displayPreviewUrl(url: string) {
 export function LivePreviewPanel({
   project,
   className,
+  onFixError,
 }: {
   project: VibeProjectPreviewTarget | null;
   className?: string;
+  onFixError?: (errMsg: string) => void;
 }) {
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
   const [session, setSession] = useState<PreviewSession | null>(null);
@@ -208,13 +211,13 @@ export function LivePreviewPanel({
   return (
     <motion.aside
       layout
-      initial={{ opacity: 0, x: 42, scale: 0.982 }}
+      initial={{ opacity: 0, x: 60, scale: 0.97 }}
       animate={{ opacity: 1, x: 0, scale: 1 }}
-      exit={{ opacity: 0, x: 36, scale: 0.982 }}
-      transition={{ duration: 0.62, ease: [0.16, 1, 0.3, 1] }}
+      exit={{ opacity: 0, x: 48, scale: 0.975 }}
+      transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
       className={cn(
         "group flex min-w-0 flex-col overflow-hidden rounded-[34px] border border-slate-200/80 bg-white/88 shadow-[0_28px_100px_rgba(15,23,42,0.08)] backdrop-blur-xl",
-        !isFullscreen && "sticky top-0 h-[calc(100vh-6rem)] min-h-[620px]",
+        !isFullscreen && "sticky top-0 h-[calc(100vh-6rem)] min-h-[580px]",
         isFullscreen &&
           "fixed inset-4 top-4 z-[240] h-auto min-h-0 rounded-[32px] shadow-[0_38px_130px_rgba(15,23,42,0.16)]",
         className,
@@ -250,7 +253,9 @@ export function LivePreviewPanel({
         onToggleFullscreen={() => setIsFullscreen((value) => !value)}
       />
 
+      {/* Preview viewport — overflow-hidden so iframe never causes outer scroll */}
       <div className="relative min-h-0 flex-1 overflow-hidden bg-white">
+        <PreviewHealthStatus status={session?.status === "runtime_error" ? "runtime_error" : session?.status === "server_crashed" ? "server_crashed" : session?.status === "ready" ? "ready" : "idle"} />
         <motion.div
           layout
           className="mx-auto h-full max-w-full overflow-hidden bg-white"
@@ -272,6 +277,7 @@ export function LivePreviewPanel({
           error={error}
           onRestart={restartPreview}
           onOpenLogs={() => setShowLogs(true)}
+          onAutoFix={() => onFixError?.(error ? `${error.title}: ${error.message}` : "Unknown error")}
         />
       </div>
 

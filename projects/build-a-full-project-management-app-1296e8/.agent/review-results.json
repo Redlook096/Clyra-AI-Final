@@ -1,0 +1,14 @@
+{
+  "status": "passed",
+  "reviewer": "Review Agent",
+  "checkedAt": "2026-06-26T09:53:05.249Z",
+  "checks": [
+    "plan.md saved",
+    "AGENTS.md saved",
+    "project files saved",
+    "checkpoint exists",
+    "preview-ready files exist",
+    "rollback path recorded"
+  ],
+  "issues": []
+}

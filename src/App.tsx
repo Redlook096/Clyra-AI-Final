@@ -186,17 +186,11 @@ const AnimatedMessage = ({
 
   // Robust heuristics to detect if the response is an email or structured notes, ignoring preamble.
   const isEmail =
-    /Subject:\s*.+/i.test(content) ||
-    /draft email/i.test(content) ||
-    /(?:Hi|Dear|Hello)\s+[\w\s]+,/i.test(content);
+    /^(?:Subject:|To:|From:)\s*.+/im.test(content) ||
+    /^(?:Hi|Dear|Hello)\s+[\w\s]+,\s*\n/i.test(content);
+
   const isNote =
-    /(?:Meeting Notes?|Summary|Here.*notes|notes:|#+\s*.*Notes?)/i.test(
-      content,
-    ) ||
-    /(?:Quick overview|Key Points|Main Notes|Final takeaway|Actions\s*\/\s*Next Steps|^#\s*📘)/im.test(
-      content,
-    ) ||
-    (/^\s*(-|\*)\s+/m.test(content) && content.length > 50 && !isEmail);
+    /^\s*#{1,3}\s+(?:Meeting Notes|Notes|Summary Notes|Session Notes)\b/i.test(content);
   const useDocumentUI = (isEmail || isNote) && content.length > 5;
 
   let preamble = "";

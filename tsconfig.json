@@ -22,6 +22,8 @@
     "Clyra-AI-Final",
     "node_modules",
     "vendor",
-    "vibe-sandbox"
+    "vibe-sandbox",
+    "temp-repo",
+    "projects"
   ]
 }

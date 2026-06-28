@@ -10,6 +10,8 @@ import {
 } from "motion/react";
 import { ChevronDown } from "lucide-react";
 import { ShiningText } from "@/components/ShiningText";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
 import { cn } from "@/lib/utils";
 
 const LINE_PX = 20;
@@ -178,7 +180,7 @@ export function VibeMiniCodeBox({
     if (revealed < code.length) {
       const left = code.length - revealed;
       const step =
-        left > 8000 ? 260 : left > 3500 ? 150 : left > 1500 ? 82 : 34;
+        left > 8000 ? 500 : left > 3500 ? 300 : left > 1500 ? 150 : 80;
       rafRef.current = window.requestAnimationFrame(() => {
         setRevealed((r) => Math.min(r + step, code.length));
       });
@@ -207,7 +209,7 @@ export function VibeMiniCodeBox({
     if (overflow <= 4) return;
     const targetTop = el.scrollHeight - el.clientHeight;
     if (Math.abs(el.scrollTop - targetTop) < 2) return;
-    el.scrollTo({ top: targetTop, behavior: "smooth" });
+    el.scrollTo({ top: targetTop, behavior: "auto" });
   }, [archived, revealed, collapsed, active]);
 
   const shown = code.slice(0, revealed);
@@ -369,6 +371,7 @@ export function VibeMiniCodeBox({
                 height: { duration: 0.42, ease: [0.22, 1, 0.36, 1] },
                 opacity: { duration: 0.24 },
               }}
+              layout
               className="overflow-hidden border-t border-slate-100/70 bg-white/35"
             >
               <div
@@ -383,26 +386,20 @@ export function VibeMiniCodeBox({
                     "linear-gradient(to bottom, transparent 0%, #000 10px, #000 calc(100% - 10px), transparent 100%)",
                 }}
               >
-                {lines.length === 0 ? (
+                {shown.length === 0 ? (
                   <div className="min-h-[20px]" aria-hidden />
                 ) : (
-                  lines.map((line, i) => (
-                    <motion.div
-                      key={`line-${i}`}
-                      layout="position"
-                      initial={{ opacity: 0, y: 5 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-                      className="flex min-h-[20px] gap-2"
-                    >
-                      <span className="w-8 shrink-0 select-none text-right font-mono text-[10px] tabular-nums leading-[20px] text-slate-400">
-                        {i + 1}
-                      </span>
-                      <span className="min-w-0 flex-1 break-words font-mono text-[12px] leading-[20px] text-slate-700 whitespace-pre-wrap">
-                        {line}
-                      </span>
-                    </motion.div>
-                  ))
+                  <SyntaxHighlighter
+                    language={file.split('.').pop() === 'tsx' || file.split('.').pop() === 'ts' ? 'typescript' : file.split('.').pop() || 'javascript'}
+                    style={oneLight}
+                    PreTag="div"
+                    customStyle={{ background: "transparent", margin: 0, padding: 0, fontSize: "12px", lineHeight: "20px" }}
+                    wrapLines={true}
+                    showLineNumbers={true}
+                    lineNumberStyle={{ minWidth: "32px", paddingRight: "8px", color: "#94a3b8", textAlign: "right", border: "none" }}
+                  >
+                    {shown}
+                  </SyntaxHighlighter>
                 )}
               </div>
             </motion.div>

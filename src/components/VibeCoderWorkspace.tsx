@@ -1,332 +1,1110 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { useCallback, useEffect, useState, useRef } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { AiOrb, type OrbColorTheme } from "./AiOrb";
+type HarnessMode = "plan" | "fast";
 import {
+  AlertTriangle,
+  Brain,
   Check,
+  CheckCircle2,
   ChevronDown,
-  ChevronRight,
-  Code2,
-  Copy,
+  Eye,
   FileCode2,
-  FolderKanban,
+  GitBranch,
+  LoaderCircle,
   Paperclip,
-  Pencil,
-  Play,
-  RefreshCw,
+  Rocket,
   Send,
   Sparkles,
-  Trash2,
-  X,
+  TerminalSquare,
 } from "lucide-react";
-import { AiOrb, type OrbColorTheme } from "./AiOrb";
-import { ShiningBrainIcon, ShiningText } from "./ShiningText";
-import { VibeMiniCodeBox } from "./vibe/VibeMiniCodeBox";
-import { LivePreviewPanel } from "./vibe-coder/preview/LivePreviewPanel";
 import { cn } from "../lib/utils";
 import { buildVibePreviewSrcDoc } from "../lib/buildVibePreviewSrcDoc";
-import {
-  getVisibleThoughtPreview,
-  type VisibleThoughtPhase,
-} from "../../lib/vibe-coder/llm/visible-thought-preview";
 
-type HarnessMode = "plan" | "fast";
-type VibePhase = "idle" | "thinking" | "plan-ready" | "building" | "done";
-type ThoughtPhase = VisibleThoughtPhase;
+// --- New Imports for the Advanced Workspace ---
+import { useVibeCoderWorkspace } from "../hooks/useVibeCoderWorkspace";
+import { ThinkingStatus } from "./vibe-coder/thinking/ThinkingStatus";
+import { MiniCodeBoxQueue } from "./vibe-coder/code/MiniCodeBoxQueue";
+import { LivePreviewPanel } from "./vibe-coder/preview/LivePreviewPanel";
 
-interface VibeProject {
-  id: string;
-  name: string;
-  prompt: string;
-  mode: HarnessMode;
-  status: "Draft" | "Building" | "Ready" | "Failed";
-  createdAt: string;
-  updatedAt: string;
+// Fallback/Mock Composer for the Welcome Page
+
+// Relative time util
+function relativeTime(iso: string) {
+  const d = new Date(iso);
+  const diff = Date.now() - d.getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "Just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
 }
 
-interface VibePlanResponse {
+const isProjectPreviewFile = (path: string) =>
+  path.endsWith("index.html") || path.endsWith(".css") || path.endsWith(".js") || path.endsWith(".tsx");
+
+type AgentActivityStatus = "pending" | "active" | "success" | "warning" | "error" | "cancelled";
+type AgentActivityType = "stage" | "plan" | "file" | "terminal" | "preview" | "checkpoint" | "error" | "complete";
+
+type AgentActivityItem = {
+  id: string;
+  type: AgentActivityType;
+  status: AgentActivityStatus;
   title: string;
-  summary: string;
-  markdown: string;
-  taskGraph: Array<{ id: string; name: string; description: string }>;
-  starterFiles: Record<string, string>;
-}
-
-interface VibePatch {
-  file: string;
-  added: number;
-  removed: number;
-  code: string;
-  reason: string;
-}
-
-interface PlanComment {
-  id: string;
-  quote: string;
-  note: string;
-}
-
-type ProjectActionDialog =
-  | { type: "rename"; project: VibeProject; draftName: string }
-  | { type: "delete"; project: VibeProject };
-
-const PLAN_PHASES: ThoughtPhase[] = [
-  "request_reading",
-  "project_scanning",
-  "framework_detection",
-  "package_detection",
-  "ui_detection",
-  "plan_generating",
-  "file_tree_generating",
-  "task_graph_generating",
-  "plan_refining",
-  "plan_ready",
-];
-
-const BUILD_PHASES: ThoughtPhase[] = [
-  "plan_approved",
-  "checkpointing",
-  "task_starting",
-  "file_editing",
-  "file_generating",
-  "validation",
-  "error_fixing",
-  "preview_refreshing",
-  "final_review",
-];
-
-const isProjectPreviewFile = (path: string) => {
-  const normalized = path.replace(/^\/+/, "");
-  if (
-    normalized.includes("node_modules/") ||
-    normalized.includes(".vite/") ||
-    normalized.includes("dist/") ||
-    normalized.includes("build/") ||
-    normalized.includes(".next/")
-  ) {
-    return false;
-  }
-
-  return (
-    /(^|\/)(src|app|pages|components|lib)\//.test(normalized) ||
-    /(^|\/)(App|main|index)\.(tsx|jsx|ts|js)$/.test(normalized)
-  );
+  description?: string;
+  timestamp: number;
+  durationMs?: number;
+  details?: string;
+  filePath?: string;
+  command?: string;
 };
 
-function formatTime(ms: number) {
+function formatElapsed(ms: number) {
   const total = Math.max(0, Math.floor(ms / 1000));
   const minutes = Math.floor(total / 60);
   const seconds = total % 60;
+  if (minutes === 0) return `${seconds}s`;
   return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
-function relativeTime(iso: string) {
-  const delta = Date.now() - new Date(iso).getTime();
-  const minutes = Math.max(1, Math.round(delta / 60000));
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.round(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.round(hours / 24)}d ago`;
+function cleanActivityText(text: string) {
+  return text.replace(/\s+/g, " ").replace(/\.{3,}$/g, "").trim();
 }
 
-function countLines(source: string) {
-  if (!source) return 0;
-  return source.split("\n").length;
+function stageLabel(stage: string) {
+  const labels: Record<string, string> = {
+    "task-created": "Starting",
+    "inspecting-existing-project": "Inspecting",
+    "writing-plan-md": "Planning",
+    "extracting-file-queue": "Queueing",
+    planning: "Plan review",
+    "creating-checkpoint": "Checkpointing",
+    "generating-file": "Coding",
+    "editing-file": "Editing",
+    "running-command": "Checking",
+    "starting-preview": "Previewing",
+    "validating-preview": "Preview ready",
+    complete: "Complete",
+    failed: "Failed",
+    cancelled: "Cancelled",
+  };
+  return labels[stage] ?? "Working";
 }
 
-function featureChips(prompt: string) {
-  const lower = prompt.toLowerCase();
-  if (lower.includes("calculator")) {
-    return ["Working keypad", "Live result", "Clear/delete", "Responsive shell"];
-  }
-  if (lower.includes("landing") || lower.includes("website")) {
-    return ["Navbar", "Hero", "Feature grid", "CTA", "Responsive layout"];
-  }
-  return ["Plan.md", "Project files", "Preview-ready UI", "Validation notes"];
-}
-
-function planPreviewText(plan: VibePlanResponse | null) {
-  if (!plan) return "";
-  return plan.markdown
-    .split("\n")
-    .filter((line) => line.trim() && !line.startsWith("|"))
-    .slice(0, 18)
-    .join("\n");
-}
-
-function buildPatches(files: Record<string, string>): VibePatch[] {
-  return Object.entries(files).map(([file, code]) => ({
-    file,
-    code,
-    added: countLines(code),
-    removed: 0,
-    reason:
-      file === "plan.md"
-        ? "Saved the approved build plan."
-        : file.endsWith(".css")
-          ? "Added the visual system and responsive styling."
-          : file.endsWith("App.tsx")
-            ? "Created the main functional product surface."
-            : "Added project support file.",
-  }));
-}
-
-async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
-    },
-  });
-  if (!response.ok) {
-    const text = await response.text();
-    throw new Error(text || `Request failed: ${response.status}`);
-  }
-  return (await response.json()) as T;
-}
-
-function useVibeAutoResizeTextarea({
-  value,
-  minHeight = 92,
-  maxHeight = 124,
+function buildActivityItems({
+  state,
+  planApproved,
 }: {
-  value: string;
-  minHeight?: number;
-  maxHeight?: number;
+  state: ReturnType<typeof useVibeCoderWorkspace>["state"];
+  planApproved: boolean;
 }) {
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const items: AgentActivityItem[] = [];
+  const startedAt = state.startedAt ?? Date.now();
+  const seenThoughts = new Set<string>();
+  const latestLineId = state.thinkingLines[state.thinkingLines.length - 1]?.id;
 
-  const resize = useCallback(() => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-
-    window.requestAnimationFrame(() => {
-      textarea.style.height = "auto";
-      if (textarea.value.length === 0) {
-        textarea.style.height = `${minHeight}px`;
-        textarea.style.overflowY = "hidden";
-        return;
-      }
-      const nextHeight = Math.max(
-        minHeight,
-        Math.min(textarea.scrollHeight, maxHeight),
-      );
-      textarea.style.height = `${nextHeight}px`;
-      textarea.style.overflowY =
-        textarea.scrollHeight > maxHeight ? "auto" : "hidden";
+  for (const line of state.thinkingLines) {
+    const text = cleanActivityText(line.text);
+    if (!text || seenThoughts.has(text)) continue;
+    seenThoughts.add(text);
+    items.push({
+      id: `thought-${line.id}`,
+      type: "stage",
+      status: line.id === latestLineId && state.stage !== "complete" && state.stage !== "failed" ? "active" : "success",
+      title: text,
+      description: line.id === latestLineId ? "Current agent focus." : "Completed agent step.",
+      timestamp: line.timestamp,
     });
-  }, [maxHeight, minHeight]);
+  }
 
-  useEffect(() => {
-    resize();
-  }, [resize, value]);
+  if (state.planMd) {
+    items.push({
+      id: "plan-md",
+      type: "plan",
+      status: planApproved ? "success" : "active",
+      title: planApproved ? "PLAN.md approved" : "PLAN.md ready for review",
+      description: planApproved
+        ? "The approved plan is now the source of truth for file generation."
+        : "Review the plan before implementation starts.",
+      timestamp: startedAt + 1200,
+      filePath: "PLAN.md",
+    });
+  }
 
-  useEffect(() => {
-    window.addEventListener("resize", resize);
-    return () => window.removeEventListener("resize", resize);
-  }, [resize]);
+  if (state.fileQueue.length > 0) {
+    items.push({
+      id: "file-queue",
+      type: "file",
+      status: planApproved ? "success" : "pending",
+      title: "File queue prepared",
+      description: `${state.fileQueue.length} files queued from PLAN.md.`,
+      timestamp: startedAt + 1600,
+    });
+  }
 
-  return { textareaRef, resize };
+  for (const file of Object.values(state.files)) {
+    items.push({
+      id: `file-${file.path}`,
+      type: "file",
+      status: file.status === "error" ? "error" : file.status === "complete" ? "success" : "active",
+      title: `${file.status === "complete" ? file.action === "edit" ? "Edited" : "Created" : file.action === "edit" ? "Editing" : "Generating"} ${file.path}`,
+      description: file.status === "complete"
+        ? `${file.added ?? 0} additions, ${file.removed ?? 0} removals.`
+        : "Streaming through the existing mini code box.",
+      timestamp: startedAt + 2200 + items.length * 70,
+      filePath: file.path,
+    });
+  }
+
+  const commandLogs = state.terminalLogs.filter((log) => log.command || log.output.includes("Command exited"));
+  commandLogs.forEach((log, index) => {
+    const failed = /Command exited with code (?!0\b)/.test(log.output);
+    const passed = log.output.includes("Command exited with code 0");
+    items.push({
+      id: `terminal-${log.id}`,
+      type: "terminal",
+      status: failed ? "error" : passed ? "success" : "active",
+      title: log.command ? log.output.replace(/^>\s*/, "") : passed ? "Build check passed" : failed ? "Build check failed" : "Terminal output",
+      description: passed ? "Command completed successfully." : failed ? "The harness will pause or patch before continuing." : "Running real terminal command.",
+      timestamp: log.timestamp,
+      command: log.command,
+      details: log.output,
+    });
+  });
+
+  for (const checkpoint of state.checkpoints) {
+    items.push({
+      id: `checkpoint-${checkpoint.id}`,
+      type: "checkpoint",
+      status: "success",
+      title: "Checkpoint created",
+      description: checkpoint.label,
+      timestamp: checkpoint.createdAt,
+    });
+  }
+
+  if (state.preview.status === "starting") {
+    items.push({
+      id: "preview-starting",
+      type: "preview",
+      status: "active",
+      title: "Starting live preview",
+      description: "Detecting the project dev server and preview URL.",
+      timestamp: Date.now(),
+    });
+  }
+
+  if (state.preview.status === "ready") {
+    items.push({
+      id: "preview-ready",
+      type: "preview",
+      status: "success",
+      title: "Preview ready",
+      description: state.preview.url ? `Loaded ${state.preview.url}.` : "The project is running in live preview.",
+      timestamp: Date.now(),
+    });
+  }
+
+  if (state.error) {
+    items.push({
+      id: "task-error",
+      type: "error",
+      status: "error",
+      title: "Build paused",
+      description: state.error,
+      timestamp: state.completedAt ?? Date.now(),
+    });
+  }
+
+  if (state.stage === "complete") {
+    items.push({
+      id: "task-complete",
+      type: "complete",
+      status: "success",
+      title: "Build complete",
+      description: `${Object.keys(state.files).length} files streamed, ${state.terminalLogs.length} terminal events recorded, preview ${state.preview.status}.`,
+      timestamp: state.completedAt ?? Date.now(),
+    });
+  }
+
+  return items;
 }
 
-function ThinkingStep({
-  active,
-  thoughtText,
-  thoughtPhase,
-  startedAt,
-  finishedMs,
-}: {
-  active: boolean;
-  thoughtText: string;
-  thoughtPhase: ThoughtPhase;
-  startedAt: number;
-  finishedMs?: number;
-}) {
-  const [now, setNow] = useState(Date.now());
-  const [hovered, setHovered] = useState(false);
+export default function VibeCoderWorkspace({ orbColorTheme = "default" }: { orbColorTheme?: OrbColorTheme }) {
+  // New Workspace State
+  const { state, startTask, cancelTask, approvePlan } = useVibeCoderWorkspace("project-advanced-vibe");
+  
+  // Existing Welcome Page State
+  const [mode, setMode] = useState<"plan" | "fast">("plan");
+  const [promptInput, setPromptInput] = useState("");
+  const [projects, setProjects] = useState<any[]>([]);
+  const [projectPreviews, setProjectPreviews] = useState<Record<string, string>>({});
+  const [attachedFiles, setAttachedFiles] = useState<string[]>([]);
+  const [planExpanded, setPlanExpanded] = useState(false);
+  const [planApproved, setPlanApproved] = useState(false);
+  const fileRef = useRef<HTMLInputElement | null>(null);
+  const activeScrollRef = useRef<HTMLDivElement | null>(null);
+  const [elapsedNow, setElapsedNow] = useState(Date.now());
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false);
+
+  const fetchJson = async <T,>(url: string, init?: RequestInit): Promise<T> => {
+    const response = await fetch(url, init);
+    if (!response.ok) throw new Error("Fetch failed");
+    return response.json();
+  };
+
+  const loadProjects = useCallback(async () => {
+    try {
+      const data = await fetchJson<{ projects: any[] }>("/api/vibe/projects");
+      setProjects(data.projects ?? []);
+    } catch (error) {
+      console.warn("Failed to load Vibe projects", error);
+    }
+  }, []);
 
   useEffect(() => {
-    if (!active) return;
-    const id = window.setInterval(() => setNow(Date.now()), 250);
-    return () => window.clearInterval(id);
-  }, [active]);
+    void loadProjects();
+  }, [loadProjects]);
 
-  const elapsed = active ? now - startedAt : (finishedMs ?? 0);
+  useEffect(() => {
+    if (state.stage === "idle") return;
+    const timer = window.setInterval(() => setElapsedNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [state.stage]);
 
+  const handleActiveScroll = useCallback(() => {
+    const element = activeScrollRef.current;
+    if (!element) return;
+    const nearBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 140;
+    setShowJumpToLatest(!nearBottom);
+  }, []);
+
+  const jumpToLatest = useCallback(() => {
+    const element = activeScrollRef.current;
+    if (!element) return;
+    element.scrollTo({ top: element.scrollHeight, behavior: "smooth" });
+    setShowJumpToLatest(false);
+  }, []);
+
+  const activeActivityItems = buildActivityItems({ state, planApproved });
+  const activeScrollSignal = [
+    state.stage,
+    state.thinkingLines.length,
+    activeActivityItems.length,
+    Object.keys(state.files).length,
+    state.terminalLogs.length,
+    state.planMd.length,
+    state.preview.status,
+    planApproved ? "approved" : "reviewing",
+  ].join(":");
+
+  useEffect(() => {
+    if (state.stage === "idle") return;
+    const element = activeScrollRef.current;
+    if (!element) return;
+    const nearBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 170;
+    if (!nearBottom) {
+      setShowJumpToLatest(true);
+      return;
+    }
+    const frame = window.requestAnimationFrame(() => {
+      element.scrollTo({ top: element.scrollHeight, behavior: "smooth" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeScrollSignal, state.stage]);
+
+  useEffect(() => {
+    const recent = projects.slice(0, 3).filter((item) => !projectPreviews[item.id]);
+    if (recent.length === 0) return;
+    let cancelled = false;
+    Promise.all(
+      recent.map(async (item) => {
+        try {
+          const data = await fetchJson<{ files: Array<{ path: string; content: string }> }>(`/api/vibe/projects/${item.id}`);
+          const filesByPath = Object.fromEntries(
+            data.files.filter((file) => isProjectPreviewFile(file.path)).map((file) => [file.path, file.content])
+          );
+          return [item.id, buildVibePreviewSrcDoc(filesByPath)] as const;
+        } catch {
+          return [item.id, ""] as const;
+        }
+      })
+    ).then((entries) => {
+      if (cancelled) return;
+      setProjectPreviews((current) => {
+        const next = { ...current };
+        for (const [id, srcDoc] of entries) { next[id] = srcDoc; }
+        return next;
+      });
+    });
+    return () => { cancelled = true; };
+  }, [projectPreviews, projects]);
+
+  const handleSubmit = async (overridePrompt?: string) => {
+    const cleanPrompt = (typeof overridePrompt === "string" ? overridePrompt : promptInput).trim();
+    if (!cleanPrompt) return;
+    setPlanExpanded(false);
+    setPlanApproved(!mode || mode === "fast");
+    await startTask(cleanPrompt, mode === "plan");
+    setPromptInput("");
+  };
+
+  if (state.stage !== "idle") {
+    const hasSuccessfulBuild = state.terminalLogs.some((log) =>
+      log.output.includes("Command exited with code 0"),
+    );
+    const shouldShowPreview =
+      state.preview.status === "ready" ||
+      state.stage === "complete" ||
+      hasSuccessfulBuild;
+
+    const generatedFiles = Object.values(state.files);
+    const canReviewPlan = Boolean(state.planMd) && state.planMode;
+    const showBuildStream = !state.planMode || planApproved;
+    const activityItems = activeActivityItems;
+    const checksRun = state.terminalLogs.filter((log) => log.command || log.output.includes("Command exited")).length;
+    const elapsedMs = state.startedAt ? (state.completedAt ?? elapsedNow) - state.startedAt : 0;
+    const thinkingIsResting =
+      state.stage === "complete" ||
+      (state.planMode && !planApproved && canReviewPlan);
+    const activeSummary =
+      state.stage === "complete"
+        ? "Finished with a passing build and live preview."
+        : state.stage === "failed"
+          ? state.error || "The build paused because an error was found."
+          : state.planMode && !planApproved && state.planMd
+            ? "Review the plan, expand it if needed, then approve to continue the build."
+            : "Building from the approved plan with file-by-file generation.";
+
+    return (
+      <div className="relative flex h-full min-h-0 w-full overflow-hidden bg-white text-slate-950">
+        <motion.section
+          layout
+          transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+          className={cn(
+            "flex min-h-0 flex-col transition-[width,max-width] duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]",
+            shouldShowPreview
+              ? "w-[38%] min-w-[410px] max-w-[520px] border-r border-slate-200/70"
+              : "mx-auto w-full max-w-[920px]",
+          )}
+        >
+          <div
+            ref={activeScrollRef}
+            onScroll={handleActiveScroll}
+            className="clyra-visible-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pb-52 pt-20 sm:px-8"
+          >
+            <AgentStatusHeader
+              prompt={state.prompt}
+              stage={state.stage}
+              elapsedMs={elapsedMs}
+              filesQueued={state.fileQueue.length}
+              filesChanged={generatedFiles.length}
+              checksRun={checksRun}
+              previewStatus={state.preview.status}
+            />
+
+            <motion.div
+              initial={{ opacity: 0, y: 24, scale: 0.985 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
+              className="ml-auto max-w-[78%] rounded-[26px] border border-slate-200/75 bg-white/92 px-5 py-3 text-left text-[15px] font-semibold leading-relaxed text-slate-900 shadow-[0_18px_52px_rgba(15,23,42,0.055)]"
+            >
+              {state.prompt}
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 14 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.12, duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
+              className="mt-8"
+            >
+              <ThinkingStatus
+                lines={state.thinkingLines}
+                stage={state.stage}
+                isComplete={thinkingIsResting}
+                hasError={state.stage === "failed"}
+              />
+              <p className="ml-6 max-w-[640px] text-[13px] font-medium leading-relaxed text-slate-700">
+                {activeSummary}
+              </p>
+            </motion.div>
+
+            <AgentActivityFeed items={activityItems} />
+
+            {canReviewPlan ? (
+              <PlanReviewCard
+                markdown={state.planMd}
+                expanded={planExpanded}
+                approved={planApproved}
+                onToggle={() => setPlanExpanded((value) => !value)}
+                onApprove={() => {
+                  setPlanApproved(true);
+                  setPlanExpanded(false);
+                  void approvePlan();
+                }}
+              />
+            ) : null}
+
+            {showBuildStream ? (
+              <div className="mt-5">
+                <MiniCodeBoxQueue files={generatedFiles} queueList={state.fileQueue} />
+              </div>
+            ) : null}
+
+            {showBuildStream && generatedFiles.length > 0 ? (
+              <GeneratedFilesSummary files={generatedFiles.map((file) => file.path)} />
+            ) : null}
+
+            {state.terminalLogs.length > 0 ? (
+              <TerminalTranscript logs={state.terminalLogs} />
+            ) : null}
+
+            {state.stage === "complete" ? (
+              <CompletionSummary
+                filesChanged={generatedFiles.length}
+                checksRun={checksRun}
+                previewUrl={state.preview.url}
+              />
+            ) : null}
+          </div>
+
+          <AnimatePresence>
+            {showJumpToLatest ? (
+              <motion.button
+                type="button"
+                onClick={jumpToLatest}
+                initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: 8, scale: 0.96 }}
+                transition={{ duration: 0.18, ease: "easeOut" }}
+                className="absolute bottom-28 left-1/2 z-30 -translate-x-1/2 rounded-full border border-slate-200/80 bg-white/92 px-3.5 py-2 text-[12px] font-bold text-slate-600 shadow-[0_14px_34px_rgba(15,23,42,0.08)] backdrop-blur-xl transition-colors hover:bg-slate-50 hover:text-slate-950"
+              >
+                Jump to latest
+              </motion.button>
+            ) : null}
+          </AnimatePresence>
+
+          <motion.div
+            layout
+            className="pointer-events-auto absolute bottom-6 left-1/2 z-20 w-full max-w-[760px] -translate-x-1/2 px-5 sm:px-8"
+          >
+            <Composer
+              compact
+              placeholder="Add a follow-up or ask for a change..."
+              value={promptInput}
+              onChange={setPromptInput}
+              onSubmit={handleSubmit}
+              mode={mode}
+              onModeChange={setMode}
+              onAttach={() => fileRef?.current?.click()}
+              disabled={!promptInput.trim()}
+              isGenerating={state.stage !== "complete" && state.stage !== "failed" && state.stage !== "cancelled"}
+            />
+          </motion.div>
+        </motion.section>
+
+        <AnimatePresence>
+          {shouldShowPreview ? (
+            <motion.aside
+              key="live-preview"
+              initial={{ opacity: 0, x: 80, scale: 0.985 }}
+              animate={{ opacity: 1, x: 0, scale: 1 }}
+              exit={{ opacity: 0, x: 80, scale: 0.985 }}
+              transition={{ duration: 0.58, ease: [0.22, 1, 0.36, 1] }}
+              className="min-w-0 flex-1 bg-white p-5"
+            >
+              <LivePreviewPanel
+                project={{ id: state.projectId, name: state.prompt.slice(0, 60) || "Vibe project", status: state.stage }}
+                onFixError={() => {}}
+              />
+            </motion.aside>
+          ) : null}
+        </AnimatePresence>
+      </div>
+    );
+  }
+
+  // IDLE WELCOME PAGE
+  return (
+    <div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-white">
+      <div className={cn("clyra-visible-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto px-5 sm:px-8", "pt-16")}>
+        <AnimatePresence mode="wait">
+          {state.stage === "idle" && (
+            <motion.section
+              key="welcome"
+              initial={{ opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
+              className="mx-auto flex min-h-full w-full max-w-[900px] translate-y-16 flex-col items-center justify-center pb-10 text-center"
+            >
+              <div className="mb-4 flex justify-center">
+                <AiOrb colorTheme={orbColorTheme} />
+              </div>
+              <h1 className="text-4xl font-semibold tracking-[-0.055em] text-slate-950 sm:text-5xl">
+                What should we build?
+              </h1>
+              <p className="mt-3 text-[15px] font-semibold text-slate-500 sm:text-base">
+                Plan, generate, validate, preview, save and reopen real Vibe projects.
+              </p>
+
+              <motion.div layoutId="composer-bar" className="mt-8 mb-6 w-full max-w-[900px] px-5 sm:px-8">
+                <Composer
+                  compact={false}
+                  placeholder="Tell the coding agent what to build..."
+                  value={promptInput}
+                  onChange={setPromptInput}
+                  onSubmit={handleSubmit}
+                  mode={mode}
+                  onModeChange={setMode}
+                  onAttach={() => fileRef?.current?.click()}
+                  disabled={!promptInput.trim()}
+                  isGenerating={false}
+                />
+              </motion.div>
+
+              <input
+                ref={fileRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={(event) => {
+                  setAttachedFiles(Array.from(event.target.files ?? []).map((file) => file.name));
+                  event.target.value = "";
+                }}
+              />
+
+              {attachedFiles.length > 0 && (
+                <div className="mt-3 flex flex-wrap justify-center gap-2">
+                  {attachedFiles.map((file) => (
+                    <span
+                      key={file}
+                      className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-500"
+                    >
+                      {file}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              <div className="mt-5 w-full max-w-[700px]">
+                <p className="mb-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-300">
+                  Recent projects
+                </p>
+                {projects.length === 0 ? (
+                  <div className="rounded-[26px] border border-dashed border-slate-200 bg-white/75 px-5 py-5 text-center text-[13px] font-semibold text-slate-400">
+                    Your recent projects will appear here.
+                  </div>
+                ) : (
+                  <div className="grid gap-2.5 sm:grid-cols-3">
+                    {projects.slice(0, 3).map((item) => (
+                      <article
+                        key={item.id}
+                        className="group relative aspect-square overflow-hidden rounded-[20px] border border-slate-200/70 bg-white/88 text-left shadow-[0_10px_28px_rgba(15,23,42,0.03)] transition-[border-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 hover:border-slate-300/80 hover:shadow-[0_16px_38px_rgba(15,23,42,0.05)]"
+                      >
+                        <button type="button" className="flex h-full w-full flex-col p-1.5 text-left">
+                          <div className="relative h-[76%] shrink-0 overflow-hidden rounded-[16px] border border-slate-200/70 bg-[linear-gradient(135deg,#ffffff_0%,#f8fafc_46%,#eef2f7_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.95)]">
+                            {projectPreviews[item.id] ? (
+                              <iframe
+                                title={`${item.name} preview`}
+                                srcDoc={projectPreviews[item.id]}
+                                sandbox="allow-scripts"
+                                loading="lazy"
+                                tabIndex={-1}
+                                className="pointer-events-none absolute left-1/2 top-1/2 h-[360px] w-[430px] origin-center -translate-x-1/2 -translate-y-1/2 scale-[0.47] border-0 bg-white"
+                              />
+                            ) : (
+                              <>
+                                <div className="absolute inset-x-3 top-3 h-2 rounded-full bg-white/90 shadow-sm" />
+                                <div className="absolute left-3 right-12 top-8 h-3 rounded-full bg-slate-200/65" />
+                                <div className="absolute left-3 top-14 h-12 w-[46%] rounded-[14px] bg-white/92 shadow-[0_10px_24px_rgba(15,23,42,0.045)]" />
+                                <div className="absolute right-3 top-14 h-12 w-[38%] rounded-[14px] bg-slate-100/90" />
+                                <div className="absolute bottom-3 left-3 right-3 h-7 rounded-[13px] bg-white/86 shadow-[0_8px_18px_rgba(15,23,42,0.035)]" />
+                              </>
+                            )}
+                            <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0)_58%,rgba(255,255,255,0.7)_100%)]" />
+                            <span className="absolute left-2.5 top-2.5 grid h-7 w-7 place-items-center rounded-[12px] border border-slate-200/70 bg-white/96 text-slate-600 shadow-[0_8px_18px_rgba(15,23,42,0.04)] opacity-90 transition-opacity group-hover:opacity-0">
+                              <FileCode2 className="h-3.5 w-3.5" />
+                            </span>
+                            <span
+                              className={cn(
+                                "absolute right-2.5 top-2.5 rounded-full px-2 py-0.5 text-[9.5px] font-bold opacity-90 transition-opacity group-hover:opacity-0",
+                                item.status === "Building" ? "bg-emerald-50 text-emerald-600" : "bg-white/88 text-slate-400"
+                              )}
+                            >
+                              {item.status === "Building" ? "Running" : item.status}
+                            </span>
+                          </div>
+                          <div className="flex min-h-0 flex-1 items-center justify-between gap-2 px-1.5 pb-1 pt-1.5">
+                            <div className="min-w-0">
+                              <p className="truncate text-[12.5px] font-bold leading-snug tracking-[-0.02em] text-slate-950">
+                                {item.name}
+                              </p>
+                              <p className="mt-0.5 text-[10px] font-semibold text-slate-400">
+                                {relativeTime(item.updatedAt)}
+                              </p>
+                            </div>
+                            <span className="shrink-0 text-[9.5px] font-bold text-slate-300">
+                              {item.mode === "plan" ? "Plan" : "Fast"}
+                            </span>
+                          </div>
+                        </button>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </motion.section>
+          )}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+}
+
+function AgentStatusHeader({
+  prompt,
+  stage,
+  elapsedMs,
+  filesQueued,
+  filesChanged,
+  checksRun,
+  previewStatus,
+}: {
+  prompt: string;
+  stage: string;
+  elapsedMs: number;
+  filesQueued: number;
+  filesChanged: number;
+  checksRun: number;
+  previewStatus: string;
+}) {
+  const active = !["complete", "failed", "cancelled"].includes(stage);
   return (
     <motion.div
-      initial={{ opacity: 0, y: 12 }}
+      layout
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
-      className="w-full max-w-[720px] self-start text-left"
+      transition={{ duration: 0.24, ease: "easeOut" }}
+      className="mb-6 rounded-[24px] border border-slate-200/75 bg-white/82 p-3 shadow-[0_16px_48px_rgba(15,23,42,0.045)] backdrop-blur-xl"
     >
-      <button
-        type="button"
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
-        className="flex items-center gap-2.5 rounded-full text-[13px] font-semibold text-slate-400 outline-none transition-colors hover:text-slate-600"
-      >
-        {active ? (
-          <ShiningBrainIcon />
-        ) : hovered ? (
-          <span className="grid h-[15px] w-[15px] place-items-center font-mono text-[15px] leading-none text-slate-500">
-            &gt;
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-[15px] border border-slate-200/75 bg-white text-slate-500">
+            {stage === "complete" ? <Rocket className="h-4 w-4" /> : <Brain className="h-4 w-4" />}
           </span>
-        ) : (
-          <span className="grid h-[15px] w-[15px] place-items-center text-slate-400">
-            <Check className="h-3.5 w-3.5" />
-          </span>
-        )}
-        {active ? (
-          <ShiningText
-            text="thinking"
-            preset="thinkingChat"
-            className="text-[13px] font-semibold"
-          />
-        ) : (
-          <span>thought</span>
-        )}
-        <span className="font-mono text-[12px] tabular-nums">
-          {formatTime(elapsed)}
+          <div className="min-w-0">
+            <p className="truncate text-[13px] font-bold tracking-[-0.01em] text-slate-950">
+              {prompt ? `Building ${prompt.slice(0, 52)}${prompt.length > 52 ? "..." : ""}` : "Vibe coder"}
+            </p>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] font-semibold text-slate-400">
+              <span>{formatElapsed(elapsedMs)}</span>
+              <span className="h-1 w-1 rounded-full bg-slate-300" />
+              <span>{filesQueued} queued</span>
+              <span className="h-1 w-1 rounded-full bg-slate-300" />
+              <span>{filesChanged} changed</span>
+              <span className="h-1 w-1 rounded-full bg-slate-300" />
+              <span>{checksRun} checks</span>
+              <span className="h-1 w-1 rounded-full bg-slate-300" />
+              <span>preview {previewStatus}</span>
+            </div>
+          </div>
+        </div>
+        <span
+          className={cn(
+            "inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.12em]",
+            active
+              ? "agent-soft-shimmer border-slate-200 bg-slate-50/70 text-slate-600"
+              : stage === "failed"
+                ? "border-rose-200 bg-rose-50 text-rose-600"
+                : "border-emerald-200 bg-emerald-50 text-emerald-600",
+          )}
+        >
+          {active ? <LoaderCircle className="h-3 w-3 animate-spin" /> : <CheckCircle2 className="h-3 w-3" />}
+          {stageLabel(stage)}
         </span>
-      </button>
-      <ThinkingUnderText
-        text={thoughtText}
-        phase={thoughtPhase}
-        isActive={active}
-      />
+      </div>
     </motion.div>
   );
 }
 
-function ThinkingUnderText({
-  text,
-  phase,
-  isActive,
+function AgentActivityFeed({ items }: { items: AgentActivityItem[] }) {
+  if (items.length === 0) return null;
+  return (
+    <div className="ml-6 mt-5 max-w-[720px]">
+      <div className="mb-2 flex items-center gap-2 px-1 text-[11px] font-black uppercase tracking-[0.16em] text-slate-300">
+        <Sparkles className="h-3.5 w-3.5" />
+        Activity
+      </div>
+      <div className="space-y-2.5">
+        <AnimatePresence initial={false}>
+          {items.map((item) => (
+            <AgentActivityRow key={item.id} item={item} />
+          ))}
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+}
+
+function AgentActivityRow({ item }: { item: AgentActivityItem }) {
+  const Icon =
+    item.type === "file" ? FileCode2 :
+    item.type === "terminal" ? TerminalSquare :
+    item.type === "preview" ? Eye :
+    item.type === "checkpoint" ? GitBranch :
+    item.type === "error" ? AlertTriangle :
+    item.type === "complete" ? Rocket :
+    item.type === "plan" ? FileCode2 :
+    Brain;
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 6, scale: 0.985 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -4, scale: 0.99 }}
+      transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+      className={cn(
+        "group relative overflow-hidden rounded-[20px] border bg-white/78 px-3.5 py-3 text-left shadow-[0_10px_30px_rgba(15,23,42,0.03)]",
+        item.status === "active" && "agent-soft-shimmer border-slate-200/90",
+        item.status === "success" && "border-slate-200/65",
+        item.status === "pending" && "border-slate-200/55 opacity-75",
+        item.status === "error" && "border-rose-200/90 bg-rose-50/45",
+      )}
+      style={{ contain: "layout paint" }}
+    >
+      <div className="flex items-start gap-3">
+        <span
+          className={cn(
+            "mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-[14px] border bg-white text-slate-400",
+            item.status === "active" && "border-slate-200 text-slate-600",
+            item.status === "success" && "border-emerald-100 text-emerald-600",
+            item.status === "error" && "border-rose-100 text-rose-500",
+          )}
+        >
+          {item.status === "active" ? <LoaderCircle className="h-4 w-4 animate-spin" /> : <Icon className="h-4 w-4" />}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="min-w-0 truncate text-[13px] font-bold tracking-[-0.01em] text-slate-800">
+              {item.title}
+            </p>
+            <span
+              className={cn(
+                "rounded-full px-2 py-0.5 text-[9.5px] font-black uppercase tracking-[0.1em]",
+                item.status === "active" && "bg-slate-100 text-slate-500",
+                item.status === "success" && "bg-emerald-50 text-emerald-600",
+                item.status === "pending" && "bg-slate-50 text-slate-400",
+                item.status === "error" && "bg-rose-100 text-rose-600",
+              )}
+            >
+              {item.status === "active" ? "active" : item.status}
+            </span>
+          </div>
+          {item.description ? (
+            <p className="mt-1 text-[12px] font-medium leading-relaxed text-slate-500">
+              {item.description}
+            </p>
+          ) : null}
+          {item.filePath ? (
+            <p className="mt-1 truncate font-mono text-[10.5px] font-semibold text-slate-400">
+              {item.filePath}
+            </p>
+          ) : null}
+        </div>
+        <span className="shrink-0 text-[10px] font-bold text-slate-300">
+          {relativeTime(new Date(item.timestamp).toISOString())}
+        </span>
+      </div>
+    </motion.div>
+  );
+}
+
+function CompletionSummary({
+  filesChanged,
+  checksRun,
+  previewUrl,
 }: {
-  text: string;
-  phase: ThoughtPhase;
-  isActive: boolean;
+  filesChanged: number;
+  checksRun: number;
+  previewUrl?: string;
 }) {
   return (
-    <div className="mt-2 ml-[25px] h-[40px] overflow-hidden">
-      <AnimatePresence mode="wait">
-        {isActive && text ? (
-          <motion.p
-            key={`${phase}-${text}`}
-            initial={{ opacity: 0, y: 8, filter: "blur(3px)" }}
-            animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-            exit={{ opacity: 0, y: -8, filter: "blur(3px)" }}
-            transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
-            className="m-0 max-w-[620px] text-[12.5px] font-medium leading-relaxed text-slate-500/80"
+    <motion.div
+      initial={{ opacity: 0, y: 10, scale: 0.99 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+      className="ml-6 mt-5 max-w-[720px] rounded-[26px] border border-emerald-200/70 bg-emerald-50/45 p-4 text-left shadow-[0_18px_46px_rgba(16,185,129,0.07)]"
+    >
+      <div className="flex items-center gap-3">
+        <span className="grid h-9 w-9 place-items-center rounded-[15px] border border-emerald-200 bg-white text-emerald-600">
+          <Rocket className="h-4 w-4" />
+        </span>
+        <div>
+          <p className="text-[14px] font-black text-slate-950">Build complete</p>
+          <p className="mt-1 text-[12px] font-semibold text-slate-500">
+            {filesChanged} files streamed, {checksRun} checks recorded, preview {previewUrl ? "ready" : "reported"}.
+          </p>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function PlanReviewCard({
+  markdown,
+  expanded,
+  approved,
+  onToggle,
+  onApprove,
+}: {
+  markdown: string;
+  expanded: boolean;
+  approved: boolean;
+  onToggle: () => void;
+  onApprove: () => void;
+}) {
+  const summary = markdown
+    .split("\n")
+    .filter((line) => line.trim() && !line.startsWith("#") && !line.startsWith("|"))
+    .slice(0, 3)
+    .join(" ");
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 16, scale: 0.985 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.36, ease: [0.22, 1, 0.36, 1] }}
+      className="ml-6 mt-5 max-w-[720px] overflow-hidden rounded-[28px] border border-slate-200/75 bg-white/90 p-4 text-left shadow-[0_20px_60px_rgba(15,23,42,0.055)] backdrop-blur-xl"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="grid h-7 w-7 place-items-center rounded-full border border-slate-200 bg-white text-slate-700">
+              {approved ? <Check className="h-3.5 w-3.5" /> : <FileCode2 className="h-3.5 w-3.5" />}
+            </span>
+            <p className="text-[13px] font-bold text-slate-950">
+              {approved ? "Plan approved" : "Plan ready"}
+            </p>
+          </div>
+          <p className="mt-3 line-clamp-3 max-w-[560px] text-[13px] font-medium leading-relaxed text-slate-500">
+            {summary || "The build plan is ready to review before implementation continues."}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={onToggle}
+            className="rounded-full border border-slate-200/80 bg-white px-3.5 py-2 text-[12px] font-bold text-slate-700 transition-colors hover:bg-slate-50 hover:text-slate-950"
           >
-            {text}
-          </motion.p>
+            {expanded ? "Collapse" : "Expand"}
+          </button>
+          {!approved ? (
+            <button
+              type="button"
+              onClick={onApprove}
+              className="rounded-full bg-slate-950 px-4 py-2 text-[12px] font-bold text-white shadow-[0_12px_30px_rgba(15,23,42,0.14)] transition-transform hover:-translate-y-0.5"
+            >
+              Approve
+            </button>
+          ) : null}
+        </div>
+      </div>
+      <AnimatePresence initial={false}>
+        {expanded ? (
+          <motion.div
+            key="plan-markdown"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+            className="overflow-hidden"
+          >
+            <pre className="clyra-visible-scrollbar mt-4 max-h-[380px] overflow-auto rounded-[22px] border border-slate-200/70 bg-slate-50/75 p-4 whitespace-pre-wrap text-[12px] font-medium leading-relaxed text-slate-700">
+              {markdown}
+            </pre>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+    </motion.div>
+  );
+}
+
+function GeneratedFilesSummary({ files }: { files: string[] }) {
+  if (files.length === 0) return null;
+
+  return (
+    <div className="ml-6 mt-4 max-w-[720px] rounded-[24px] border border-slate-200/70 bg-white/74 p-3 shadow-[0_14px_38px_rgba(15,23,42,0.035)]">
+      <p className="px-1 text-[11px] font-black uppercase tracking-[0.16em] text-slate-300">
+        Generated files
+      </p>
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {files.slice(0, 18).map((file) => (
+          <span
+            key={file}
+            className="rounded-full border border-slate-200/75 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-500"
+          >
+            {file}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function TerminalTranscript({ logs }: { logs: Array<{ id: string; output: string; command?: string }> }) {
+  const [expanded, setExpanded] = useState(false);
+  if (logs.length === 0) return null;
+  const latestCommand = [...logs].reverse().find((log) => log.command)?.command;
+  const passed = logs.some((log) => log.output.includes("Command exited with code 0"));
+  const failed = logs.some((log) => /Command exited with code (?!0\b)/.test(log.output));
+  const status = failed ? "Needs fix" : passed ? "Passed" : "Running";
+
+  return (
+    <div className="ml-6 mt-4 max-w-[720px] overflow-hidden rounded-[24px] border border-slate-200/75 bg-white/82 text-left shadow-[0_16px_42px_rgba(15,23,42,0.045)]">
+      <button
+        type="button"
+        onClick={() => setExpanded((value) => !value)}
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition-colors hover:bg-slate-50/70"
+      >
+        <span className="flex min-w-0 items-center gap-3">
+          <span className="grid h-8 w-8 shrink-0 place-items-center rounded-[14px] border border-slate-200 bg-white text-slate-500">
+            <TerminalSquare className="h-4 w-4" />
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate text-[13px] font-black text-slate-900">
+              {latestCommand || "Terminal"}
+            </span>
+            <span className="mt-0.5 block text-[11px] font-semibold text-slate-400">
+              {logs.length} log events · {expanded ? "hide output" : "expand output"}
+            </span>
+          </span>
+        </span>
+        <span
+          className={cn(
+            "shrink-0 rounded-full px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.1em]",
+            failed ? "bg-rose-50 text-rose-600" : passed ? "bg-emerald-50 text-emerald-600" : "agent-soft-shimmer bg-slate-100 text-slate-500",
+          )}
+        >
+          {status}
+        </span>
+      </button>
+      <AnimatePresence initial={false}>
+        {expanded ? (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+            className="overflow-hidden"
+          >
+            <div className="clyra-visible-scrollbar max-h-44 overflow-auto border-t border-slate-200/70 bg-slate-950 px-4 py-3 font-mono text-[11.5px] leading-relaxed text-slate-300">
+              {logs.map((log) => (
+                <p key={log.id} className={cn("whitespace-pre-wrap break-words", log.command && "text-sky-300")}>
+                  {log.output}
+                </p>
+              ))}
+            </div>
+          </motion.div>
         ) : null}
       </AnimatePresence>
     </div>
   );
 }
 
+// --- COMPOSER ---
+
+export function Composer({
+  value,
+  onChange,
+  onSubmit,
+  mode,
+  onModeChange,
+  onAttach,
+  disabled,
+  className,
+  compact = false,
+  isGenerating = false,
+  placeholder,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onSubmit: () => void;
+  mode: "plan" | "fast";
+  onModeChange: (mode: "plan" | "fast") => void;
+  onAttach: () => void;
+  disabled: boolean;
+  className?: string;
+  compact?: boolean;
+  isGenerating?: boolean;
+  placeholder?: string;
+}) {
+  const { textareaRef, resize } = useVibeAutoResizeTextarea({
+    value,
+    minHeight: compact ? 42 : 92,
+    maxHeight: compact ? 74 : 124,
+  });
+
+  return (
+    <div
+      className={cn(
+        "mx-auto flex w-full max-w-3xl flex-col rounded-[24px] border border-slate-200/80 bg-white/86 p-3 shadow-[0_22px_72px_rgba(15,23,42,0.065)] backdrop-blur-xl transition-[height,box-shadow,border-color] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)]",
+        className,
+      )}
+    >
+      <textarea
+        ref={textareaRef}
+        value={value}
+        onChange={(event) => {
+          onChange(event.target.value);
+          resize();
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && !event.shiftKey) {
+            event.preventDefault();
+            if (!disabled) onSubmit();
+          }
+        }}
+        rows={1}
+        placeholder={placeholder || "Ask Clyra to build a feature, app, page, or fix..."}
+        className={cn(
+          "clyra-visible-scrollbar w-full resize-none bg-transparent px-0 pb-1 pt-2 text-[15px] font-medium leading-relaxed text-slate-800 outline-none transition-[height,padding,opacity] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] placeholder:text-slate-400 sm:text-lg",
+          compact ? "max-h-[74px] min-h-[42px]" : "max-h-[124px] min-h-[92px]",
+        )}
+      />
+      <div className="mt-1 flex items-center justify-between gap-3">
+        <button
+          type="button"
+          onClick={onAttach}
+          className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-transparent text-slate-500 transition-[background-color,border-color,color] duration-[120ms] ease-out hover:border-slate-200/70 hover:bg-white/72 hover:text-slate-900"
+          aria-label="Attach files"
+        >
+          <Paperclip className="h-5 w-5" />
+        </button>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <ModeDropdown mode={mode as any} onChange={onModeChange as any} />
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={onSubmit}
+            aria-label="Send Vibe request"
+            className={cn(
+              "grid h-10 w-10 shrink-0 place-items-center rounded-full border transition-[background-color,border-color,color] duration-[120ms] ease-out",
+              disabled && !isGenerating
+                ? "border-transparent bg-transparent text-slate-300"
+                : "border-transparent bg-transparent text-slate-700 hover:border-slate-200/70 hover:bg-white/72 hover:text-slate-950",
+            )}
+          >
+            {isGenerating ? <div className="h-3 w-3 rounded-[2px] bg-slate-700" /> : <Send className="h-5 w-5" />}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 function ModeDropdown({
   mode,
   onChange,
@@ -423,1028 +1201,46 @@ function ModeDropdown({
     </div>
   );
 }
-
-function PlanCard({
-  plan,
-  prompt,
-  expanded,
-  setExpanded,
-  comments,
-  onAddComment,
-  onApprove,
-  approving,
-}: {
-  plan: VibePlanResponse;
-  prompt: string;
-  expanded: boolean;
-  setExpanded: (value: boolean) => void;
-  comments: PlanComment[];
-  onAddComment: (quote: string, note: string) => void;
-  onApprove: () => void;
-  approving: boolean;
-}) {
-  const [commentMenu, setCommentMenu] = useState<{
-    x: number;
-    y: number;
-    quote: string;
-  } | null>(null);
-  const [commentText, setCommentText] = useState("");
-
-  const preview = planPreviewText(plan);
-  const latestQuote = comments[comments.length - 1]?.quote;
-
-  const planBody = latestQuote && plan.markdown.includes(latestQuote) ? (
-    <>
-      {plan.markdown.split(latestQuote)[0]}
-      <button
-        type="button"
-        title={comments[comments.length - 1]?.note}
-        className="rounded-sm border-b-2 border-amber-300 bg-amber-50/70 px-0.5 text-left"
-      >
-        {latestQuote}
-      </button>
-      {plan.markdown.split(latestQuote).slice(1).join(latestQuote)}
-    </>
-  ) : (
-    plan.markdown
-  );
-
-  return (
-    <motion.section
-      layout
-      initial={{ opacity: 0, y: 18, scale: 0.985 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ duration: 0.48, ease: [0.22, 1, 0.36, 1] }}
-      className="relative w-full max-w-[900px] rounded-[34px] border border-slate-200/80 bg-white/88 p-5 shadow-[0_26px_90px_rgba(15,23,42,0.08)] backdrop-blur-xl"
-    >
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <div className="mb-3 flex items-center gap-2 text-[12px] font-bold text-slate-400">
-            <Sparkles className="h-3.5 w-3.5" />
-            Plan ready
-          </div>
-          <h2 className="text-2xl font-bold tracking-[-0.04em] text-slate-950">
-            {plan.title}
-          </h2>
-          <p className="mt-3 max-w-[680px] text-[14px] font-semibold leading-relaxed text-slate-500">
-            {plan.summary}
-          </p>
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setExpanded(!expanded)}
-            className="rounded-full border border-slate-200 bg-white px-4 py-2.5 text-[13px] font-bold text-slate-700 transition-all hover:border-slate-300 hover:shadow-sm"
-          >
-            {expanded ? "Collapse" : "Expand"}
-          </button>
-          <button
-            type="button"
-            className="rounded-full border border-slate-200 bg-white px-4 py-2.5 text-[13px] font-bold text-slate-700 transition-all hover:border-slate-300 hover:shadow-sm"
-          >
-            <RefreshCw className="inline h-3.5 w-3.5" /> Regenerate
-          </button>
-          <button
-            type="button"
-            onClick={onApprove}
-            disabled={approving}
-            className="inline-flex items-center gap-2 rounded-full bg-slate-950 px-5 py-2.5 text-[13px] font-bold text-white shadow-[0_18px_42px_rgba(15,23,42,0.16)] transition-all hover:bg-slate-800 disabled:opacity-60"
-          >
-            <Play className="h-3.5 w-3.5" />
-            Approve
-          </button>
-        </div>
-      </div>
-
-      <div className="mt-5 flex flex-wrap gap-2">
-        {featureChips(prompt).map((chip) => (
-          <span
-            key={chip}
-            className="rounded-full border border-slate-200 bg-slate-50/80 px-3 py-1.5 text-[11px] font-bold text-slate-600"
-          >
-            {chip}
-          </span>
-        ))}
-      </div>
-
-      <AnimatePresence initial={false}>
-        {expanded ? (
-          <motion.div
-            key="expanded"
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.34, ease: [0.22, 1, 0.36, 1] }}
-            className="overflow-hidden"
-          >
-            <div className="mt-5 grid gap-3 sm:grid-cols-2">
-              {plan.taskGraph.map((task) => (
-                <div
-                  key={task.id}
-                  className="rounded-[24px] border border-slate-200/75 bg-white/70 p-4"
-                >
-                  <p className="text-[12px] font-black uppercase tracking-[0.16em] text-slate-400">
-                    {task.id}
-                  </p>
-                  <p className="mt-2 text-[15px] font-bold text-slate-900">
-                    {task.name}
-                  </p>
-                  <p className="mt-1 text-[12px] font-semibold leading-relaxed text-slate-500">
-                    {task.description}
-                  </p>
-                </div>
-              ))}
-            </div>
-            <div
-              className="clyra-visible-scrollbar relative mt-5 max-h-[420px] overflow-auto rounded-[26px] border border-slate-200/75 bg-slate-50/65 p-5 font-mono text-[12px] leading-relaxed text-slate-700 whitespace-pre-wrap"
-              onContextMenu={(event) => {
-                const selected = window.getSelection()?.toString().trim();
-                if (!selected) return;
-                event.preventDefault();
-                setCommentMenu({
-                  x: event.clientX,
-                  y: event.clientY,
-                  quote: selected.slice(0, 260),
-                });
-              }}
-            >
-              {planBody}
-            </div>
-          </motion.div>
-        ) : (
-          <motion.p
-            key="collapsed"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="mt-5 max-w-[760px] text-[13px] font-medium leading-relaxed text-slate-500"
-          >
-            {preview}
-          </motion.p>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {commentMenu && (
-          <motion.div
-            initial={{ opacity: 0, scale: 0.96, y: 8 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: 8 }}
-            className="fixed z-[120] flex w-[330px] items-center gap-2 rounded-full border border-slate-200 bg-white/94 p-2 shadow-[0_22px_70px_rgba(15,23,42,0.16)] backdrop-blur-xl"
-            style={{ left: Math.min(commentMenu.x, window.innerWidth - 350), top: commentMenu.y }}
-          >
-            <input
-              value={commentText}
-              onChange={(event) => setCommentText(event.target.value)}
-              placeholder="Describe changes"
-              className="min-w-0 flex-1 bg-transparent px-3 text-[13px] font-semibold outline-none placeholder:text-slate-400"
-              autoFocus
-            />
-            <button
-              type="button"
-              onClick={() => {
-                if (commentText.trim()) {
-                  onAddComment(commentMenu.quote, commentText.trim());
-                  setCommentText("");
-                  setCommentMenu(null);
-                }
-              }}
-              className="grid h-9 w-9 place-items-center rounded-full bg-slate-950 text-white"
-            >
-              <Send className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setCommentMenu(null)}
-              className="grid h-9 w-9 place-items-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.section>
-  );
-}
-
-export default function VibeCoderWorkspace({
-  orbColorTheme = "default",
-}: {
-  orbColorTheme?: OrbColorTheme;
-}) {
-  const [mode, setMode] = useState<HarnessMode>("plan");
-  const [prompt, setPrompt] = useState("");
-  const [phase, setPhase] = useState<VibePhase>("idle");
-  const [projects, setProjects] = useState<VibeProject[]>([]);
-  const [plan, setPlan] = useState<VibePlanResponse | null>(null);
-  const [planExpanded, setPlanExpanded] = useState(false);
-  const [comments, setComments] = useState<PlanComment[]>([]);
-  const [thinkingStartedAt, setThinkingStartedAt] = useState(Date.now());
-  const [thinkingFinishedMs, setThinkingFinishedMs] = useState(0);
-  const [thoughtPhase, setThoughtPhase] =
-    useState<ThoughtPhase>("request_reading");
-  const [thoughtText, setThoughtText] = useState("");
-  const [project, setProject] = useState<VibeProject | null>(null);
-  const [patches, setPatches] = useState<VibePatch[]>([]);
-  const [visiblePatchCount, setVisiblePatchCount] = useState(0);
-  const [statusLine, setStatusLine] = useState("");
-  const [attachedFiles, setAttachedFiles] = useState<string[]>([]);
-  const [projectPreviews, setProjectPreviews] = useState<Record<string, string>>(
-    {},
-  );
-  const [projectAction, setProjectAction] =
-    useState<ProjectActionDialog | null>(null);
-  const fileRef = useRef<HTMLInputElement | null>(null);
-
-  const loadProjects = useCallback(async () => {
-    try {
-      const data = await fetchJson<{ projects: VibeProject[] }>(
-        "/api/vibe/projects",
-      );
-      setProjects(data.projects ?? []);
-    } catch (error) {
-      console.warn("Failed to load Vibe projects", error);
-    }
-  }, []);
-
-  useEffect(() => {
-    void loadProjects();
-  }, [loadProjects]);
-
-  useEffect(() => {
-    const recent = projects.slice(0, 3).filter((item) => !projectPreviews[item.id]);
-    if (recent.length === 0) return;
-
-    let cancelled = false;
-    Promise.all(
-      recent.map(async (item) => {
-        try {
-          const data = await fetchJson<{
-            files: Array<{ path: string; content: string }>;
-          }>(`/api/vibe/projects/${item.id}`);
-          const filesByPath = Object.fromEntries(
-            data.files
-              .filter((file) => isProjectPreviewFile(file.path))
-              .map((file) => [file.path, file.content]),
-          );
-          return [item.id, buildVibePreviewSrcDoc(filesByPath)] as const;
-        } catch {
-          return [item.id, ""] as const;
-        }
-      }),
-    ).then((entries) => {
-      if (cancelled) return;
-      setProjectPreviews((current) => {
-        const next = { ...current };
-        for (const [id, srcDoc] of entries) {
-          next[id] = srcDoc;
-        }
-        return next;
-      });
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [projectPreviews, projects]);
-
-  const runThinking = useCallback(
-    async (
-      phases: ThoughtPhase[],
-      minMs: number,
-      context?: { prompt?: string; projectName?: string },
-    ) => {
-      const start = Date.now();
-      setThinkingStartedAt(start);
-      setThinkingFinishedMs(0);
-      setPhase("thinking");
-      const stepMs = Math.max(1100, minMs / Math.max(1, phases.length));
-      for (const phase of phases) {
-        setThoughtPhase(phase);
-        setThoughtText(getVisibleThoughtPreview(phase, context).text);
-        await new Promise((resolve) => window.setTimeout(resolve, stepMs));
-      }
-      const elapsed = Date.now() - start;
-      if (elapsed < minMs) {
-        await new Promise((resolve) =>
-          window.setTimeout(resolve, minMs - elapsed),
-        );
-      }
-      setThinkingFinishedMs(Date.now() - start);
-    },
-    [],
-  );
-
-  const handleSubmit = async () => {
-    const cleanPrompt = prompt.trim();
-    if (!cleanPrompt) return;
-    setPlan(null);
-    setComments([]);
-    setPatches([]);
-    setProject(null);
-    setVisiblePatchCount(0);
-    setStatusLine("");
-    setPrompt("");
-
-    try {
-      const scanPromise = fetchJson<Record<string, unknown>>("/api/vibe/scan", {
-        method: "POST",
-        body: JSON.stringify({}),
-      });
-      await runThinking(
-        mode === "plan" ? PLAN_PHASES : PLAN_PHASES.slice(0, 3),
-        mode === "plan" ? 15500 : 4600,
-        { prompt: cleanPrompt },
-      );
-      const scan = await scanPromise;
-      const nextPlan = await fetchJson<VibePlanResponse>("/api/vibe/plan", {
-        method: "POST",
-        body: JSON.stringify({ prompt: cleanPrompt, mode, scan }),
-      });
-      setPlan(nextPlan);
-      setPhase("plan-ready");
-      if (mode === "fast") {
-        await approvePlan(nextPlan, cleanPrompt, true);
-      }
-    } catch (error) {
-      console.error(error);
-      setThoughtPhase("error_fixing");
-      setThoughtText("I could not create the plan cleanly, so I’m leaving the workspace unchanged for another try.");
-      setPhase("idle");
-    }
-  };
-
-  const approvePlan = async (
-    approvedPlan = plan,
-    approvedPrompt = plan?.title ?? "",
-    fromFastMode = false,
-  ) => {
-    if (!approvedPlan) return;
-    setPhase("building");
-    setStatusLine("I’ll build from the approved plan.md now, save the project, and validate the preview-ready files.");
-    await runThinking(BUILD_PHASES, fromFastMode ? 4200 : 6800, {
-      projectName: approvedPlan.title,
-    });
-    setPhase("building");
-
-    const created = await fetchJson<{ project: VibeProject }>("/api/vibe/projects", {
-      method: "POST",
-      body: JSON.stringify({
-        prompt: approvedPrompt || approvedPlan.title,
-        name: approvedPlan.title,
-        mode,
-      }),
-    });
-    const files = {
-      "plan.md": approvedPlan.markdown,
-      ...approvedPlan.starterFiles,
-    };
-    const saved = await fetchJson<{ project: VibeProject }>("/api/vibe/write-plan", {
-      method: "POST",
-      body: JSON.stringify({
-        projectId: created.project.id,
-        plan: approvedPlan.markdown,
-        taskGraph: approvedPlan.taskGraph,
-        files,
-      }),
-    });
-    setProject(saved.project);
-    setPatches(buildPatches(files));
-    setVisiblePatchCount(1);
-    await loadProjects();
-  };
-
-  const openProject = async (id: string) => {
-    const data = await fetchJson<{
-      project: VibeProject;
-      files: Array<{ path: string; content: string }>;
-      plan: string;
-    }>(`/api/vibe/projects/${id}`);
-    const displayFiles = data.files.filter((file) =>
-      isProjectPreviewFile(file.path),
-    );
-    setProject(data.project);
-    setPlan({
-      title: data.project.name,
-      summary: `Loaded saved project "${data.project.name}" without replaying the original generation.`,
-      markdown: data.plan || "# Plan\n\nSaved plan was not found.",
-      taskGraph: [],
-      starterFiles: Object.fromEntries(
-        displayFiles.map((file) => [file.path, file.content]),
-      ),
-    });
-    setPhase("done");
-    setPatches(
-      displayFiles.map((file) => ({
-        file: file.path,
-        code: file.content,
-        added: countLines(file.content),
-        removed: 0,
-        reason: "Loaded saved project file.",
-      })),
-    );
-    setVisiblePatchCount(displayFiles.length);
-  };
-
-  const renameProject = async (item: VibeProject, nextNameRaw: string) => {
-    const nextName = nextNameRaw.trim();
-    if (!nextName || nextName === item.name) return;
-
-    const data = await fetchJson<{ project: VibeProject }>(
-      `/api/vibe/projects/${item.id}`,
-      {
-        method: "PATCH",
-        body: JSON.stringify({ name: nextName }),
-      },
-    );
-    setProjects((current) =>
-      current.map((project) =>
-        project.id === item.id ? data.project : project,
-      ),
-    );
-    setProject((current) =>
-      current?.id === item.id ? data.project : current,
-    );
-  };
-
-  const deleteProject = async (item: VibeProject) => {
-    await fetchJson<{ ok: boolean; projectId: string }>(
-      `/api/vibe/projects/${item.id}`,
-      { method: "DELETE" },
-    );
-    setProjects((current) =>
-      current.filter((project) => project.id !== item.id),
-    );
-    if (project?.id === item.id) {
-      setProject(null);
-      setPlan(null);
-      setPatches([]);
-      setPhase("idle");
-    }
-  };
-
-  const visiblePatches = patches.slice(0, visiblePatchCount);
-  const isWorking = phase === "thinking";
-  const hasLivePreview = Boolean(project) && (phase === "building" || phase === "done");
-
-  return (
-    <div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-white">
-      <div
-        className={cn(
-          "clyra-visible-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto px-5 sm:px-8",
-          hasLivePreview ? "pt-3" : "pt-16",
-        )}
-      >
-        <AnimatePresence mode="wait">
-          {phase === "idle" ? (
-            <motion.section
-              key="welcome"
-              initial={{ opacity: 0, y: 18 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -12 }}
-              transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
-              className="mx-auto flex min-h-full w-full max-w-[900px] translate-y-16 flex-col items-center justify-center pb-10 text-center"
-            >
-              <div className="mb-4 flex justify-center">
-                <AiOrb colorTheme={orbColorTheme} />
-              </div>
-              <h1 className="text-4xl font-semibold tracking-[-0.055em] text-slate-950 sm:text-5xl">
-                What should we build?
-              </h1>
-              <p className="mt-3 text-[15px] font-semibold text-slate-500 sm:text-base">
-                Plan, generate, validate, preview, save and reopen real Vibe projects.
-              </p>
-
-              <Composer
-                className="mt-16"
-                value={prompt}
-                onChange={setPrompt}
-                onSubmit={handleSubmit}
-                mode={mode}
-                onModeChange={setMode}
-                onAttach={() => fileRef.current?.click()}
-                disabled={!prompt.trim()}
-              />
-
-              <input
-                ref={fileRef}
-                type="file"
-                multiple
-                className="hidden"
-                onChange={(event) => {
-                  setAttachedFiles(Array.from(event.target.files ?? []).map((file) => file.name));
-                  event.target.value = "";
-                }}
-              />
-
-              {attachedFiles.length > 0 && (
-                <div className="mt-3 flex flex-wrap justify-center gap-2">
-                  {attachedFiles.map((file) => (
-                    <span
-                      key={file}
-                      className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-bold text-slate-500"
-                    >
-                      {file}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-                <div className="mt-5 w-full max-w-[700px]">
-                <p className="mb-3 text-left text-[11px] font-black uppercase tracking-[0.18em] text-slate-300">
-                  Recent projects
-                </p>
-                {projects.length === 0 ? (
-                  <div className="rounded-[26px] border border-dashed border-slate-200 bg-white/75 px-5 py-5 text-center text-[13px] font-semibold text-slate-400">
-                    Your recent projects will appear here.
-                  </div>
-                ) : (
-                  <div className="grid gap-2.5 sm:grid-cols-3">
-                    {projects.slice(0, 3).map((item) => (
-                      <article
-                        key={item.id}
-                        className="group relative aspect-square overflow-hidden rounded-[20px] border border-slate-200/70 bg-white/88 text-left shadow-[0_10px_28px_rgba(15,23,42,0.03)] transition-[border-color,box-shadow,transform] duration-200 ease-[cubic-bezier(0.16,1,0.3,1)] hover:-translate-y-0.5 hover:border-slate-300/80 hover:shadow-[0_16px_38px_rgba(15,23,42,0.05)]"
-                      >
-                        <button
-                          type="button"
-                          onClick={() => openProject(item.id)}
-                          className="flex h-full w-full flex-col p-1.5 text-left"
-                        >
-                          <div className="relative h-[76%] shrink-0 overflow-hidden rounded-[16px] border border-slate-200/70 bg-[linear-gradient(135deg,#ffffff_0%,#f8fafc_46%,#eef2f7_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.95)]">
-                            {projectPreviews[item.id] ? (
-                              <iframe
-                                title={`${item.name} preview`}
-                                srcDoc={projectPreviews[item.id]}
-                                sandbox="allow-scripts"
-                                loading="lazy"
-                                tabIndex={-1}
-                                className="pointer-events-none absolute left-1/2 top-1/2 h-[360px] w-[430px] origin-center -translate-x-1/2 -translate-y-1/2 scale-[0.47] border-0 bg-white"
-                              />
-                            ) : (
-                              <>
-                                <div className="absolute inset-x-3 top-3 h-2 rounded-full bg-white/90 shadow-sm" />
-                                <div className="absolute left-3 right-12 top-8 h-3 rounded-full bg-slate-200/65" />
-                                <div className="absolute left-3 top-14 h-12 w-[46%] rounded-[14px] bg-white/92 shadow-[0_10px_24px_rgba(15,23,42,0.045)]" />
-                                <div className="absolute right-3 top-14 h-12 w-[38%] rounded-[14px] bg-slate-100/90" />
-                                <div className="absolute bottom-3 left-3 right-3 h-7 rounded-[13px] bg-white/86 shadow-[0_8px_18px_rgba(15,23,42,0.035)]" />
-                              </>
-                            )}
-                            <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0)_58%,rgba(255,255,255,0.7)_100%)]" />
-                            <span className="absolute left-2.5 top-2.5 grid h-7 w-7 place-items-center rounded-[12px] border border-slate-200/70 bg-white/96 text-slate-600 shadow-[0_8px_18px_rgba(15,23,42,0.04)] opacity-90 transition-opacity group-hover:opacity-0">
-                              <FileCode2 className="h-3.5 w-3.5" />
-                            </span>
-                            <span
-                              className={cn(
-                                "absolute right-2.5 top-2.5 rounded-full px-2 py-0.5 text-[9.5px] font-bold opacity-90 transition-opacity group-hover:opacity-0",
-                                item.status === "Building"
-                                  ? "bg-emerald-50 text-emerald-600"
-                                  : "bg-white/88 text-slate-400",
-                              )}
-                            >
-                              {item.status === "Building" ? "Running" : item.status}
-                            </span>
-                          </div>
-                          <div className="flex min-h-0 flex-1 items-center justify-between gap-2 px-1.5 pb-1 pt-1.5">
-                            <div className="min-w-0">
-                              <p className="truncate text-[12.5px] font-bold leading-snug tracking-[-0.02em] text-slate-950">
-                              {item.name}
-                            </p>
-                              <p className="mt-0.5 text-[10px] font-semibold text-slate-400">
-                                {relativeTime(item.updatedAt)}
-                              </p>
-                            </div>
-                            <span className="shrink-0 text-[9.5px] font-bold text-slate-300">
-                              {item.mode === "plan" ? "Plan" : "Fast"}
-                            </span>
-                          </div>
-                        </button>
-                        <div className="absolute right-2.5 top-2.5 flex items-center gap-1 rounded-full border border-slate-200/70 bg-white/92 p-0.5 opacity-0 shadow-[0_10px_24px_rgba(15,23,42,0.055)] backdrop-blur-md transition-[opacity,transform] duration-150 ease-out group-hover:translate-y-0 group-hover:opacity-100">
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              setProjectAction({
-                                type: "rename",
-                                project: item,
-                                draftName: item.name,
-                              });
-                            }}
-                            aria-label={`Rename ${item.name}`}
-                            title="Rename"
-                            className="grid h-7 w-7 place-items-center rounded-full text-slate-400 transition-[background-color,color] duration-150 hover:bg-slate-100/80 hover:text-slate-900"
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              setProjectAction({
-                                type: "delete",
-                                project: item,
-                              });
-                            }}
-                            aria-label={`Delete ${item.name}`}
-                            title="Delete"
-                            className="grid h-7 w-7 place-items-center rounded-full text-slate-400 transition-[background-color,color] duration-150 hover:bg-rose-50 hover:text-rose-500"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </motion.section>
-          ) : (
-            <motion.section
-              key="chat"
-              initial={{ opacity: 0, y: 14 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.36, ease: [0.22, 1, 0.36, 1] }}
-              className={cn(
-                "mx-auto w-full flex-1 pb-32",
-                hasLivePreview
-                  ? "grid max-w-[1420px] grid-cols-1 gap-5 lg:grid-cols-[minmax(300px,0.38fr)_minmax(0,0.62fr)]"
-                  : "flex max-w-[980px] flex-col gap-5",
-              )}
-            >
-              <motion.div
-                layout
-                initial={
-                  hasLivePreview
-                    ? { opacity: 0, x: -18, scale: 0.972 }
-                    : false
-                }
-                animate={{ opacity: 1, x: 0, scale: hasLivePreview ? 0.985 : 1 }}
-                transition={{ duration: 0.56, ease: [0.16, 1, 0.3, 1] }}
-                className={cn(
-                  "flex min-w-0 origin-center flex-col gap-5",
-                  hasLivePreview ? "lg:order-1" : "",
-                )}
-              >
-                {plan?.title ? (
-                  <div className="flex justify-end">
-                    <div className="rounded-[28px] border border-slate-200/80 bg-white px-5 py-3 text-[15px] font-bold text-slate-900 shadow-[0_18px_54px_rgba(15,23,42,0.06)]">
-                      {plan.title}
-                    </div>
-                  </div>
-                ) : null}
-
-                {(phase === "thinking" || thinkingFinishedMs > 0) && (
-                  <ThinkingStep
-                    active={isWorking}
-                    startedAt={thinkingStartedAt}
-                    finishedMs={thinkingFinishedMs}
-                    thoughtText={thoughtText}
-                    thoughtPhase={thoughtPhase}
-                  />
-                )}
-
-                {phase === "plan-ready" && plan && (
-                  <PlanCard
-                    plan={plan}
-                    prompt={plan.title}
-                    expanded={planExpanded}
-                    setExpanded={setPlanExpanded}
-                    comments={comments}
-                    onAddComment={(quote, note) =>
-                      setComments((prev) => [
-                        ...prev,
-                        { id: `${Date.now()}`, quote, note },
-                      ])
-                    }
-                    onApprove={() => approvePlan()}
-                    approving={false}
-                  />
-                )}
-
-                {(phase === "building" || phase === "done") && (
-                  <div className="w-full max-w-[760px] space-y-4 self-start">
-                    {statusLine && (
-                      <motion.p
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="text-[14px] font-semibold leading-relaxed text-slate-600"
-                      >
-                        {statusLine}
-                      </motion.p>
-                    )}
-                    <AnimatePresence>
-                      {visiblePatches.map((patch, index) => (
-                        <motion.div
-                          key={`${patch.file}-${index}`}
-                          className="space-y-2"
-                          initial={{ opacity: 0, y: 12 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0, y: -8 }}
-                          transition={{ duration: 0.42, ease: [0.16, 1, 0.3, 1] }}
-                        >
-                          <p className="text-[12px] font-bold text-slate-400">
-                            {patch.reason}
-                          </p>
-                          <VibeMiniCodeBox
-                            file={patch.file}
-                            code={patch.code}
-                            added={patch.added}
-                            removed={patch.removed}
-                            active={index === visiblePatchCount - 1}
-                            segmentComplete
-                            archived={phase === "done"}
-                            onCollapsed={() => {
-                              if (visiblePatchCount < patches.length) {
-                                window.setTimeout(
-                                  () => setVisiblePatchCount((value) => value + 1),
-                                  1000,
-                                );
-                              } else {
-                                setPhase("done");
-                                setStatusLine("Build complete. The project is saved, validated locally, and ready to reopen without replaying generation.");
-                                void loadProjects();
-                              }
-                            }}
-                          />
-                        </motion.div>
-                      ))}
-                    </AnimatePresence>
-                    {project && (
-                      <div className="flex flex-wrap gap-2 pt-2">
-                        <ActionButton icon={Code2}>Open in Code</ActionButton>
-                        <ActionButton icon={Copy}>Duplicate</ActionButton>
-                        <ActionButton icon={FolderKanban}>Projects</ActionButton>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </motion.div>
-
-              {hasLivePreview && (
-                <LivePreviewPanel project={project} className="lg:order-2" />
-              )}
-            </motion.section>
-          )}
-        </AnimatePresence>
-      </div>
-
-      {phase !== "idle" && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-white via-white/92 to-transparent px-5 pb-5 pt-14 sm:px-8">
-          <div
-            className={cn(
-              "mx-auto w-full",
-              hasLivePreview
-                ? "grid max-w-[1420px] grid-cols-1 gap-5 lg:grid-cols-[minmax(300px,0.38fr)_minmax(0,0.62fr)]"
-                : "max-w-[980px]",
-            )}
-          >
-            <Composer
-              className={cn(
-                "pointer-events-auto mb-1",
-                hasLivePreview
-                  ? "max-w-[420px] justify-self-center lg:col-start-1"
-                  : "mx-auto",
-              )}
-              compact
-              value={prompt}
-              onChange={setPrompt}
-              onSubmit={handleSubmit}
-              mode={mode}
-              onModeChange={setMode}
-              onAttach={() => fileRef.current?.click()}
-              disabled={!prompt.trim() || phase === "thinking"}
-            />
-          </div>
-        </div>
-      )}
-
-      <AnimatePresence>
-        {projectAction && (
-          <motion.div
-            className="fixed inset-0 z-50 grid place-items-center bg-white/45 px-4 backdrop-blur-[6px]"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-            onMouseDown={() => setProjectAction(null)}
-          >
-            <motion.div
-              role="dialog"
-              aria-modal="true"
-              aria-label={
-                projectAction.type === "rename"
-                  ? "Rename project"
-                  : "Delete project"
-              }
-              className="w-full max-w-[340px] rounded-[26px] border border-white/80 bg-white/78 p-4 text-left shadow-[0_24px_80px_rgba(15,23,42,0.10)] backdrop-blur-2xl"
-              initial={{ opacity: 0, y: 18, scale: 0.97 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 12, scale: 0.98 }}
-              transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
-              onMouseDown={(event) => event.stopPropagation()}
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-300">
-                    Project
-                  </p>
-                  <h3 className="mt-1 text-[17px] font-bold tracking-[-0.035em] text-slate-950">
-                    {projectAction.type === "rename"
-                      ? "Rename project"
-                      : "Delete project"}
-                  </h3>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setProjectAction(null)}
-                  className="grid h-8 w-8 place-items-center rounded-full text-slate-400 transition-colors hover:bg-white/80 hover:text-slate-700"
-                  aria-label="Close project menu"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-
-              {projectAction.type === "rename" ? (
-                <form
-                  className="mt-4"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    const current = projectAction;
-                    void renameProject(
-                      current.project,
-                      current.draftName,
-                    ).then(() => setProjectAction(null));
-                  }}
-                >
-                  <label className="block text-[12px] font-bold text-slate-500">
-                    Project name
-                  </label>
-                  <input
-                    autoFocus
-                    value={projectAction.draftName}
-                    onChange={(event) =>
-                      setProjectAction({
-                        ...projectAction,
-                        draftName: event.target.value,
-                      })
-                    }
-                    className="mt-2 h-11 w-full rounded-[16px] border border-slate-200/75 bg-white/82 px-4 text-[14px] font-semibold text-slate-900 outline-none transition-[border-color,box-shadow] duration-150 placeholder:text-slate-300 focus:border-slate-300 focus:shadow-[0_0_0_4px_rgba(148,163,184,0.12)]"
-                  />
-                  <div className="mt-4 flex justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setProjectAction(null)}
-                      className="h-10 rounded-full px-4 text-[13px] font-bold text-slate-500 transition-colors hover:bg-white/80 hover:text-slate-800"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      className="h-10 rounded-full bg-slate-950 px-4 text-[13px] font-bold text-white shadow-[0_12px_28px_rgba(15,23,42,0.12)] transition-[transform,background-color] duration-150 hover:-translate-y-0.5 hover:bg-slate-800"
-                    >
-                      Save
-                    </button>
-                  </div>
-                </form>
-              ) : (
-                <div className="mt-4">
-                  <p className="text-[13px] font-semibold leading-relaxed text-slate-500">
-                    Delete{" "}
-                    <span className="font-bold text-slate-900">
-                      {projectAction.project.name}
-                    </span>
-                    ? This removes it from your recent Vibe projects.
-                  </p>
-                  <div className="mt-4 flex justify-end gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setProjectAction(null)}
-                    className="h-10 rounded-full px-4 text-[13px] font-bold text-slate-500 transition-colors hover:bg-white/80 hover:text-slate-800"
-                    >
-                      Keep
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const current = projectAction;
-                        void deleteProject(current.project).then(() =>
-                          setProjectAction(null),
-                        );
-                      }}
-                      className="h-10 rounded-full bg-slate-950 px-4 text-[13px] font-bold text-white shadow-[0_12px_28px_rgba(15,23,42,0.14)] transition-[transform,background-color] duration-150 hover:-translate-y-0.5 hover:bg-slate-800"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-              )}
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-function Composer({
+function useVibeAutoResizeTextarea({
   value,
-  onChange,
-  onSubmit,
-  mode,
-  onModeChange,
-  onAttach,
-  disabled,
-  className,
-  compact = false,
+  minHeight = 92,
+  maxHeight = 124,
 }: {
   value: string;
-  onChange: (value: string) => void;
-  onSubmit: () => void;
-  mode: HarnessMode;
-  onModeChange: (mode: HarnessMode) => void;
-  onAttach: () => void;
-  disabled: boolean;
-  className?: string;
-  compact?: boolean;
+  minHeight?: number;
+  maxHeight?: number;
 }) {
-  const { textareaRef, resize } = useVibeAutoResizeTextarea({
-    value,
-    minHeight: compact ? 66 : 92,
-    maxHeight: compact ? 98 : 124,
-  });
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  return (
-    <div
-      className={cn(
-        "mx-auto flex w-full max-w-3xl flex-col rounded-[24px] border border-slate-200/80 bg-white/86 p-3 shadow-[0_22px_72px_rgba(15,23,42,0.065)] backdrop-blur-xl transition-[height,box-shadow,border-color] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)]",
-        className,
-      )}
-    >
-      <textarea
-        ref={textareaRef}
-        value={value}
-        onChange={(event) => {
-          onChange(event.target.value);
-          resize();
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" && !event.shiftKey) {
-            event.preventDefault();
-            if (!disabled) onSubmit();
-          }
-        }}
-        rows={1}
-        placeholder="Ask Clyra to build a feature, app, page, or fix..."
-        className={cn(
-          "clyra-visible-scrollbar w-full resize-none bg-transparent px-0 pb-1 pt-2 text-[15px] font-medium leading-relaxed text-slate-800 outline-none transition-[height,padding,opacity] duration-150 ease-[cubic-bezier(0.16,1,0.3,1)] placeholder:text-slate-400 sm:text-lg",
-          compact ? "max-h-[98px] min-h-[66px]" : "max-h-[124px] min-h-[92px]",
-        )}
-      />
-      <div className="mt-1 flex items-center justify-between gap-3">
-        <button
-          type="button"
-          onClick={onAttach}
-          className="grid h-10 w-10 shrink-0 place-items-center rounded-full border border-transparent text-slate-500 transition-[background-color,border-color,color] duration-[120ms] ease-out hover:border-slate-200/70 hover:bg-white/72 hover:text-slate-900"
-          aria-label="Attach files"
-        >
-          <Paperclip className="h-5 w-5" />
-        </button>
-        <div className="flex shrink-0 items-center gap-1.5">
-          <ModeDropdown mode={mode} onChange={onModeChange} />
-          <button
-            type="button"
-            disabled={disabled}
-            onClick={onSubmit}
-            aria-label="Send Vibe request"
-            className={cn(
-              "grid h-10 w-10 shrink-0 place-items-center rounded-full border transition-[background-color,border-color,color] duration-[120ms] ease-out",
-              disabled
-                ? "border-transparent bg-transparent text-slate-300"
-                : "border-transparent bg-transparent text-slate-700 hover:border-slate-200/70 hover:bg-white/72 hover:text-slate-950",
-            )}
-          >
-            <Send className="h-5 w-5" />
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+  const resize = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
 
-function ActionButton({
-  icon: Icon,
-  children,
-}: {
-  icon: typeof Code2;
-  children: string;
-}) {
-  return (
-    <button
-      type="button"
-      className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-[12px] font-bold text-slate-600 transition-all hover:border-slate-300 hover:text-slate-900 hover:shadow-sm"
-    >
-      <Icon className="h-3.5 w-3.5" />
-      {children}
-    </button>
-  );
+    window.requestAnimationFrame(() => {
+      textarea.style.height = "auto";
+      if (textarea.value.length === 0) {
+        textarea.style.height = `${minHeight}px`;
+        textarea.style.overflowY = "hidden";
+        return;
+      }
+      const nextHeight = Math.max(
+        minHeight,
+        Math.min(textarea.scrollHeight, maxHeight),
+      );
+      textarea.style.height = `${nextHeight}px`;
+      textarea.style.overflowY =
+        textarea.scrollHeight > maxHeight ? "auto" : "hidden";
+    });
+  }, [maxHeight, minHeight]);
+
+  useEffect(() => {
+    resize();
+  }, [resize, value]);
+
+  useEffect(() => {
+    window.addEventListener("resize", resize);
+    return () => window.removeEventListener("resize", resize);
+  }, [resize]);
+
+  return { textareaRef, resize };
 }
