@@ -432,6 +432,16 @@ export function useVibeCoderWorkspace(projectId: string) {
           es.close();
         }
       };
+
+      es.onerror = () => {
+        if (eventSourceRef.current === es) {
+          setState((prev) => {
+            if (prev.stage === "complete" || prev.stage === "failed") return prev;
+            return { ...prev, stage: "failed", error: "Lost connection to the coding agent stream." };
+          });
+          es.close();
+        }
+      };
     } catch (e: any) {
       setState((prev) => ({ ...prev, stage: "failed", error: e.message }));
     }

@@ -101,7 +101,10 @@ export function registerClineRoutes(app: import("express").Application) {
 
     const listener = (event: VibeCoderEvent) => {
       res.write(`data: ${JSON.stringify(event)}\n\n`);
-      if (event.type === "complete" || event.type === "error") {
+      const shouldEnd =
+        event.type === "complete" ||
+        (event.type === "error" && !event.recoverable);
+      if (shouldEnd) {
         res.end();
         activeTasks.delete(taskId);
       }

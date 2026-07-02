@@ -360,10 +360,8 @@ export default function VibeCoderWorkspace({ orbColorTheme = "default" }: { orbC
   const [showJumpToLatest, setShowJumpToLatest] = useState(false);
   const [thinkingCollapsed, setThinkingCollapsed] = useState(false);
 
-  const elapsedSinceStart = state.startedAt ? elapsedNow - state.startedAt : 0;
-  const planReadyDelayPassed = elapsedSinceStart >= 10000;
   const canReviewPlan = Boolean(state.planMd) && state.planMode;
-  const planReady = canReviewPlan && state.fileQueue.length > 0 && planReadyDelayPassed;
+  const planReady = canReviewPlan && state.fileQueue.length > 0;
   const thinkingIsResting = state.stage === "complete" || (state.planMode && planReady);
 
   useEffect(() => {
@@ -1255,8 +1253,8 @@ function CodeModeThinkingRow({ resetKey }: { resetKey: string }) {
       className="mx-auto mb-4 flex w-full max-w-2xl items-center gap-2 text-left"
     >
       <Brain className="h-4 w-4 text-slate-400" strokeWidth={1.6} />
-      <ShiningText text="Thinking" className="text-[13px] font-semibold" />
-      <span className="text-[13px] font-semibold text-slate-500">{seconds}s</span>
+      <ShiningText text="Thinking" className="text-[13px] font-normal" />
+      <span className="text-[13px] font-normal text-slate-500">{seconds}s</span>
     </motion.div>
   );
 }

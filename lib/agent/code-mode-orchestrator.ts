@@ -3,7 +3,7 @@ import { promises as fs } from "node:fs";
 import * as path from "node:path";
 import type { VibeCoderEvent } from "../cline/cline-events";
 import { ClineSdkSession } from "../cline/cline-sdk-session";
-import { CODE_MODE_SYSTEM_PROMPT, resolveClineProviderFromEnv } from "../cline/cline-config";
+import { CODE_MODE_SYSTEM_PROMPT, hasUsableLlmApiKey, resolveClineProviderFromEnv } from "../cline/cline-config";
 import { inspectProject, formatCodebaseMapForPrompt, listProjectFiles } from "./context-engine";
 import { CheckpointManager } from "./tool-router";
 import { PreviewManager } from "./preview-manager";
@@ -15,6 +15,7 @@ import {
   type AgentLoopCallbacks,
 } from "./agent-loop";
 import type { PlannedFile } from "./plan-md-writer";
+import { writeLocalScaffold } from "./local-scaffold";
 
 const TEXT_EXTENSIONS = new Set([".css", ".html", ".js", ".json", ".jsx", ".md", ".mjs", ".ts", ".tsx"]);
 
@@ -139,41 +140,71 @@ export class CodeModeOrchestrator {
       message: "Executing PLAN.md with Cline CLI (full tool access)…",
     });
 
+    const remoteAgentAvailable = hasUsableLlmApiKey();
+
     try {
-      await this.runClineCli(codePrompt, 360);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      this.emit({
-        type: "terminal_output",
-        command: "cline",
-        output: `Cline CLI: ${message}\nTrying Cline SDK act mode…\n`,
-      });
-      try {
-        const provider = resolveClineProviderFromEnv();
-        this.sdkSession = new ClineSdkSession();
-        await this.sdkSession.run({
-          workspacePath: this.options.workspacePath,
-          mode: "act",
-          systemPrompt: CODE_MODE_SYSTEM_PROMPT,
-          prompt: codePrompt,
-          provider,
-          onEvent: (event) => this.handleSdkEvent(event, loopState),
-          timeoutMs: 300_000,
-        });
-      } catch (sdkError) {
+      if (remoteAgentAvailable) {
+        try {
+          await this.runClineCli(codePrompt, 90);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          this.emit({
+            type: "terminal_output",
+            command: "cline",
+            output: `Cline CLI: ${message}\nTrying Cline SDK act mode…\n`,
+          });
+          try {
+            const provider = resolveClineProviderFromEnv();
+            this.sdkSession = new ClineSdkSession();
+            await this.sdkSession.run({
+              workspacePath: this.options.workspacePath,
+              mode: "act",
+              systemPrompt: CODE_MODE_SYSTEM_PROMPT,
+              prompt: codePrompt,
+              provider,
+              onEvent: (event) => this.handleSdkEvent(event, loopState),
+              timeoutMs: 120_000,
+            });
+          } catch (sdkError) {
+            this.emit({
+              type: "error",
+              message: sdkError instanceof Error ? sdkError.message : String(sdkError),
+              recoverable: true,
+            });
+          }
+        } finally {
+          await this.sdkSession?.dispose();
+        }
+      } else {
         this.emit({
-          type: "error",
-          message: sdkError instanceof Error ? sdkError.message : String(sdkError),
-          recoverable: true,
+          type: "terminal_output",
+          command: "cline",
+          output: "No usable LLM API key configured. Skipping remote agent and using local scaffold generation.\n",
         });
       }
     } finally {
       await stopPoller();
-      await this.sdkSession?.dispose();
     }
 
     const after = await snapshotFiles(this.options.workspacePath);
-    const changes = getChanges(before, after);
+    let changes = getChanges(before, after);
+
+    if (changes.length === 0) {
+      this.emit({
+        type: "thinking",
+        text: "Remote coding agent was unavailable, so I'm generating a complete local scaffold from PLAN.md instead of leaving the workspace empty.",
+      });
+      const scaffolded = await writeLocalScaffold(
+        this.options.workspacePath,
+        this.options.prompt,
+        fileQueue,
+      );
+      changes = scaffolded.map((file) => ({
+        path: file.path,
+        content: file.content,
+        action: file.action,
+      }));
+    }
 
     const callbacks: AgentLoopCallbacks = {
       emit: (event) => this.emit(event),

@@ -282,7 +282,7 @@ export function LivePreviewPanel({
         </motion.div>
         <PreviewStatusOverlay status={error ? undefined : session?.status} />
         <PreviewErrorOverlay
-          error={undefined}
+          error={error}
           onRestart={restartPreview}
           onOpenLogs={() => setShowLogs(true)}
         />
