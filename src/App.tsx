@@ -507,9 +507,9 @@ export default function App() {
 
     const minDistance = Math.abs(mouseX - closestCenter);
 
-    // 3/4 snap zone: snap firmly when within 26px (approx 1/4 of width)
-    const snapZone = 26;
-    const releaseZone = 40;
+    // Soft magnetic zone: stretches toward the nearest tab, then settles cleanly on it.
+    const snapZone = 30;
+    const releaseZone = 58;
 
     if (minDistance < snapZone) {
       return closestCenter;
@@ -522,15 +522,15 @@ export default function App() {
   });
 
   const springContainerX = useSpring(magneticTargetX, {
-    stiffness: 500,
-    damping: 32,
-    mass: 0.3,
+    stiffness: 430,
+    damping: 33,
+    mass: 0.34,
   });
   const containerVelocityX = useVelocity(springContainerX);
   const hoverScaleX = useTransform(
     containerVelocityX,
     [-1500, 0, 1500],
-    [1.06, 1, 1.06],
+    [1.1, 1, 1.1],
   );
   const hoverOrigin = useTransform(
     containerVelocityX,
@@ -2489,6 +2489,9 @@ ${userText}`;
     setSelectedCommand(null);
     setShowCommandPalette(false);
     setClipInitialUrl("");
+    if (tabId !== "chat") {
+      setIsSidebarOpen(false);
+    }
     setIsInputExpanded(false);
     adjustHeight(true);
 
@@ -2598,6 +2601,7 @@ ${userText}`;
                 {isSidebarOpen && (
                   <button
                     type="button"
+                    onPointerDown={() => setIsSidebarOpen(false)}
                     onClick={() => setIsSidebarOpen(false)}
                     aria-label="Close sidebar"
                     title="Close sidebar"
@@ -3090,6 +3094,10 @@ ${userText}`;
                       type="button"
                       role="tab"
                       aria-selected={isActive}
+                      onPointerDown={(event) => {
+                        event.preventDefault();
+                        handleWorkspaceTabChange(tabItem.id);
+                      }}
                       onClick={() => handleWorkspaceTabChange(tabItem.id)}
                       onMouseEnter={() => setHoveredWorkspaceTab(tabItem.id)}
                       onFocus={() => setHoveredWorkspaceTab(tabItem.id)}

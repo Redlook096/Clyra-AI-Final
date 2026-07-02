@@ -230,23 +230,24 @@
     0 8px 22px rgba(15, 23, 42, 0.075),
     inset 0 1px 0 rgba(255, 255, 255, 0.9);
   opacity: 1;
+  filter: saturate(1.04);
 }
 
 .clyra-workflow-tab:hover {
   color: #0f172a;
-  transform: translateY(1px) rotateX(2deg) rotateY(-1deg) translateZ(4px);
+  transform: translateY(-0.5px) translateZ(2px);
   transition:
-    transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
-    color 0.3s ease;
+    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    color 0.22s ease;
 }
 
 .clyra-workflow-tab--active {
   color: #0f172a;
   text-shadow: 0 2px 8px rgba(15, 23, 42, 0.08);
-  transform: translateY(1px) rotateX(1deg) translateZ(3px);
+  transform: translateY(0) translateZ(1px);
   transition:
-    transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
-    color 0.3s ease;
+    transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+    color 0.22s ease;
 }
 
 .clyra-workflow-tabs:hover .clyra-workflow-tab:not(:hover) {
@@ -3122,6 +3123,31 @@ body,
 
 @media (prefers-reduced-motion: reduce) {
   .agent-soft-shimmer::after {
+    animation: none;
+  }
+}
+
+.preview-skeleton-shimmer {
+  position: relative;
+  overflow: hidden;
+}
+
+.preview-skeleton-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    110deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.72) 48%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  background-size: 220% 100%;
+  animation: agent-soft-shimmer 2.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .preview-skeleton-shimmer::after {
     animation: none;
   }
 }

@@ -6,22 +6,14 @@ import {
   MoreHorizontal,
   RotateCcw,
 } from "lucide-react";
-import {
-  PreviewDeviceSwitcher,
-  type PreviewDevice,
-} from "./PreviewDeviceSwitcher";
 
 export function PreviewToolbar({
-  device,
-  onDeviceChange,
   onOpenExternal,
   onRestart,
   onCopyUrl,
   isFullscreen,
   onToggleFullscreen,
 }: {
-  device: PreviewDevice;
-  onDeviceChange: (device: PreviewDevice) => void;
   onOpenExternal: () => void;
   onRestart: () => void;
   onCopyUrl: () => void;
@@ -29,8 +21,7 @@ export function PreviewToolbar({
   onToggleFullscreen: () => void;
 }) {
   return (
-    <div className="flex shrink-0 items-center gap-2">
-      <PreviewDeviceSwitcher value={device} onChange={onDeviceChange} />
+    <div className="flex shrink-0 items-center gap-1">
       <button
         type="button"
         onClick={onToggleFullscreen}

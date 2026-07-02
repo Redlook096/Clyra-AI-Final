@@ -7,14 +7,12 @@ import type {
 } from "../../../../types/vibe-preview";
 import { cn } from "../../../lib/utils";
 import { PreviewBrowserChrome } from "./PreviewBrowserChrome";
-import {
-  type PreviewDevice,
-} from "./PreviewDeviceSwitcher";
 import { PreviewEmptyState } from "./PreviewEmptyState";
 import { PreviewErrorOverlay } from "./PreviewErrorOverlay";
 import { PreviewIframe } from "./PreviewIframe";
 import { PreviewStatusOverlay } from "./PreviewStatusOverlay";
 import { PreviewHealthStatus } from "./PreviewHealthStatus";
+import { PreviewSkeletonLayout } from "./PreviewSkeletonLayout";
 
 interface VibeProjectPreviewTarget {
   id: string;
@@ -37,9 +35,7 @@ async function previewRequest<T>(url: string, init?: RequestInit): Promise<T> {
   return (await response.json()) as T;
 }
 
-function deviceWidth(device: PreviewDevice) {
-  if (device === "mobile") return "390px";
-  if (device === "tablet") return "768px";
+function deviceWidth(_device: string) {
   return "100%";
 }
 
@@ -60,7 +56,6 @@ export function LivePreviewPanel({
   const [session, setSession] = useState<PreviewSession | null>(null);
   const [logs, setLogs] = useState<PreviewLogLine[]>([]);
   const [address, setAddress] = useState("");
-  const [device, setDevice] = useState<PreviewDevice>("desktop");
   const [showLogs, setShowLogs] = useState(false);
   const [customSrc, setCustomSrc] = useState("");
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -208,6 +203,19 @@ export function LivePreviewPanel({
       ? session.lastError
       : undefined;
 
+  const reportedErrorRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!error || !onFixError) return;
+    const signature = `${error.title}:${error.message}`;
+    if (reportedErrorRef.current === signature) return;
+    reportedErrorRef.current = signature;
+    const errMsg = [error.title, error.filePath ? `${error.filePath}${error.line ? `:${error.line}` : ""}` : "", error.message]
+      .filter(Boolean)
+      .join("\n");
+    onFixError(errMsg);
+  }, [error, onFixError]);
+
   return (
     <motion.aside
       layout
@@ -226,7 +234,6 @@ export function LivePreviewPanel({
       <PreviewBrowserChrome
         title={activeTitle}
         address={address}
-        device={device}
         canNavigate={canNavigate}
         onAddressChange={setAddress}
         onNavigate={navigate}
@@ -248,7 +255,6 @@ export function LivePreviewPanel({
         onRestart={restartPreview}
         onOpenExternal={openExternal}
         onCopyUrl={copyUrl}
-        onDeviceChange={setDevice}
         isFullscreen={isFullscreen}
         onToggleFullscreen={() => setIsFullscreen((value) => !value)}
       />
@@ -259,25 +265,26 @@ export function LivePreviewPanel({
         <motion.div
           layout
           className="mx-auto h-full max-w-full overflow-hidden bg-white"
-          style={{ width: deviceWidth(device) }}
+          style={{ width: deviceWidth("desktop") }}
           transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
         >
-          {effectiveSrc ? (
+          {effectiveSrc && !error ? (
             <PreviewIframe
               ref={iframeRef}
               src={effectiveSrc}
               title={`${project?.name ?? "Vibe"} preview`}
             />
+          ) : error ? (
+            <PreviewSkeletonLayout message="Diagnosing preview issue…" />
           ) : (
             <PreviewEmptyState />
           )}
         </motion.div>
-        <PreviewStatusOverlay status={session?.status} />
+        <PreviewStatusOverlay status={error ? undefined : session?.status} />
         <PreviewErrorOverlay
-          error={error}
+          error={undefined}
           onRestart={restartPreview}
           onOpenLogs={() => setShowLogs(true)}
-          onAutoFix={() => onFixError?.(error ? `${error.title}: ${error.message}` : "Unknown error")}
         />
       </div>
 

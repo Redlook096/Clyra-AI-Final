@@ -1,31 +1,16 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, RotateCcw, Wand2 } from "lucide-react";
+import { AlertTriangle, RotateCcw } from "lucide-react";
 import type { PreviewError } from "../../../../types/vibe-preview";
-
-import { useState, useEffect } from "react";
 
 export function PreviewErrorOverlay({
   error,
   onRestart,
   onOpenLogs,
-  onAutoFix,
 }: {
   error?: PreviewError;
   onRestart: () => void;
   onOpenLogs: () => void;
-  onAutoFix?: () => void;
 }) {
-  const [autoFixing, setAutoFixing] = useState(false);
-
-  useEffect(() => {
-    if (error && onAutoFix && !autoFixing) {
-      const t = setTimeout(() => {
-        setAutoFixing(true);
-        onAutoFix();
-      }, 1500);
-      return () => clearTimeout(t);
-    }
-  }, [error, onAutoFix, autoFixing]);
   return (
     <AnimatePresence>
       {error && (
@@ -63,15 +48,8 @@ export function PreviewErrorOverlay({
             </div>
             <div className="mt-5 flex flex-wrap gap-2">
               <button
-                onClick={() => { setAutoFixing(true); onAutoFix?.(); }}
-                className="inline-flex items-center gap-2 rounded-full bg-slate-950 px-4 py-2.5 text-[12px] font-bold text-white"
-              >
-                <Wand2 className="h-3.5 w-3.5" />
-                {autoFixing ? "Auto-fixing..." : "Ask AI to fix"}
-              </button>
-              <button
                 onClick={onRestart}
-                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-[12px] font-bold text-slate-700 transition-all hover:border-slate-300"
+                className="inline-flex items-center gap-2 rounded-full bg-slate-950 px-4 py-2.5 text-[12px] font-bold text-white transition-all hover:bg-slate-800"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
                 Restart preview

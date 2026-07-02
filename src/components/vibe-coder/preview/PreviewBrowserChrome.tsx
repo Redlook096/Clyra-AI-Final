@@ -2,12 +2,10 @@ import { ArrowLeft, ArrowRight, RefreshCw } from "lucide-react";
 import { PreviewTabBar } from "./PreviewTabBar";
 import { PreviewToolbar } from "./PreviewToolbar";
 import { PreviewUrlInput } from "./PreviewUrlInput";
-import type { PreviewDevice } from "./PreviewDeviceSwitcher";
 
 export function PreviewBrowserChrome({
   title,
   address,
-  device,
   canNavigate,
   onAddressChange,
   onNavigate,
@@ -17,13 +15,11 @@ export function PreviewBrowserChrome({
   onRestart,
   onOpenExternal,
   onCopyUrl,
-  onDeviceChange,
   isFullscreen,
   onToggleFullscreen,
 }: {
   title: string;
   address: string;
-  device: PreviewDevice;
   canNavigate: boolean;
   onAddressChange: (value: string) => void;
   onNavigate: (value: string) => void;
@@ -33,7 +29,6 @@ export function PreviewBrowserChrome({
   onRestart: () => void;
   onOpenExternal: () => void;
   onCopyUrl: () => void;
-  onDeviceChange: (device: PreviewDevice) => void;
   isFullscreen: boolean;
   onToggleFullscreen: () => void;
 }) {
@@ -75,8 +70,6 @@ export function PreviewBrowserChrome({
           onNavigate={onNavigate}
         />
         <PreviewToolbar
-          device={device}
-          onDeviceChange={onDeviceChange}
           onOpenExternal={onOpenExternal}
           onRestart={onRestart}
           onCopyUrl={onCopyUrl}

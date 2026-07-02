@@ -8,5 +8,6 @@
   "updatedAt": "2026-06-26T08:25:14.686Z",
   "smartRoute": "Full app build",
   "lastBuildStatus": "ready",
-  "lastReviewStatus": "passed"
+  "lastReviewStatus": "passed",
+  "thumbnailUrl": "/api/vibe/projects/build-a-simple-to-do-list-app-app-d841b1/thumbnail"
 }

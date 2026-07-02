@@ -46,6 +46,7 @@ interface VibeProjectMetadata {
   lastBuildStatus?: string;
   lastReviewStatus?: string;
   previewUrl?: string;
+  thumbnailUrl?: string;
 }
 
 const projectsRoot = () => path.join(process.cwd(), "projects");
@@ -100,6 +101,9 @@ async function listProjectFiles(id: string) {
     for (const entry of entries) {
       const full = path.join(dir, entry.name);
       if (entry.isDirectory()) {
+        if (entry.name === "node_modules" || entry.name === ".git" || entry.name === "dist") {
+          continue;
+        }
         await walk(full);
       } else if (entry.isFile()) {
         const rel = path.relative(root, full).replaceAll(path.sep, "/");
@@ -110,6 +114,59 @@ async function listProjectFiles(id: string) {
 
   await walk(root);
   return files.sort((a, b) => a.path.localeCompare(b.path));
+}
+
+function buildStaticProjectHtml(files: Array<{ path: string; content: string }>) {
+  const byPath = new Map(files.map((file) => [file.path, file.content]));
+  const indexPath = files.find((file) => /(^|\/)index\.html$/i.test(file.path))?.path;
+  if (indexPath) {
+    let html = byPath.get(indexPath) || "";
+    html = html.replace(/<link\s+[^>]*href=["']([^"']+\.css)["'][^>]*>/gi, (_tag, href) => {
+      const key = String(href).replace(/^\.\//, "");
+      const css = byPath.get(key) || byPath.get(path.basename(key));
+      return css ? `<style>${css}</style>` : "";
+    });
+    html = html.replace(/<script\s+[^>]*src=["']([^"']+\.js)["'][^>]*>\s*<\/script>/gi, (_tag, src) => {
+      const key = String(src).replace(/^\.\//, "");
+      const js = byPath.get(key) || byPath.get(path.basename(key));
+      return js ? `<script>${js}</script>` : "";
+    });
+    return html;
+  }
+
+  const title = files.find((file) => /app|page|index/i.test(file.path))?.path || "Vibe project";
+  return `<!doctype html><html><head><meta charset="utf-8"><style>
+    body{margin:0;min-height:100vh;display:grid;place-items:center;background:linear-gradient(135deg,#fff,#f1f5f9);font:600 18px Inter,system-ui;color:#0f172a}
+    .card{width:min(520px,80vw);border:1px solid #e2e8f0;border-radius:28px;background:rgba(255,255,255,.85);box-shadow:0 30px 90px rgba(15,23,42,.12);padding:32px}
+    p{color:#64748b;font-size:14px;line-height:1.6}
+  </style></head><body><div class="card"><h1>${title}</h1><p>Screenshot will update when the generated project exposes a static preview entry.</p></div></body></html>`;
+}
+
+async function captureProjectThumbnail(projectId: string) {
+  const root = projectRoot(projectId);
+  const previewDir = path.join(root, "preview");
+  const thumbnailPath = path.join(previewDir, "thumbnail.png");
+  await ensureDir(previewDir);
+  try {
+    const { chromium } = await import("playwright");
+    const browser = await chromium.launch({ headless: true });
+    const page = await browser.newPage({ viewport: { width: 1200, height: 900 }, deviceScaleFactor: 1 });
+    await page.setContent(buildStaticProjectHtml(await listProjectFiles(projectId)), { waitUntil: "networkidle" });
+    await page.screenshot({ path: thumbnailPath, fullPage: false });
+    await browser.close();
+    const metadata = await readProjectMetadata(projectId);
+    if (metadata) {
+      await writeJson(path.join(root, "metadata.json"), {
+        ...metadata,
+        thumbnailUrl: `/api/vibe/projects/${projectId}/thumbnail`,
+      });
+    }
+    return thumbnailPath;
+  } catch (error) {
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900"><defs><linearGradient id="g" x1="0" x2="1" y1="0" y2="1"><stop stop-color="#ffffff"/><stop offset=".55" stop-color="#f8fafc"/><stop offset="1" stop-color="#e2e8f0"/></linearGradient></defs><rect width="1200" height="900" fill="url(#g)"/><rect x="150" y="170" width="900" height="560" rx="48" fill="white" stroke="#dbe3ed" stroke-width="3"/><rect x="220" y="240" width="520" height="34" rx="17" fill="#cbd5e1"/><rect x="220" y="320" width="760" height="220" rx="34" fill="#f1f5f9"/><rect x="220" y="585" width="260" height="64" rx="32" fill="#0f172a"/></svg>`;
+    await fs.writeFile(path.join(previewDir, "thumbnail.svg"), svg, "utf8");
+    return path.join(previewDir, "thumbnail.svg");
+  }
 }
 
 function buildStarterFiles(prompt: string, projectName: string) {
@@ -1342,6 +1399,41 @@ Do NOT wrap the JSON in Markdown code blocks like \`\`\`json. Return JUST the ra
     res.json({ ok: true, projectId });
   });
 
+  app.get("/api/vibe/projects/:id/session", async (req, res) => {
+    const projectId = safeProjectId(String(req.params.id ?? ""));
+    const metadata = await readProjectMetadata(projectId);
+    if (!metadata) {
+      res.status(404).json({ error: "Project not found" });
+      return;
+    }
+    const session = await readJson(
+      path.join(projectRoot(projectId), ".agent", "workspace-session.json"),
+      null,
+    );
+    res.json({ session });
+  });
+
+  app.put("/api/vibe/projects/:id/session", async (req, res) => {
+    const projectId = safeProjectId(String(req.params.id ?? ""));
+    const metadata = await readProjectMetadata(projectId);
+    if (!metadata) {
+      res.status(404).json({ error: "Project not found" });
+      return;
+    }
+    const session = req.body?.session;
+    if (!session || typeof session !== "object") {
+      res.status(400).json({ error: "session payload is required" });
+      return;
+    }
+    const savedAt = new Date().toISOString();
+    const payload = { ...session, savedAt };
+    await writeJson(
+      path.join(projectRoot(projectId), ".agent", "workspace-session.json"),
+      payload,
+    );
+    res.json({ ok: true, savedAt });
+  });
+
   app.post("/api/vibe/write-plan", async (req, res) => {
     const projectId = safeProjectId(String(req.body?.projectId ?? ""));
     const plan = String(req.body?.plan ?? "");
@@ -1418,6 +1510,9 @@ Do NOT wrap the JSON in Markdown code blocks like \`\`\`json. Return JUST the ra
       lastReviewStatus: "passed",
     };
     await writeJson(path.join(root, "metadata.json"), updated);
+    void captureProjectThumbnail(projectId).catch((error) => {
+      console.warn("Failed to capture Vibe project thumbnail", error);
+    });
     await writeJson(path.join(root, ".agent", "review-results.json"), {
       status: "passed",
       reviewer: "Review Agent",
@@ -1446,6 +1541,29 @@ Do NOT wrap the JSON in Markdown code blocks like \`\`\`json. Return JUST the ra
       "utf8",
     );
     res.json({ project: updated, files: await listProjectFiles(projectId) });
+  });
+
+  app.get("/api/vibe/projects/:id/thumbnail", async (req, res) => {
+    const projectId = safeProjectId(String(req.params.id ?? ""));
+    const metadata = await readProjectMetadata(projectId);
+    if (!metadata) {
+      res.status(404).send("Project not found");
+      return;
+    }
+    const pngPath = path.join(projectRoot(projectId), "preview", "thumbnail.png");
+    const svgPath = path.join(projectRoot(projectId), "preview", "thumbnail.svg");
+    try {
+      if (!existsSync(pngPath) && !existsSync(svgPath)) {
+        await captureProjectThumbnail(projectId);
+      }
+      if (existsSync(pngPath)) {
+        res.type("png").sendFile(pngPath);
+        return;
+      }
+      res.type("svg").sendFile(svgPath);
+    } catch {
+      res.status(500).send("Thumbnail unavailable");
+    }
   });
 
   app.post("/api/vibe/validate", async (req, res) => {

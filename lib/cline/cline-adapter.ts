@@ -15,10 +15,6 @@ export interface ClineTaskOptions {
 export class ClineAdapter extends EventEmitter {
   private runner?: ClineRunner;
 
-  constructor() {
-    super();
-  }
-
   public startClineTask(options: ClineTaskOptions) {
     this.runner = new ClineRunner({
       projectId: options.projectId,
@@ -37,7 +33,7 @@ export class ClineAdapter extends EventEmitter {
     this.emit("event", {
       type: "stage",
       stage: "task-created",
-      message: "Starting Cline coding agent..."
+      message: "Starting Cline coding agent...",
     } as VibeCoderEvent);
 
     this.runner.start();
@@ -49,9 +45,13 @@ export class ClineAdapter extends EventEmitter {
       this.emit("event", {
         type: "error",
         message: "Task cancelled by user.",
-        recoverable: false
+        recoverable: false,
       } as VibeCoderEvent);
     }
+  }
+
+  public approvePlan() {
+    this.runner?.approvePlan();
   }
 }
 
@@ -63,3 +63,5 @@ export function startClineTask(options: ClineTaskOptions, onEvent: (evt: VibeCod
   adapter.startClineTask(options);
   return adapter;
 }
+
+export type { ClineRunnerOptions };

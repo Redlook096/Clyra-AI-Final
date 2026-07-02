@@ -3,6 +3,7 @@ export type AgentStage =
   | "task-created"
   | "inspecting-existing-project"
   | "auditing-old-system"
+  | "researching-web"
   | "planning"
   | "writing-plan-md"
   | "extracting-file-queue"
@@ -36,6 +37,13 @@ export type VibeCoderEvent =
       timestamp?: number;
     }
   | {
+      type: "mode_changed";
+      mode: "plan" | "code";
+      label: string;
+      message: string;
+      timestamp?: number;
+    }
+  | {
       type: "plan_started";
       timestamp?: number;
     }
@@ -60,10 +68,16 @@ export type VibeCoderEvent =
       timestamp?: number;
     }
   | {
+      type: "status_update";
+      message: string;
+      timestamp?: number;
+    }
+  | {
       type: "file_started";
       path: string;
       language: string;
       action: "create" | "edit" | "delete";
+      stepId?: string;
       timestamp?: number;
     }
   | {

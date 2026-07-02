@@ -69,11 +69,12 @@ export function MarkdownMessageContent({
     code({ inline, className, children, ...props }: CodeProps) {
       const match = /language-(\w+)/.exec(className || "");
       const text = String(children).replace(/\n$/, "");
+      const isInlineCode = inline ?? !className;
 
       if (suppressCodeBlocks) {
-        if (!inline) return null;
+        if (!isInlineCode && text.includes("\n")) return null;
         return (
-          <span className="text-inherit" {...props}>
+          <span className="font-mono text-[0.94em] text-inherit" {...props}>
             {children}
           </span>
         );

@@ -219,10 +219,10 @@ export function VibeThoughtPanel({
               <div
                 aria-hidden
                 className={cn(
-                  "mt-0.5 w-px shrink-0 self-stretch bg-gradient-to-b to-transparent",
+                  "mt-0.5 w-px shrink-0 self-stretch",
                   active
-                    ? "from-blue-300 via-slate-200"
-                    : "from-slate-200 via-slate-200/80",
+                    ? "bg-gradient-to-b from-blue-400 via-slate-300 to-transparent"
+                    : "bg-slate-200",
                 )}
               />
               <div

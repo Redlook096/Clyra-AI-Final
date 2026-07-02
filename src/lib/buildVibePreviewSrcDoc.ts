@@ -86,6 +86,18 @@ function stripExportKeyword(src: string): string {
   return src.replace(/^\s*export\s+(?=type|interface|function|const|enum)/gm, "");
 }
 
+function stripDefaultExportForBundledModule(src: string): string {
+  let code = src;
+  code = code.replace(/export\s+default\s+function\s+(\w+)/g, "function $1");
+  code = code.replace(
+    /export\s+default\s+memo\s*\(\s*(\w+)\s*\)\s*;?/g,
+    "const $1Memo = React.memo($1);",
+  );
+  code = code.replace(/export\s+default\s+(\w+)\s*;?/g, "");
+  code = code.replace(/export\s*\{[\s\S]*?\}\s*;?/g, "");
+  return code;
+}
+
 function preparePrimaryMount(src: string): { code: string; mount: string } {
   let code = src;
   
@@ -144,7 +156,7 @@ export function buildVibePreviewSrcDoc(filesByPath: Record<string, string>): str
     body = stubLucideReact(body);
     body = stripModuleImports(body);
     body = stripExportKeyword(body);
-    body = body.replace(/export\s+default\s+[^;\n]+;?\s*$/gm, "");
+    body = stripDefaultExportForBundledModule(body);
     parts.push(`\n/* --- ${p} --- */\n${body}\n`);
   }
 

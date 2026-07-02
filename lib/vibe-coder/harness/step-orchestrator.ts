@@ -3,8 +3,32 @@ import { AgentRenderQueue, AgentPhase, RenderBlock } from "./agent-render-queue"
 import { VibePlan } from "../../../types/vibe-plan";
 import { VibePreviewState } from "../../../types/vibe-preview";
 
-// Helper for waiting in async functions
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function generateThinkingText(phase: string, plan?: VibePlan): string {
+  switch (phase) {
+    case "understanding":
+      return "Analyzing your request and identifying the scope of work...";
+    case "task_group_preparing":
+      if (!plan) return "Preparing execution batches from PLAN.md...";
+      const taskCount = plan.taskGraph?.length || 0;
+      const fileCount = plan.proposedFileTree?.length || 0;
+      return `Grouping ${taskCount} tasks into execution batches. ${fileCount} files to create/edit across the project.`;
+    case "checkpointing":
+      return "Creating checkpoint and preparing workspace...";
+    case "file_editing":
+      if (!plan) return "Executing file changes from PLAN.md...";
+      return "Applying file changes in grouped batches...";
+    case "validating":
+      return "Running validation checks against PLAN.md requirements...";
+    case "previewing":
+      return "Opening live preview to verify implementation...";
+    case "reviewing":
+      return "Performing final review against plan specifications...";
+    default:
+      return "Processing...";
+  }
+}
 
 export function useStepOrchestrator() {
   const [activeBlocks, setActiveBlocks] = useState<RenderBlock[]>([]);
@@ -14,26 +38,26 @@ export function useStepOrchestrator() {
   const queue = queueRef.current;
 
   const [currentPhase, setCurrentPhase] = useState<AgentPhase>("idle");
+  const planRef = useRef<VibePlan | null>(null);
 
   const startFlow = useCallback(async () => {
     setCurrentPhase("understanding");
-    
-    // 1. Thinking
-    const thinkingId = `thinking-${Date.now()}`;
+
     queue.enqueue({
-      id: thinkingId,
+      id: `thinking-${Date.now()}`,
       type: "thinking",
       phase: "understanding",
       renderPolicy: "replace_current",
-      payload: { text: "Analyzing your request, outlining basic functions and features..." }
+      payload: { text: generateThinkingText("understanding") }
     });
 
-    await delay(1000); // Simulate some work before real planning kicks in
+    await delay(800);
   }, [queue]);
 
   const onPlanReady = useCallback(async (plan: VibePlan) => {
+    planRef.current = plan;
     setCurrentPhase("awaiting_approval");
-    
+
     queue.enqueue({
       id: `plan-card-${Date.now()}`,
       type: "plan_card",
@@ -44,7 +68,7 @@ export function useStepOrchestrator() {
   }, [queue]);
 
   const onPlanApproved = useCallback(async (plan: VibePlan) => {
-    // Finish plan card
+    planRef.current = plan;
     const planBlock = queue.getActiveBlocks().find(b => b.type === "plan_card");
     if (planBlock) queue.finishBlock(planBlock.id);
 
@@ -54,31 +78,32 @@ export function useStepOrchestrator() {
       type: "checkpoint_status",
       phase: "checkpointing",
       renderPolicy: "sequential",
-      payload: { text: "Plan Approved. Checkpointing project..." }
+      payload: { text: "Plan Approved" }
     });
 
-    await delay(1000); // Simulate checkpoint wait
+    await delay(600);
     const checkBlock = queue.getActiveBlocks().find(b => b.type === "checkpoint_status");
     if (checkBlock) queue.finishBlock(checkBlock.id);
 
     setCurrentPhase("task_group_preparing");
+    const taskThinkingText = generateThinkingText("task_group_preparing", plan);
     queue.enqueue({
       id: `thinking-tasks-${Date.now()}`,
       type: "thinking",
       phase: "task_group_preparing",
       renderPolicy: "replace_current",
-      payload: { text: "Preparing frontend and architecture execution..." }
+      payload: { text: taskThinkingText }
     });
-    
-    await delay(1500);
+
+    await delay(1200);
     const thinkingBlock = queue.getActiveBlocks().find(b => b.type === "thinking");
     if (thinkingBlock) queue.finishBlock(thinkingBlock.id);
   }, [queue]);
 
   const onFilesReady = useCallback(async (patches: any[], plan: VibePlan) => {
+    planRef.current = plan;
     setCurrentPhase("file_editing");
-    
-    // Group boxes
+
     queue.enqueue({
       id: `boxes-${Date.now()}`,
       type: "mini_code_box_group",
@@ -100,7 +125,7 @@ export function useStepOrchestrator() {
       renderPolicy: "sequential"
     });
 
-    await delay(1500); // Review wait
+    await delay(1200);
     const revBlock = queue.getActiveBlocks().find(b => b.type === "review_card");
     if (revBlock) queue.unblock(revBlock.id);
 
@@ -125,9 +150,8 @@ export function useStepOrchestrator() {
       renderPolicy: "sequential"
     });
 
-    await delay(2000); // Wait for real validation
-    // Simulate pass
-    
+    await delay(1800);
+
     const valBlock = queue.getActiveBlocks().find(b => b.type === "validation_card");
     if (valBlock) queue.unblock(valBlock.id);
 
@@ -138,9 +162,9 @@ export function useStepOrchestrator() {
       phase: "previewing",
       renderPolicy: "sequential"
     });
-    
-    await delay(1500); // Simulate preview load
-    
+
+    await delay(1200);
+
     setCurrentPhase("browser_testing");
     queue.enqueue({
       id: `browser-${Date.now()}`,
@@ -148,15 +172,16 @@ export function useStepOrchestrator() {
       phase: "browser_testing",
       renderPolicy: "sequential"
     });
-    
+
     setTimeout(() => {
       onPreviewReady();
-    }, 2000);
+    }, 1500);
   }, [queue, onPreviewReady]);
 
   const clearQueue = useCallback(() => {
     queue.clear();
     setCurrentPhase("idle");
+    planRef.current = null;
   }, [queue]);
 
   return {

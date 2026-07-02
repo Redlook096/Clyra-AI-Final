@@ -1,0 +1,27 @@
+[
+  {
+    "path": "PLAN.md",
+    "action": "create",
+    "reason": "Fresh Cline Plan Mode source of truth."
+  },
+  {
+    "path": "index.html",
+    "action": "edit",
+    "reason": "Queued from the fresh PLAN.md."
+  },
+  {
+    "path": "README.md",
+    "action": "edit",
+    "reason": "Queued from the fresh PLAN.md."
+  },
+  {
+    "path": "particle.js",
+    "action": "edit",
+    "reason": "Queued from the fresh PLAN.md."
+  },
+  {
+    "path": "Three.js",
+    "action": "edit",
+    "reason": "Queued from the fresh PLAN.md."
+  }
+]
