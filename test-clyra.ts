@@ -29,7 +29,7 @@ async function testAllWorkflows() {
     const vibeTab = page.locator('.clyra-workflow-tab', { hasText: 'Vibe Coder' });
     await vibeTab.waitFor({ state: 'visible', timeout: 30000 });
     await vibeTab.click();
-    await page.waitForSelector('text="Clyra Vibe is ready."', { timeout: 30000 });
+    await page.waitForSelector('text="What should we build?"', { timeout: 30000 });
     console.log('✅ Switched to Vibe Coder');
     
     // Check that recent projects area appears when input is expanded

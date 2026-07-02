@@ -5,6 +5,7 @@ import { ClineSdkSession } from "../cline/cline-sdk-session";
 import {
   CODE_MODE_SYSTEM_PROMPT,
   PLAN_MODE_SYSTEM_PROMPT,
+  hasUsableLlmApiKey,
   resolveClineProviderFromEnv,
 } from "../cline/cline-config";
 import { inspectProject, formatCodebaseMapForPrompt } from "./context-engine";
@@ -73,27 +74,35 @@ export class PlanModeOrchestrator {
     let clineText = "";
     const provider = resolveClineProviderFromEnv();
 
-    const session = new ClineSdkSession();
-    try {
-      const result = await session.run({
-        workspacePath: this.workspacePath,
-        mode: "plan",
-        systemPrompt: PLAN_MODE_SYSTEM_PROMPT,
-        prompt: planPrompt,
-        provider,
-        onEvent: (event) => this.emit(event),
-        timeoutMs: 60_000,
-      });
-      clineText = result.text;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+    if (hasUsableLlmApiKey(provider.apiKey)) {
+      const session = new ClineSdkSession();
+      try {
+        const result = await session.run({
+          workspacePath: this.workspacePath,
+          mode: "plan",
+          systemPrompt: PLAN_MODE_SYSTEM_PROMPT,
+          prompt: planPrompt,
+          provider,
+          onEvent: (event) => this.emit(event),
+          timeoutMs: 60_000,
+        });
+        clineText = result.text;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        this.emit({
+          type: "terminal_output",
+          command: "cline-sdk",
+          output: `Cline Plan Mode: ${message}\nUsing local PLAN.md writer with project inspection.\n`,
+        });
+      } finally {
+        await session.dispose();
+      }
+    } else {
       this.emit({
         type: "terminal_output",
         command: "cline-sdk",
-        output: `Cline Plan Mode: ${message}\nUsing local PLAN.md writer with project inspection.\n`,
+        output: "No usable LLM API key configured. Using local PLAN.md writer with project inspection.\n",
       });
-    } finally {
-      await session.dispose();
     }
 
     // Read PLAN.md if Cline wrote it directly

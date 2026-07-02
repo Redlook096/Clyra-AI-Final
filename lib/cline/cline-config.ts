@@ -9,12 +9,32 @@ export type ClineProviderConfig = {
   headers?: Record<string, string>;
 };
 
-export function resolveClineProviderFromEnv(): ClineProviderConfig {
-  const apiKey =
+function readApiKeyFromEnv() {
+  return (
     process.env.MY_LLM_API_KEY ||
     process.env.DEEPSEEK_API_KEY ||
     process.env.ANTHROPIC_API_KEY ||
-    process.env.OPENAI_API_KEY;
+    process.env.OPENAI_API_KEY
+  );
+}
+
+export function hasUsableLlmApiKey(apiKey = readApiKeyFromEnv()) {
+  if (!apiKey || !apiKey.trim()) return false;
+  const normalized = apiKey.trim().toLowerCase();
+  if (
+    normalized.includes("placeholder") ||
+    normalized.includes("your-key") ||
+    normalized.includes("my_app_url") ||
+    normalized === '""' ||
+    normalized === "sk-test"
+  ) {
+    return false;
+  }
+  return normalized.length >= 12;
+}
+
+export function resolveClineProviderFromEnv(): ClineProviderConfig {
+  const apiKey = readApiKeyFromEnv();
 
   if (process.env.MY_LLM_BASE_URL) {
     return {
