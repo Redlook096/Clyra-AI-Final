@@ -19,11 +19,9 @@
   },
   "exclude": [
     "dist",
-    "Clyra-AI-Final",
     "node_modules",
     "vendor",
     "vibe-sandbox",
-    "temp-repo",
     "projects"
   ]
 }

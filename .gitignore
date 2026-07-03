@@ -27,5 +27,6 @@ projects/*
 # QA / test artifacts
 qa-screenshots/
 test-results/
+playwright-report/
 clyra-test-*.png
 *.webm

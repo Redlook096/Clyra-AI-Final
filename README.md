@@ -6,37 +6,51 @@
 
 AI workspace with **Chat**, **Vibe Coder** (plan → code → preview), and **Clip**.
 
-## Project layout
+## Directory layout
 
 ```
-├── src/              React frontend (App, Vibe Coder UI, components)
-├── lib/              Server-side agents, Cline integration, preview harness
-├── types/            Shared TypeScript types
-├── public/           Static assets
-├── scripts/          Dev utilities (browser helpers, clipper pipeline, recordings)
-├── tests/e2e/        Playwright smoke tests
-├── pages/            Secondary Vite entry pages
-├── projects/         Generated Vibe projects (runtime output; samples committed)
+Clyra-AI-Final/
+├── src/                         Frontend (React)
+│   ├── App.tsx                  Main app shell
+│   ├── components/
+│   │   ├── vibe/                Chat-embedded Vibe agent UI
+│   │   ├── vibe-coder/          Vibe Coder workspace UI
+│   │   │   ├── code/            Live code streaming boxes
+│   │   │   ├── preview/         Browser-style live preview panel
+│   │   │   └── thinking/        Agent thinking status
+│   │   └── ui/                  Shared UI primitives
+│   ├── hooks/                   React hooks (Vibe workspace state)
+│   └── lib/                     Frontend helpers & parsers
+├── lib/                         Server-side code
+│   ├── agent/                   Plan/code orchestrators, local scaffold
+│   ├── cline/                   Cline SDK integration & routes
+│   └── vibe-coder/              Preview runner & build harness
+├── types/                       Shared TypeScript schemas
+├── public/                      Static assets (icons, etc.)
+├── pages/                       Extra Vite entry pages
+├── scripts/
+│   ├── browser/                 Local browser automation helpers
+│   ├── clipper-pipeline.py      AI Clipper backend
+│   └── record-vibe-coder.ts     Demo screen recorder
+├── tests/e2e/                   Playwright smoke tests
+├── projects/                    Generated Vibe builds (runtime output)
 │   ├── project-advanced-vibe/   Default placeholder project
 │   └── _samples/                Example completed builds
-├── server.ts         Main Express + Vite server
-└── vibe-server.ts    Isolated preview sandbox server
+├── server.ts                    Express + Vite dev server
+└── vibe-server.ts                 Isolated preview sandbox
 ```
 
 ## Run locally
 
 **Prerequisites:** Node.js 18+
 
-1. Install dependencies:
-   ```bash
-   npm install
-   ```
-2. Copy `.env.example` to `.env.local` and set `DEEPSEEK_API_KEY`.
-3. Start the app:
-   ```bash
-   npm run dev:source
-   ```
-4. Open http://localhost:3000
+```bash
+npm install
+cp .env.example .env.local   # add DEEPSEEK_API_KEY
+npm run dev:source
+```
+
+Open http://localhost:3000
 
 ## Scripts
 
@@ -44,13 +58,15 @@ AI workspace with **Chat**, **Vibe Coder** (plan → code → preview), and **Cl
 |---------|-------------|
 | `npm run dev:source` | Dev server (fast iteration) |
 | `npm run dev` | Build + production-style server |
+| `npm run build` | Production build |
 | `npm run lint` | TypeScript check |
-| `npm run test:e2e` | UI smoke test (Playwright) |
+| `npm run test:e2e` | UI smoke test |
 | `npm run test:vibe` | Vibe Coder API + UI test |
 | `npm run record:vibe` | Record a Vibe Coder demo video |
+| `npm run clean` | Remove `dist/` |
 
-## Environment
+## Notes
 
-See `.env.example` for `DEEPSEEK_API_KEY`, optional LLM overrides, and port settings.
-
-Generated Vibe builds are written to `projects/` at runtime and are gitignored except the placeholder and `_samples/`.
+- New Vibe builds write to `projects/` at runtime (gitignored except placeholder + samples).
+- Browser profiles and QA screenshots are local-only and gitignored.
+- Set `DEEPSEEK_API_KEY` in `.env.local` for chat and the coding agent.
