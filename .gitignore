@@ -10,5 +10,22 @@ vibe-sandbox/
 vendor/opencode/
 tmp/
 output/
-*.mp4
 .claude/
+
+# Browser automation profiles (local only)
+.agentic-browser-profile/
+.chromium-google-profile/
+
+# Generated Vibe projects (keep placeholder + samples only)
+projects/*
+!projects/.gitkeep
+!projects/project-advanced-vibe/
+!projects/project-advanced-vibe/**
+!projects/_samples/
+!projects/_samples/**
+
+# QA / test artifacts
+qa-screenshots/
+test-results/
+clyra-test-*.png
+*.webm

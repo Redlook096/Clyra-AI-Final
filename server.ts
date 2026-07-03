@@ -1655,7 +1655,7 @@ Do NOT wrap the JSON in Markdown code blocks like \`\`\`json. Return JUST the ra
     const send = (type, data) => { res.write(`data: ${JSON.stringify({ type, ...data })}
 
 `); };
-    const scriptPath = path.join(process.cwd(), "clipper-pipeline.py");
+    const scriptPath = path.join(process.cwd(), "scripts", "clipper-pipeline.py");
     const homeBin = path.join(homedir(), "bin");
     send("progress", { step: "captions", status: "running", message: "Starting..." });
     const proc = spawn("python3", [scriptPath, url, JSON.stringify(cfg || {})], {
