@@ -115,10 +115,13 @@ function mapAgentEvent(agentEvent: AgentEvent, workspacePath: string): VibeCoder
   }
 
   if (agentEvent.type === "error") {
+    const message = agentEvent.error?.message || "Cline error";
+    const authOrConfigFailure =
+      /authentication|api key|unauthorized|invalid.*key|401|403/i.test(message);
     events.push({
       type: "error",
-      message: agentEvent.error?.message || "Cline error",
-      recoverable: agentEvent.recoverable ?? true,
+      message,
+      recoverable: authOrConfigFailure ? true : (agentEvent.recoverable ?? true),
     });
   }
 

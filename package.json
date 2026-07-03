@@ -1,5 +1,5 @@
 {
-  "name": "react-example",
+  "name": "clyra-ai",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -12,7 +12,10 @@
     "build": "vite build && npm run build:server",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test:e2e": "tsx tests/e2e/test-clyra.ts",
+    "test:vibe": "tsx tests/e2e/test-vibe-coder.ts",
+    "record:vibe": "tsx scripts/record-vibe-coder.ts"
   },
   "dependencies": {
     "@cline/sdk": "^0.0.52",
@@ -53,8 +56,7 @@
     "typescript": "~5.8.2",
     "vite": "^6.2.0"
   },
-  "description": "<div align=\"center\"> <img width=\"1200\" height=\"475\" alt=\"GHBanner\" src=\"https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6\" /> </div>",
-  "main": "fix-test.js",
+  "description": "Clyra AI — chat, vibe coder, and clip workspace",
   "directories": {
     "lib": "lib"
   },
@@ -62,8 +64,6 @@
     "type": "git",
     "url": "git+https://github.com/Redlook096/Clyra-AI-Final.git"
   },
-  "keywords": [],
-  "author": "",
   "license": "ISC",
   "bugs": {
     "url": "https://github.com/Redlook096/Clyra-AI-Final/issues"

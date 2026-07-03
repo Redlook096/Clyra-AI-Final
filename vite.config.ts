@@ -17,7 +17,7 @@ export default defineConfig(() => {
       rollupOptions: {
         input: {
           main: path.resolve(__dirname, 'index.html'),
-          todo: path.resolve(__dirname, 'todo.html'),
+          todo: path.resolve(__dirname, 'pages/todo.html'),
         },
         output: {
           manualChunks(id) {
@@ -31,7 +31,7 @@ export default defineConfig(() => {
       },
     },
     optimizeDeps: {
-      entries: ['index.html', 'todo.html'],
+      entries: ['index.html', 'pages/todo.html'],
     },
     server: {
       hmr: {
